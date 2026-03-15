@@ -1,6 +1,8 @@
 # TodoBridge
 
-TodoBridge は、Remember The Milk の置き換えとして使えるタスク管理アプリです。Vue 3 / TypeScript / Firebase をベースに、タスク管理、インポート、家族共有を見据えた構造に加えて、関心テーマごとの情報を集めて Todo に繋げる仕組みを提供します。
+![TodoBridge logo](./img/rertm_logo.png)
+
+TodoBridge は、RTM代替を目指した、共有対応のタスク管理アプリです。家族共有を見据えた構造と、関心テーマごとの情報を Todo に繋げる仕組みを持ちます。
 
 ## このアプリを作った目的
 
@@ -20,11 +22,10 @@ TodoBridge は、Remember The Milk の置き換えとして使えるタスク管
 
 - タスク一覧と詳細表示
 - Remember The Milk 形式のインポート
-- Firebase Authentication によるログイン
-- Firestore ベースのデータ保存
+- Google ログイン
+- 家族共有を見据えたデータ構造
 - AI / iOS / Android などの関心テーマに応じた情報表示
 - 情報をあとで読む・対応する Todo へ繋げる前提の構造
-- 家族共有を見据えたデータ構造
 
 ## セットアップ
 
