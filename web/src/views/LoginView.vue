@@ -18,11 +18,12 @@ async function handleGoogleLogin() {
 <template>
   <div class="min-h-screen flex items-center justify-center bg-gray-100">
     <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-      <div class="flex justify-center mb-8">
-        <img src="/logo.png" alt="TodoBridge" class="h-12" />
+      <div class="mb-8 flex items-center justify-center gap-3">
+        <img src="/icons/icon.svg" alt="TodoBridge" class="h-12 w-12" />
+        <span class="text-xl font-medium tracking-tight text-gray-700">TodoBridge</span>
       </div>
       <p class="text-gray-600 text-center mb-6">
-        Remember The Milk クローン
+        共有対応のタスク管理アプリ
       </p>
 
       <button
