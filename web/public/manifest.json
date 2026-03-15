@@ -1,6 +1,6 @@
 {
-  "name": "ReRTM - タスク管理",
-  "short_name": "ReRTM",
+  "name": "TodoBridge - タスク管理",
+  "short_name": "TodoBridge",
   "description": "シンプルで使いやすいタスク管理アプリ",
   "start_url": "/",
   "display": "standalone",

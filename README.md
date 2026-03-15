@@ -1,8 +1,18 @@
 # TodoBridge
 
-![TodoBridge logo](./img/rertm_logo.png)
+![TodoBridge icon](./web/public/icons/icon.svg)
 
 TodoBridge は、RTM代替を目指した、共有対応のタスク管理アプリです。家族共有を見据えた構造と、関心テーマごとの情報を Todo に繋げる仕組みを持ちます。
+
+## Screenshots
+
+### Home
+
+![Home screen](./img/screenshot-home.png)
+
+### News
+
+![News screen](./img/screenshot-news.png)
 
 ## このアプリを作った目的
 
