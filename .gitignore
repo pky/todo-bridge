@@ -1,0 +1,80 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist-ssr/
+
+# Environment files
+*.local
+.env
+.env.*
+!.env.example
+!web/.env.test
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test artifacts
+screenshots/
+playwright-report/
+test-results/
+coverage/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Misc
+.claude/
+progress.txt
+
+# Export data (個人データ)
+rememberthemilk_export*.json
+*.export.json
+
+# Firebase
+.firebase/
+.firebaserc
+web/.firebaserc
+
+# Cloud Functions build
+functions/lib/
+
+# Local-only scripts
+scripts/migrate.html
+scripts/migrate-deleted-field.js
+
+# Internal docs with environment-specific IDs/URLs
+doc/04_DEVELOPMENT_PLAN.md
+doc/05_BACKUP_SYSTEM.md
+doc/06_SYSTEM_ARCHITECTURE.md
+doc/07_CHROME_EXTENSION.md
+doc/08_GOOGLE_CALENDAR_SETUP.md
+doc/FIRESTORE_ONSNAPSHOT.md
+internal_docs/
+
+.codexignore
+
+# Re-include files hidden by global gitignore
+!web/index.html
+!web/public/
+!web/public/**

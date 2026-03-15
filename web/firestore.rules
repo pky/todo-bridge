@@ -1,0 +1,108 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function memberDoc(spaceId) {
+      return get(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid));
+    }
+
+    function spaceDoc(spaceId) {
+      return get(/databases/$(database)/documents/spaces/$(spaceId));
+    }
+
+    function isActiveSpaceMember(spaceId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/spaces/$(spaceId)/members/$(request.auth.uid))
+        && memberDoc(spaceId).data.status == 'active';
+    }
+
+    function isPersonalSpace(spaceId) {
+      return spaceDoc(spaceId).data.type == 'personal';
+    }
+
+    function canReadResource(spaceId, data) {
+      return isActiveSpaceMember(spaceId)
+        && (isPersonalSpace(spaceId) || request.auth.uid in data.visibleToMemberIds);
+    }
+
+    function canWriteResource(spaceId, data) {
+      return isActiveSpaceMember(spaceId)
+        && (isPersonalSpace(spaceId) || request.auth.uid in data.editableByMemberIds);
+    }
+
+    // ユーザーは自分のプロフィールと membership のみアクセス可能
+    match /users/{userId} {
+      allow read, write: if isSelf(userId);
+    }
+
+    match /users/{userId}/{document=**} {
+      allow read, write: if isSelf(userId);
+    }
+
+    match /spaces/{spaceId} {
+      allow read: if isActiveSpaceMember(spaceId);
+      allow write: if false;
+    }
+
+    match /spaces/{spaceId}/meta {
+      allow read: if isActiveSpaceMember(spaceId);
+      allow write: if false;
+    }
+
+    match /spaces/{spaceId}/settings/{document=**} {
+      allow read: if isActiveSpaceMember(spaceId);
+      allow write: if isActiveSpaceMember(spaceId);
+    }
+
+    match /spaces/{spaceId}/members/{memberId} {
+      allow read: if isActiveSpaceMember(spaceId);
+      allow create, update: if isActiveSpaceMember(spaceId);
+      allow delete: if false;
+    }
+
+    match /spaces/{spaceId}/lists/{listId} {
+      allow read: if canReadResource(spaceId, resource.data);
+      allow create: if canWriteResource(spaceId, request.resource.data);
+      allow update: if canWriteResource(spaceId, request.resource.data);
+      allow delete: if canWriteResource(spaceId, resource.data);
+    }
+
+    match /spaces/{spaceId}/tasks/{taskId} {
+      allow read: if canReadResource(spaceId, resource.data);
+      allow create: if canWriteResource(spaceId, request.resource.data);
+      allow update: if canWriteResource(spaceId, request.resource.data);
+      allow delete: if canWriteResource(spaceId, resource.data);
+    }
+
+    match /spaces/{spaceId}/tags/{tagId} {
+      allow read: if canReadResource(spaceId, resource.data);
+      allow create: if canWriteResource(spaceId, request.resource.data);
+      allow update: if canWriteResource(spaceId, request.resource.data);
+      allow delete: if canWriteResource(spaceId, resource.data);
+    }
+
+    // 設定コレクション（認証済みユーザーなら読み取り可能）
+    match /appConfig/{document=**} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // topics コレクション（認証済みユーザーなら読み取り可能）
+    match /topics/{topicId} {
+      allow read: if isSignedIn();
+      allow write: if false; // Cloud Functionsのみ書き込み可
+
+      match /articles/{articleId} {
+        allow read: if isSignedIn();
+        allow write: if false;
+      }
+    }
+  }
+}
