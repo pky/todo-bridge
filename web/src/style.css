@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* モバイルでの横スクロールを防止 */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  overflow-x: hidden !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  position: relative;
+}
+
+#app {
+  overflow-x: hidden !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
