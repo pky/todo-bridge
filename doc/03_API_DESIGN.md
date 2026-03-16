@@ -49,6 +49,11 @@ Services/
 - 実装がシンプル
 - 既存デバイス（スマホ/Mac）があれば新環境でもログイン可能
 
+実装制約:
+- Web の Google ログイン方式は `signInWithPopup` を標準とし、理由と検証なしに `redirect` へ切り替えない
+- 認証方式の変更は `Mac Chrome`、`iPhone相当ブラウザ`、`iOS PWA` の再ログイン互換確認を完了するまで出荷しない
+- 認証、router、PWA に関わる変更では `pnpm --prefix web test:auth` を必須チェックとする
+
 ### 3.2 インターフェース
 
 ```typescript
