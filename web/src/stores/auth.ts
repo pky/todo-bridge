@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged } from 'firebase/auth'
+import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth'
 import type { User } from 'firebase/auth'
 import { auth, googleProvider } from '@/services/firebaseAuth'
 import type { AppUser } from '@/types'
@@ -26,11 +26,6 @@ export const useAuthStore = defineStore('auth', () => {
       return new Error('このアカウントは利用を許可されていません')
     }
     return error instanceof Error ? error : new Error('ログインに失敗しました')
-  }
-
-  function shouldUseRedirectAuth(): boolean {
-    if (typeof navigator === 'undefined') return false
-    return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
   }
 
   async function validateAuthorizedUser(firebaseUser: User | null) {
@@ -130,16 +125,6 @@ export const useAuthStore = defineStore('auth', () => {
           resolveOnce()
         }
       })
-
-      void getRedirectResult(auth)
-        .then(async (redirectResult) => {
-          if (redirectResult?.user) {
-            await validateAuthorizedUser(redirectResult.user)
-          }
-        })
-        .catch((redirectError) => {
-          error.value = formatAccessError(redirectError).message
-        })
     })
   }
 
@@ -147,10 +132,6 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value = null
     try {
-      if (shouldUseRedirectAuth()) {
-        await signInWithRedirect(auth, googleProvider)
-        return
-      }
       const result = await signInWithPopup(auth, googleProvider)
       await validateAuthorizedUser(result.user)
     } catch (e) {

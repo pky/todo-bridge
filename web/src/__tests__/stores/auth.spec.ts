@@ -5,8 +5,6 @@ import { useAuthStore } from '@/stores/auth'
 // Firebase Auth のモック
 vi.mock('firebase/auth', () => ({
   signInWithPopup: vi.fn(),
-  signInWithRedirect: vi.fn(),
-  getRedirectResult: vi.fn(),
   signOut: vi.fn(),
   onAuthStateChanged: vi.fn((_auth, callback) => {
     // すぐに未認証状態をコールバック
@@ -36,9 +34,6 @@ describe('Auth Store', () => {
       personalSpaceId: 'personal_test-uid',
       joinedFamilySpaceIds: [],
     })
-    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' })
-    const { getRedirectResult } = await import('firebase/auth')
-    vi.mocked(getRedirectResult).mockResolvedValue(undefined as any)
   })
 
   it('初期状態は未認証', () => {
@@ -95,16 +90,21 @@ describe('Auth Store', () => {
     expect(store.user).toBeNull()
   })
 
-  it('モバイルでは redirect ログインを使う', async () => {
-    vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' })
-    const { signInWithRedirect, signInWithPopup } = await import('firebase/auth')
-    vi.mocked(signInWithRedirect).mockResolvedValueOnce(undefined)
+  it('モバイルでも popup ログインを使う', async () => {
+    const { signInWithPopup } = await import('firebase/auth')
+    vi.mocked(signInWithPopup).mockResolvedValueOnce({
+      user: {
+        uid: 'mobile-uid',
+        email: 'mobile@example.com',
+        displayName: 'Mobile User',
+        photoURL: null,
+      },
+    } as any)
 
     const store = useAuthStore()
     await store.loginWithGoogle()
 
-    expect(signInWithRedirect).toHaveBeenCalledTimes(1)
-    expect(signInWithPopup).not.toHaveBeenCalled()
+    expect(signInWithPopup).toHaveBeenCalledTimes(1)
   })
 
   it('未許可アカウントはログイン後に拒否される', async () => {

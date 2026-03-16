@@ -94,6 +94,7 @@ export function isAllowedEmail(
   allowedEmails: string[],
   email: string | null | undefined
 ): boolean {
+  if (allowedEmails.length === 0) return true
   const normalizedEmail = normalizeEmail(email)
   if (!normalizedEmail) return false
   return allowedEmails.map((value) => value.trim().toLowerCase()).includes(normalizedEmail)

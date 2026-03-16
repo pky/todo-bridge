@@ -1,14 +1,24 @@
 <script setup lang="ts">
+import { watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 
 const authStore = useAuthStore()
 const router = useRouter()
 
+watch(
+  () => authStore.isAuthenticated,
+  (isAuthenticated) => {
+    if (!isAuthenticated) return
+    void router.replace({ name: 'home' })
+  },
+  { immediate: true }
+)
+
 async function handleGoogleLogin() {
   try {
     await authStore.loginWithGoogle()
-    router.push({ name: 'home' })
+    await router.replace({ name: 'home' })
   } catch (e) {
     console.error('Login failed:', e)
   }
