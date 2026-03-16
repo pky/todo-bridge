@@ -82,6 +82,10 @@ test('許可メール一覧に含まれるか判定する', () => {
   assert.equal(isAllowedEmail(['owner@example.com'], 'other@example.com'), false)
 })
 
+test('許可メール一覧が空なら全ユーザーを許可する', () => {
+  assert.equal(isAllowedEmail([], 'someone@example.com'), true)
+})
+
 test('visibility 配列へ新メンバーを追加する', () => {
   const result = appendMemberToVisibility({
     visibleToMemberIds: ['owner-1'],
