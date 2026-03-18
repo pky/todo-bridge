@@ -12,6 +12,7 @@ vi.mock('firebase/firestore', () => ({
   updateDoc: vi.fn(),
   deleteDoc: vi.fn(),
   getDocs: vi.fn(),
+  onSnapshot: vi.fn(),
   serverTimestamp: vi.fn(() => ({ seconds: Date.now() / 1000 })),
   query: vi.fn(),
   orderBy: vi.fn(),
@@ -24,6 +25,16 @@ vi.mock('firebase/firestore', () => ({
 
 vi.mock('@/services/firebase', () => ({
   db: {},
+}))
+
+vi.mock('@/services/cloudFunctionsService', () => ({
+  refreshSmartListCounts: vi.fn().mockResolvedValue({
+    today: 0,
+    tomorrow: 0,
+    overdue: 0,
+    thisWeek: 0,
+    noDate: 0,
+  }),
 }))
 
 describe('Lists Store', () => {
@@ -179,6 +190,36 @@ describe('Lists Store', () => {
     await store.createTag('important')
 
     expect(addDoc).toHaveBeenCalled()
+  })
+
+  it('subscribe で実データからスマートリスト件数を再同期する', async () => {
+    const { getDocs, onSnapshot } = await import('firebase/firestore')
+    const { refreshSmartListCounts } = await import('@/services/cloudFunctionsService')
+
+    vi.mocked(getDocs)
+      .mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'inbox-id',
+            data: () => ({ name: 'Inbox', dateCreated: {} as any, dateModified: {} as any }),
+          },
+        ],
+      } as any)
+      .mockResolvedValueOnce({ docs: [] } as any)
+    vi.mocked(onSnapshot).mockReturnValue(() => {})
+    vi.mocked(refreshSmartListCounts).mockResolvedValueOnce({
+      today: 0,
+      tomorrow: 0,
+      overdue: 2,
+      thisWeek: 0,
+      noDate: 0,
+    })
+
+    const store = useListsStore()
+    await store.subscribe()
+
+    expect(refreshSmartListCounts).toHaveBeenCalled()
+    expect(store.smartListCounts.overdue).toBe(2)
   })
 
   it('deleteList がリスト内のタスクも削除する', async () => {

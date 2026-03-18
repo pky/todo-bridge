@@ -24,6 +24,8 @@ interface SmartListCounts {
   lastUpdated: admin.firestore.Timestamp
 }
 
+type SmartListCountResponse = Omit<SmartListCounts, 'lastUpdated'>
+
 export function buildSmartListCountsDocPath(userId: string, spaceId?: string): string {
   if (spaceId) {
     return `spaces/${spaceId}`
@@ -136,6 +138,16 @@ async function recalculateSmartListCounts(
   await db.doc(buildSmartListCountsDocPath(userId, spaceId)).set({ smartListCounts: counts }, { merge: true })
 
   return counts
+}
+
+function toSmartListCountResponse(counts: SmartListCounts): SmartListCountResponse {
+  return {
+    today: counts.today,
+    tomorrow: counts.tomorrow,
+    overdue: counts.overdue,
+    thisWeek: counts.thisWeek,
+    noDate: counts.noDate,
+  }
 }
 
 function buildIncrementUpdateData(delta: Record<string, number>): Record<string, admin.firestore.FieldValue | admin.firestore.Timestamp> {
@@ -345,4 +357,25 @@ export const getSmartListTasks = functions
       tasks: tasks.slice(0, limitCount),
       totalCount: tasks.length,
     }
+  })
+
+export const refreshSmartListCounts = functions
+  .region('asia-northeast1')
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', '認証が必要です')
+    }
+
+    const { spaceId, useLegacyPath = false } = data as {
+      spaceId?: string
+      useLegacyPath?: boolean
+    }
+    const userId = context.auth.uid
+    const counts = await recalculateSmartListCounts(
+      userId,
+      useLegacyPath ? undefined : spaceId,
+      { filterByUserVisibility: false }
+    )
+
+    return toSmartListCountResponse(counts)
   })

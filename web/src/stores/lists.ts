@@ -15,6 +15,7 @@ import {
   Timestamp,
 } from 'firebase/firestore'
 import { db } from '@/services/firebase'
+import { refreshSmartListCounts } from '@/services/cloudFunctionsService'
 import { useAuthStore } from './auth'
 import { useSpaceStore } from './space'
 import type { TaskList, Tag, CreateListInput, UpdateListInput } from '@/types'
@@ -265,6 +266,15 @@ export const useListsStore = defineStore('lists', () => {
     await spaceStore.initSpace()
     await Promise.all([fetchLists(), fetchTags()])
     subscribeToSmartListCounts()
+    try {
+      const refreshedCounts = await refreshSmartListCounts()
+      smartListCounts.value = {
+        ...smartListCounts.value,
+        ...refreshedCounts,
+      }
+    } catch (err) {
+      console.error('Smart list counts refresh error:', err)
+    }
   }
 
   function unsubscribe() {

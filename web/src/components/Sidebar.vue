@@ -44,7 +44,12 @@ const listItemRefs = ref<Map<string, HTMLElement>>(new Map())
 const smartLists = computed(() => [
   { type: 'today', name: '今日', icon: '📅', count: listsStore.smartListCounts.today },
   { type: 'tomorrow', name: '明日', icon: '📆', count: listsStore.smartListCounts.tomorrow },
-  { type: 'overdue', name: '期限切れ', icon: '⚠️', count: listsStore.smartListCounts.overdue },
+  {
+    type: 'overdue',
+    name: '期限切れ',
+    icon: listsStore.smartListCounts.overdue > 0 ? '⚠️' : '📅',
+    count: listsStore.smartListCounts.overdue,
+  },
   { type: 'thisWeek', name: '今週', icon: '📋', count: listsStore.smartListCounts.thisWeek },
 ])
 
