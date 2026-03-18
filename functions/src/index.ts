@@ -26,7 +26,13 @@ export {
 export { dailyBackup, manualBackup, listBackups, restoreFromBackup } from './scheduledBackup'
 
 // スマートリスト集計関数をエクスポート
-export { updateSmartListCounts, updateSpaceSmartListCounts, recalculateAllSmartLists, getSmartListTasks } from './smartLists'
+export {
+  updateSmartListCounts,
+  updateSpaceSmartListCounts,
+  recalculateAllSmartLists,
+  getSmartListTasks,
+  refreshSmartListCounts,
+} from './smartLists'
 
 // 検索API関数をエクスポート
 export { searchTasks, getTasksByFilter } from './searchApi'

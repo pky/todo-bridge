@@ -102,6 +102,20 @@ export async function getSmartListTasks(
   return result.data
 }
 
+export async function refreshSmartListCounts(): Promise<Omit<SmartListCounts, 'lastUpdated'>> {
+  const spaceStore = useSpaceStore()
+  const callable = httpsCallable<
+    { spaceId?: string | null; useLegacyPath: boolean },
+    Omit<SmartListCounts, 'lastUpdated'>
+  >(functions, 'refreshSmartListCounts')
+
+  const result = await callable({
+    spaceId: spaceStore.currentSpaceId,
+    useLegacyPath: spaceStore.useLegacyPath,
+  })
+  return result.data
+}
+
 // タスク検索（サーバー側フィルタリング）
 export async function searchTasksApi(
   query: string,

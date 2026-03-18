@@ -35,6 +35,60 @@ export type SortOrder = 'name' | 'created'
 
 // 再取得のしきい値（5分）
 const REFRESH_THRESHOLD_MS = 5 * 60 * 1000
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000
+
+function getShiftedJstDate(date: Date): Date {
+  return new Date(date.getTime() + JST_OFFSET_MS)
+}
+
+function getUtcBoundaryFromJstDateParts(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+  millisecond: number
+): Date {
+  return new Date(Date.UTC(year, month, day, hour, minute, second, millisecond) - JST_OFFSET_MS)
+}
+
+function getJstDayBoundaries(date: Date = new Date()): {
+  todayStart: Date
+  todayEnd: Date
+  tomorrowStart: Date
+  tomorrowEnd: Date
+  weekEnd: Date
+} {
+  const shifted = getShiftedJstDate(date)
+  const year = shifted.getUTCFullYear()
+  const month = shifted.getUTCMonth()
+  const day = shifted.getUTCDate()
+  const dayOfWeek = shifted.getUTCDay()
+  const daysUntilSunday = (7 - dayOfWeek) % 7
+
+  return {
+    todayStart: getUtcBoundaryFromJstDateParts(year, month, day, 0, 0, 0, 0),
+    todayEnd: getUtcBoundaryFromJstDateParts(year, month, day, 23, 59, 59, 999),
+    tomorrowStart: getUtcBoundaryFromJstDateParts(year, month, day + 1, 0, 0, 0, 0),
+    tomorrowEnd: getUtcBoundaryFromJstDateParts(year, month, day + 1, 23, 59, 59, 999),
+    weekEnd: getUtcBoundaryFromJstDateParts(year, month, day + daysUntilSunday, 23, 59, 59, 999),
+  }
+}
+
+function getSmartListCategories(task: Pick<Task, 'completed' | 'parentId' | 'dueDate'> | null, now: Date): string[] {
+  if (!task || task.completed || task.parentId) return []
+  if (!task.dueDate) return ['noDate']
+
+  const dueDate = task.dueDate.toDate()
+  const { todayStart, todayEnd, tomorrowStart, tomorrowEnd, weekEnd } = getJstDayBoundaries(now)
+
+  if (dueDate < todayStart) return ['overdue']
+  if (dueDate >= todayStart && dueDate <= todayEnd) return ['today', 'thisWeek']
+  if (dueDate >= tomorrowStart && dueDate <= tomorrowEnd) return ['tomorrow', 'thisWeek']
+  if (dueDate <= weekEnd) return ['thisWeek']
+  return []
+}
 
 export const useTasksStore = defineStore('tasks', () => {
   const tasks = ref<Task[]>([])
@@ -243,6 +297,31 @@ export const useTasksStore = defineStore('tasks', () => {
 
   function getTaskDocRef(id: string, spaceId?: string | null) {
     return doc(getTasksCollectionForSpace(spaceId), id)
+  }
+
+  function applySmartListCountDelta(
+    beforeTask: Pick<Task, 'completed' | 'parentId' | 'dueDate'> | null,
+    afterTask: Pick<Task, 'completed' | 'parentId' | 'dueDate'> | null
+  ) {
+    const listsStore = useListsStore()
+    const now = new Date()
+    const beforeCategories = new Set(getSmartListCategories(beforeTask, now))
+    const afterCategories = new Set(getSmartListCategories(afterTask, now))
+    const keys = ['today', 'tomorrow', 'overdue', 'thisWeek', 'noDate'] as const
+    let hasChanges = false
+    const nextCounts = { ...listsStore.smartListCounts }
+
+    keys.forEach((key) => {
+      const delta = (afterCategories.has(key) ? 1 : 0) - (beforeCategories.has(key) ? 1 : 0)
+      if (delta !== 0) {
+        nextCounts[key] = Math.max(0, (nextCounts[key] ?? 0) + delta)
+        hasChanges = true
+      }
+    })
+
+    if (hasChanges) {
+      listsStore.smartListCounts = nextCounts
+    }
   }
 
   function getListSpaceId(listId?: string | null) {
@@ -946,6 +1025,16 @@ export const useTasksStore = defineStore('tasks', () => {
 
     const newCompleted = !task.completed
     const nowTimestamp = Timestamp.now()
+    const beforeTask = {
+      completed: task.completed,
+      parentId: task.parentId,
+      dueDate: task.dueDate,
+    }
+    const afterTask = {
+      completed: newCompleted,
+      parentId: task.parentId,
+      dueDate: task.dueDate,
+    }
 
     const docRef = getTaskDocRef(id, task.spaceId)
     await updateDoc(docRef, {
@@ -1014,6 +1103,8 @@ export const useTasksStore = defineStore('tasks', () => {
 
     // 検索用キャッシュを更新
     updateLocalTask(allTasksCache.value)
+
+    applySmartListCountDelta(beforeTask, afterTask)
   }
 
   function collectDeletionTasks(initialTasks: Task[], sourceTasks: Task[]): Task[] {

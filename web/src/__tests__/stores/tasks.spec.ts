@@ -249,6 +249,40 @@ describe('Tasks Store', () => {
     )
   })
 
+  it('toggleComplete で期限切れ件数を即時に減算する', async () => {
+    const store = useTasksStore()
+    const listsStore = useListsStore()
+    const overdueDate = {
+      toDate: () => new Date('2026-03-17T00:00:00.000Z'),
+      toMillis: () => new Date('2026-03-17T00:00:00.000Z').getTime(),
+    } as any
+
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-18T12:00:00.000+09:00'))
+
+    listsStore.$patch({
+      smartListCounts: {
+        today: 0,
+        tomorrow: 0,
+        overdue: 1,
+        thisWeek: 0,
+        noDate: 0,
+      },
+    })
+    store.$patch({
+      tasks: [
+        { ...baseTask, id: 'overdue-task', name: '期限切れタスク', dueDate: overdueDate },
+      ],
+    })
+
+    await store.toggleComplete('overdue-task')
+
+    expect(store.tasks[0]?.completed).toBe(true)
+    expect(listsStore.smartListCounts.overdue).toBe(0)
+
+    vi.useRealTimers()
+  })
+
   it('unsubscribe でタスクがクリアされる', () => {
     const store = useTasksStore()
     store.$patch({
