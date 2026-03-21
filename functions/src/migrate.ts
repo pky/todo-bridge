@@ -211,12 +211,16 @@ export const migrateTaskCounts = functions
       const tasksSnapshot = await tasksRef
         .where('listId', '==', listId)
         .where('completed', '==', false)
-        .where('parentId', '==', null)
         .get()
+
+      const incompleteTaskCount = tasksSnapshot.docs.filter((taskDoc) => {
+        const taskData = taskDoc.data()
+        return taskData.deleted !== true && !taskData.parentId
+      }).length
 
       updates.push(
         listsRef.doc(listId).update({
-          incompleteTaskCount: tasksSnapshot.size,
+          incompleteTaskCount,
         })
       )
     }
