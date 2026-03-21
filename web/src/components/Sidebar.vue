@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { collection, getDocs, query, where } from 'firebase/firestore'
+import { collection, getDocs, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '@/services/firebase'
 import { useListsStore } from '@/stores/lists'
 import { buildPersonalSpaceId, useSpaceStore } from '@/stores/space'
@@ -40,6 +40,8 @@ const touchDragListId = ref<string | null>(null)
 const touchStartY = ref<number>(0)
 const isTouchDragging = ref(false)
 const listItemRefs = ref<Map<string, HTMLElement>>(new Map())
+const overviewListsBySpace = ref<Record<string, SidebarListItem[]>>({})
+const overviewListUnsubscribes = new Map<string, () => void>()
 
 const smartLists = computed(() => [
   { type: 'today', name: '今日', icon: '📅', count: listsStore.smartListCounts.today },
@@ -77,6 +79,22 @@ function sortListItems(items: SidebarListItem[]): SidebarListItem[] {
 
 const personalOverviewLists = ref<SidebarListItem[]>([])
 const sharedOverviewLists = ref<SidebarListItem[]>([])
+
+function rebuildOverviewLists() {
+  const allOverviewLists = overviewListsBySpace.value
+
+  personalOverviewLists.value = personalSpaceId.value && personalSpaceId.value !== spaceStore.currentSpaceId
+    ? (allOverviewLists[personalSpaceId.value] ?? [])
+    : []
+
+  const sharedSpaceIds = sharedMemberships.value
+    .map((membership) => membership.spaceId)
+    .filter((spaceId) => spaceId !== spaceStore.currentSpaceId)
+
+  sharedOverviewLists.value = sortListItems(
+    sharedSpaceIds.flatMap((spaceId) => allOverviewLists[spaceId] ?? [])
+  )
+}
 
 function getSpaceLabel(spaceId: string): string {
   if (spaceId.startsWith('personal_')) return '個人用'
@@ -264,14 +282,47 @@ async function loadListsForSpace(spaceId: string): Promise<SidebarListItem[]> {
   })))
 }
 
+function clearOverviewListSubscriptions() {
+  overviewListUnsubscribes.forEach((unsubscribe) => unsubscribe())
+  overviewListUnsubscribes.clear()
+  overviewListsBySpace.value = {}
+}
+
+function subscribeOverviewListSpace(spaceId: string) {
+  if (!authStore.user) return
+  if (overviewListUnsubscribes.has(spaceId)) return
+
+  const listQuery = query(
+    collection(db, 'spaces', spaceId, 'lists'),
+    where('visibleToMemberIds', 'array-contains', authStore.user.uid)
+  )
+
+  const unsubscribe = onSnapshot(listQuery, (snapshot) => {
+    overviewListsBySpace.value = {
+      ...overviewListsBySpace.value,
+      [spaceId]: sortListItems(snapshot.docs.map((documentSnapshot) => ({
+        ...(documentSnapshot.data() as Omit<TaskList, 'id'>),
+        id: documentSnapshot.id,
+        spaceId,
+        spaceLabel: getSpaceLabel(spaceId),
+      }))),
+    }
+    rebuildOverviewLists()
+  })
+
+  overviewListUnsubscribes.set(spaceId, unsubscribe)
+}
+
 async function loadOverviewLists() {
   if (!authStore.user) {
+    clearOverviewListSubscriptions()
     personalOverviewLists.value = []
     sharedOverviewLists.value = []
     return
   }
 
   if (spaceStore.useLegacyPath) {
+    clearOverviewListSubscriptions()
     const fallbackPersonalSpaceId = personalSpaceId.value ?? buildPersonalSpaceId(authStore.user!.uid)
     personalOverviewLists.value = sortListItems(
       listsStore.lists.map((list) => ({
@@ -284,14 +335,28 @@ async function loadOverviewLists() {
     return
   }
 
-  personalOverviewLists.value = personalSpaceId.value && personalSpaceId.value !== spaceStore.currentSpaceId
-    ? await loadListsForSpace(personalSpaceId.value)
-    : []
+  const nextOverviewSpaceIds = new Set<string>()
+  if (personalSpaceId.value && personalSpaceId.value !== spaceStore.currentSpaceId) {
+    nextOverviewSpaceIds.add(personalSpaceId.value)
+  }
+  sharedMemberships.value
+    .map((membership) => membership.spaceId)
+    .filter((spaceId) => spaceId !== spaceStore.currentSpaceId)
+    .forEach((spaceId) => nextOverviewSpaceIds.add(spaceId))
 
-  const sharedSpaces = sharedMemberships.value.map((membership) => membership.spaceId)
-  const overviewSharedSpaces = sharedSpaces.filter((spaceId) => spaceId !== spaceStore.currentSpaceId)
-  const sharedListsBySpace = await Promise.all(overviewSharedSpaces.map((spaceId) => loadListsForSpace(spaceId)))
-  sharedOverviewLists.value = sortListItems(sharedListsBySpace.flat())
+  overviewListUnsubscribes.forEach((unsubscribe, spaceId) => {
+    if (nextOverviewSpaceIds.has(spaceId)) return
+    unsubscribe()
+    overviewListUnsubscribes.delete(spaceId)
+    const nextListsBySpace = { ...overviewListsBySpace.value }
+    delete nextListsBySpace[spaceId]
+    overviewListsBySpace.value = nextListsBySpace
+  })
+
+  nextOverviewSpaceIds.forEach((spaceId) => {
+    subscribeOverviewListSpace(spaceId)
+  })
+  rebuildOverviewLists()
 }
 
 function isSharedList(list: SidebarListItem) {
@@ -537,6 +602,7 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('touchmove', handleTouchMove)
   document.removeEventListener('touchend', handleTouchEnd)
+  clearOverviewListSubscriptions()
 })
 
 watch(

@@ -41,6 +41,21 @@ function assertUserId(userId: unknown): asserts userId is string {
   }
 }
 
+function resolveScopedCollectionPath(
+  userId: string,
+  collectionName: 'lists' | 'tasks',
+  options: { spaceId?: unknown; useLegacyPath?: unknown } = {}
+): string {
+  const useLegacyPath = options.useLegacyPath === true
+  const spaceId = typeof options.spaceId === 'string' && options.spaceId.trim() !== '' ? options.spaceId : null
+
+  if (!useLegacyPath && spaceId) {
+    return `spaces/${spaceId}/${collectionName}`
+  }
+
+  return `users/${userId}/${collectionName}`
+}
+
 export function buildPersonalSpaceId(userId: string): string {
   return `${PERSONAL_SPACE_PREFIX}_${userId}`
 }
@@ -185,8 +200,8 @@ export const migrateTaskCounts = functions
     const userId = data.userId
     assertUserId(userId)
 
-    const listsRef = db.collection(`users/${userId}/lists`)
-    const tasksRef = db.collection(`users/${userId}/tasks`)
+    const listsRef = db.collection(resolveScopedCollectionPath(userId, 'lists', data))
+    const tasksRef = db.collection(resolveScopedCollectionPath(userId, 'tasks', data))
 
     const listsSnapshot = await listsRef.get()
     const updates: Promise<FirebaseFirestore.WriteResult>[] = []

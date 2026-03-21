@@ -173,6 +173,7 @@ interface Task {
   editableByMemberIds?: string[]
   listId: string
   completed: boolean
+  deleted?: boolean
   parentId?: string | null
   lastModifiedBy?: string  // 変更元デバイスID
   name?: string
@@ -223,6 +224,13 @@ async function updateIncompleteTaskCount(
   await listRef.update({
     incompleteTaskCount: admin.firestore.FieldValue.increment(delta),
   })
+}
+
+function isCountedIncompleteTask(task: Task): boolean {
+  return !!task.listId
+    && !task.parentId
+    && task.completed !== true
+    && task.deleted !== true
 }
 
 // 変更をキューに追加する共通関数
@@ -324,25 +332,26 @@ async function handleTaskUpdated(
     data: after,
   })
 
-  if (after.parentId) return
+  const countedBefore = isCountedIncompleteTask(before)
+  const countedAfter = isCountedIncompleteTask(after)
 
-  if (before.completed === after.completed) {
-    if (before.listId !== after.listId && !after.completed) {
-      await Promise.all([
-        updateIncompleteTaskCount(userId, before.listId, -1, spaceId, useLegacyPath),
-        updateIncompleteTaskCount(userId, after.listId, 1, spaceId, useLegacyPath),
-      ])
+  if (before.listId !== after.listId) {
+    const updates: Promise<void>[] = []
+    if (countedBefore) {
+      updates.push(updateIncompleteTaskCount(userId, before.listId, -1, spaceId, useLegacyPath))
+    }
+    if (countedAfter) {
+      updates.push(updateIncompleteTaskCount(userId, after.listId, 1, spaceId, useLegacyPath))
+    }
+    if (updates.length > 0) {
+      await Promise.all(updates)
     }
     return
   }
 
-  await updateIncompleteTaskCount(
-    userId,
-    after.listId,
-    after.completed ? -1 : 1,
-    spaceId,
-    useLegacyPath
-  )
+  if (countedBefore === countedAfter) return
+
+  await updateIncompleteTaskCount(userId, after.listId, countedAfter ? 1 : -1, spaceId, useLegacyPath)
 }
 
 // タスク作成時: 未完了カウントを+1 + 変更キューに追加 + カレンダー登録

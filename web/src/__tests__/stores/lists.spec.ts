@@ -222,6 +222,50 @@ describe('Lists Store', () => {
     expect(store.smartListCounts.overdue).toBe(2)
   })
 
+  it('subscribe 後にリストの件数更新を onSnapshot で反映する', async () => {
+    const { getDocs, onSnapshot } = await import('firebase/firestore')
+
+    vi.mocked(getDocs)
+      .mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'shared-list',
+            data: () => ({
+              name: '家族',
+              incompleteTaskCount: 1,
+              dateCreated: {} as any,
+              dateModified: {} as any,
+            }),
+          },
+        ],
+      } as any)
+      .mockResolvedValueOnce({ docs: [] } as any)
+
+    vi.mocked(onSnapshot).mockReturnValue(() => {})
+
+    const store = useListsStore()
+    await store.subscribe()
+
+    const listSnapshotCallback = vi.mocked(onSnapshot).mock.calls[0]?.[1] as ((snapshot: unknown) => void) | undefined
+    expect(listSnapshotCallback).toBeTypeOf('function')
+
+    listSnapshotCallback?.({
+      docs: [
+        {
+          id: 'shared-list',
+          data: () => ({
+            name: '家族',
+            incompleteTaskCount: 3,
+            dateCreated: {} as any,
+            dateModified: {} as any,
+          }),
+        },
+      ],
+    })
+
+    expect(store.lists[0]?.incompleteTaskCount).toBe(3)
+  })
+
   it('deleteList がリスト内のタスクも削除する', async () => {
     const { deleteDoc, getDocs, query, where, writeBatch } = await import('firebase/firestore')
 
