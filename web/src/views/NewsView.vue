@@ -146,6 +146,13 @@ const goBack = () => {
   }
 }
 
+const openReadLaterInTodo = () => {
+  router.push({
+    name: 'home',
+    query: { target: 'read-later' },
+  })
+}
+
 const handleScroll = () => {
   // window スクロール
   const scrollY = window.scrollY || document.documentElement.scrollTop
@@ -222,6 +229,13 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
         <h1 class="text-base font-semibold text-gray-800">{{ pageTitle }}</h1>
         <p class="text-xs text-gray-400">{{ pageSubtitle }}</p>
       </div>
+      <button
+        type="button"
+        class="ml-auto inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-white hover:text-gray-900"
+        @click="openReadLaterInTodo"
+      >
+        あとで読むを開く
+      </button>
     </header>
 
     <!-- 記事リスト -->

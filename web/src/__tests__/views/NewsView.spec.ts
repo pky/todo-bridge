@@ -10,6 +10,7 @@ const loadPreferencesMock = vi.hoisted(() => vi.fn())
 const trackClickMock = vi.hoisted(() => vi.fn())
 const bookmarkArticleMock = vi.hoisted(() => vi.fn())
 const routeState = vi.hoisted(() => ({ name: 'news-ai' as string }))
+const pushMock = vi.hoisted(() => vi.fn())
 
 const article: NewsArticle = {
   id: 'article-1',
@@ -70,7 +71,7 @@ const newsStoreState = reactive({
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({
-    push: vi.fn(),
+    push: pushMock,
     back: vi.fn(),
   }),
   useRoute: () => routeState,
@@ -113,6 +114,23 @@ describe('NewsView', () => {
       includeCommunity: true,
       actionRequiredOnly: false,
     }
+  })
+
+  it('あとで読むを開くボタンからTodo画面へ遷移できる', async () => {
+    const wrapper = mount(NewsView, {
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    await wrapper.get('button.ml-auto').trigger('click')
+
+    expect(pushMock).toHaveBeenCalledWith({
+      name: 'home',
+      query: { target: 'read-later' },
+    })
   })
 
   it('興味なし押下時にURL付きで dismissArticle を呼ぶ', async () => {

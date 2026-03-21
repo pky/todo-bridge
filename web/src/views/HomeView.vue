@@ -2,9 +2,9 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useListsStore } from '@/stores/lists'
-import { useSpaceStore } from '@/stores/space'
+import { buildPersonalSpaceId, useSpaceStore } from '@/stores/space'
 import { useTasksStore } from '@/stores/tasks'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Sidebar from '@/components/Sidebar.vue'
 import TaskList from '@/components/TaskList.vue'
 import TaskDetail from '@/components/TaskDetail.vue'
@@ -14,6 +14,7 @@ const listsStore = useListsStore()
 const spaceStore = useSpaceStore()
 const tasksStore = useTasksStore()
 const router = useRouter()
+const route = useRoute()
 let reloadSequence = 0
 
 // リスト選択が変更されたらタスクを再購読
@@ -68,10 +69,35 @@ async function reloadHomeData() {
   }
 }
 
+async function applyRequestedNavigationTarget() {
+  const target = typeof route.query.target === 'string' ? route.query.target : null
+  if (target !== 'read-later' || !authStore.user) return
+
+  const personalSpaceId = buildPersonalSpaceId(authStore.user.uid)
+  if (!spaceStore.useLegacyPath && spaceStore.currentSpaceId !== personalSpaceId) {
+    spaceStore.selectSpace(personalSpaceId)
+    await reloadHomeData()
+  }
+
+  const readLaterList = listsStore.lists.find((list) => list.name === 'あとで読む')
+  const inboxList = listsStore.lists.find((list) => list.name === 'Inbox')
+
+  listsStore.selectSmartList(null)
+
+  if (readLaterList) {
+    listsStore.selectList(readLaterList.id)
+  } else if (inboxList) {
+    listsStore.selectList(inboxList.id)
+  }
+
+  await router.replace({ name: 'home' })
+}
+
 onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
   await reloadHomeData()
+  await applyRequestedNavigationTarget()
 })
 
 onUnmounted(() => {
@@ -98,6 +124,14 @@ watch(
 
     if (!initialized) return
     await reloadHomeData()
+  }
+)
+
+watch(
+  () => route.query.target,
+  async (target) => {
+    if (target !== 'read-later' || !authStore.isAuthenticated || !spaceStore.initialized) return
+    await applyRequestedNavigationTarget()
   }
 )
 
