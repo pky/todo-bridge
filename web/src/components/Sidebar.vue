@@ -783,7 +783,7 @@ watch(
 
             <span class="flex items-center gap-1 flex-shrink-0">
               <span
-                v-if="list.incompleteTaskCount && list.incompleteTaskCount > 0"
+                v-if="section.key === 'personal' && list.incompleteTaskCount && list.incompleteTaskCount > 0"
                 class="text-[10px] text-gray-400"
               >
                 {{ list.incompleteTaskCount }}

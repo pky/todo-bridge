@@ -85,7 +85,7 @@ describe('Sidebar', () => {
     expect(wrapper.text()).not.toContain('⚠️')
   })
 
-  it('共有スペースのリスト件数更新を購読して反映する', async () => {
+  it('共有スペースではリスト件数を表示しない', async () => {
     const spaceStore = useSpaceStore()
     spaceStore.$patch({
       currentSpaceId: 'personal_user-1',
@@ -115,6 +115,6 @@ describe('Sidebar', () => {
     await flushView()
 
     expect(wrapper.text()).toContain('家族')
-    expect(wrapper.text()).toContain('3')
+    expect(wrapper.text()).not.toContain('3')
   })
 })
