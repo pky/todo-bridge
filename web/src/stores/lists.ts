@@ -13,6 +13,7 @@ import {
   where,
   writeBatch,
   Timestamp,
+  type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '@/services/firebase'
 import { refreshSmartListCounts } from '@/services/cloudFunctionsService'
@@ -47,6 +48,7 @@ export const useListsStore = defineStore('lists', () => {
 
   let listsLoaded = false
   let tagsLoaded = false
+  let listsUnsubscribe: Unsubscribe | null = null
   let smartListCountsUnsubscribe: (() => void) | null = null
 
   const selectedList = computed(() =>
@@ -72,6 +74,27 @@ export const useListsStore = defineStore('lists', () => {
   function getTagsCollection() {
     const spaceStore = useSpaceStore()
     return spaceStore.getCollectionRef('tags')
+  }
+
+  function sortLists(rawLists: TaskList[]): TaskList[] {
+    return rawLists.sort((a, b) => {
+      const posA = a.position ?? Infinity
+      const posB = b.position ?? Infinity
+      if (posA !== posB) return posA - posB
+      const dateA = a.dateCreated?.toMillis?.() ?? 0
+      const dateB = b.dateCreated?.toMillis?.() ?? 0
+      return dateA - dateB
+    })
+  }
+
+  function updateListsState(rawLists: TaskList[]) {
+    lists.value = sortLists(rawLists)
+    listsLoaded = true
+
+    if (selectedListId.value && !lists.value.some((list) => list.id === selectedListId.value)) {
+      const inbox = lists.value.find((list) => list.name === 'Inbox')
+      selectedListId.value = inbox?.id ?? lists.value[0]?.id ?? null
+    }
   }
 
   function getSelectedListStorageKey() {
@@ -127,16 +150,7 @@ export const useListsStore = defineStore('lists', () => {
         ...d.data(),
       })) as TaskList[]
 
-      // positionでソート（未設定の場合はdateCreatedでソート）
-      lists.value = rawLists.sort((a, b) => {
-        const posA = a.position ?? Infinity
-        const posB = b.position ?? Infinity
-        if (posA !== posB) return posA - posB
-        const dateA = a.dateCreated?.toMillis?.() ?? 0
-        const dateB = b.dateCreated?.toMillis?.() ?? 0
-        return dateA - dateB
-      })
-      listsLoaded = true
+      updateListsState(rawLists)
 
       // Inboxの重複排除 (複数ある場合は1つにまとめる)
       const inboxes = lists.value.filter((l) => l.name === 'Inbox')
@@ -194,6 +208,38 @@ export const useListsStore = defineStore('lists', () => {
     } finally {
       loading.value = false
     }
+  }
+
+  function subscribeToLists() {
+    const authStore = useAuthStore()
+    const spaceStore = useSpaceStore()
+    if (!authStore.user) return
+
+    if (listsUnsubscribe) {
+      listsUnsubscribe()
+      listsUnsubscribe = null
+    }
+
+    const targetQuery = spaceStore.useLegacyPath
+      ? getListsCollection()
+      : query(
+          getListsCollection(),
+          where('visibleToMemberIds', 'array-contains', authStore.user.uid)
+        )
+
+    listsUnsubscribe = onSnapshot(
+      targetQuery,
+      (snapshot) => {
+        const rawLists = snapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        })) as TaskList[]
+        updateListsState(rawLists)
+      },
+      (err) => {
+        console.error('[lists] subscribeToLists error:', err)
+      }
+    )
   }
 
   // スマートリストカウントを監視（ユーザードキュメントから取得）
@@ -265,6 +311,7 @@ export const useListsStore = defineStore('lists', () => {
     const spaceStore = useSpaceStore()
     await spaceStore.initSpace()
     await Promise.all([fetchLists(), fetchTags()])
+    subscribeToLists()
     subscribeToSmartListCounts()
     try {
       const refreshedCounts = await refreshSmartListCounts()
@@ -287,6 +334,10 @@ export const useListsStore = defineStore('lists', () => {
     if (smartListCountsUnsubscribe) {
       smartListCountsUnsubscribe()
       smartListCountsUnsubscribe = null
+    }
+    if (listsUnsubscribe) {
+      listsUnsubscribe()
+      listsUnsubscribe = null
     }
     smartListCounts.value = {
       today: 0,

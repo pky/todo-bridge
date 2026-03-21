@@ -318,14 +318,21 @@ async function handleRunDataMigration(): Promise<void> {
     migrationMessage.value = `総タスク数: ${snapshot.size}`
 
     const functions = getFunctions(undefined, 'asia-northeast1')
-    const migrateTaskCounts = httpsCallable<{ userId: string }, { success: boolean; listsUpdated: number }>(
+    const migrateTaskCounts = httpsCallable<
+      { userId: string; spaceId: string | null; useLegacyPath: boolean },
+      { success: boolean; listsUpdated: number }
+    >(
       functions,
       'migrateTaskCounts'
     )
 
     const [{ writeBatch }, migrateResponse] = await Promise.all([
       import('firebase/firestore'),
-      migrateTaskCounts({ userId: authStore.user.uid }),
+      migrateTaskCounts({
+        userId: authStore.user.uid,
+        spaceId: spaceStore.currentSpaceId,
+        useLegacyPath: spaceStore.useLegacyPath,
+      }),
     ])
 
     let updatedCount = 0
