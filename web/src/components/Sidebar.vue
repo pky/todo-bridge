@@ -266,22 +266,6 @@ async function ensureSharedSpaceMembersLoaded() {
   await loadSharedSpaceMembers()
 }
 
-async function loadListsForSpace(spaceId: string): Promise<SidebarListItem[]> {
-  if (!authStore.user) return []
-
-  const snapshot = await getDocs(query(
-    collection(db, 'spaces', spaceId, 'lists'),
-    where('visibleToMemberIds', 'array-contains', authStore.user.uid)
-  ))
-
-  return sortListItems(snapshot.docs.map((documentSnapshot) => ({
-    ...(documentSnapshot.data() as Omit<TaskList, 'id'>),
-    id: documentSnapshot.id,
-    spaceId,
-    spaceLabel: getSpaceLabel(spaceId),
-  })))
-}
-
 function clearOverviewListSubscriptions() {
   overviewListUnsubscribes.forEach((unsubscribe) => unsubscribe())
   overviewListUnsubscribes.clear()
