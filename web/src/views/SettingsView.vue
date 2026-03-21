@@ -304,7 +304,7 @@ async function handleClear(): Promise<void> {
 
 async function handleRunDataMigration(): Promise<void> {
   if (!authStore.user || migrating.value) return
-  if (!confirm('現在のスペースの全タスクに deleted: false を補完します。続行しますか？')) return
+  if (!confirm('現在のスペースの全タスクに deleted: false と parentId: null を補完します。続行しますか？')) return
 
   migrating.value = true
   maintenanceError.value = null
@@ -326,14 +326,7 @@ async function handleRunDataMigration(): Promise<void> {
       'migrateTaskCounts'
     )
 
-    const [{ writeBatch }, migrateResponse] = await Promise.all([
-      import('firebase/firestore'),
-      migrateTaskCounts({
-        userId: authStore.user.uid,
-        spaceId: spaceStore.currentSpaceId,
-        useLegacyPath: spaceStore.useLegacyPath,
-      }),
-    ])
+    const { writeBatch } = await import('firebase/firestore')
 
     let updatedCount = 0
     let skippedCount = 0
@@ -342,8 +335,11 @@ async function handleRunDataMigration(): Promise<void> {
 
     for (const taskDoc of snapshot.docs) {
       const taskData = taskDoc.data()
-      if (taskData.deleted === undefined) {
-        batch.update(taskDoc.ref, { deleted: false })
+      if (taskData.deleted === undefined || taskData.parentId === undefined) {
+        batch.update(taskDoc.ref, {
+          ...(taskData.deleted === undefined ? { deleted: false } : {}),
+          ...(taskData.parentId === undefined ? { parentId: null } : {}),
+        })
         batchCount++
         updatedCount++
 
@@ -362,7 +358,13 @@ async function handleRunDataMigration(): Promise<void> {
       await batch.commit()
     }
 
-    migrationMessage.value = `完了: deleted補完 ${updatedCount}件 / 既存 ${skippedCount}件 / タスク数更新 ${migrateResponse.data.listsUpdated}件`
+    const migrateResponse = await migrateTaskCounts({
+      userId: authStore.user.uid,
+      spaceId: spaceStore.currentSpaceId,
+      useLegacyPath: spaceStore.useLegacyPath,
+    })
+
+    migrationMessage.value = `完了: 補完 ${updatedCount}件 / 既存 ${skippedCount}件 / タスク数更新 ${migrateResponse.data.listsUpdated}件`
     await reloadScopedData()
   } catch (error) {
     maintenanceError.value = error instanceof Error ? error.message : 'データ更新に失敗しました'
