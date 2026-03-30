@@ -12,6 +12,36 @@ function parseDate(value?: string): Date {
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed
 }
 
+function parseRelativeDate(value?: string): Date {
+  if (!value) return new Date()
+
+  const match = value.trim().match(/^(\d+)\s*(d|w|mo|y)$/i)
+  if (!match) return new Date()
+
+  const amount = Number(match[1])
+  const unit = match[2].toLowerCase()
+  const date = new Date()
+
+  switch (unit) {
+    case 'd':
+      date.setDate(date.getDate() - amount)
+      break
+    case 'w':
+      date.setDate(date.getDate() - (amount * 7))
+      break
+    case 'mo':
+      date.setMonth(date.getMonth() - amount)
+      break
+    case 'y':
+      date.setFullYear(date.getFullYear() - amount)
+      break
+    default:
+      break
+  }
+
+  return date
+}
+
 function toAbsoluteUrl(url: string | undefined, baseUrl: string): string | null {
   if (!url) return null
   try {
@@ -68,6 +98,10 @@ function slugify(text: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 80)
+}
+
+function normalizeText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
 }
 
 function parseBloggerLike(html: string, baseUrl: string, sourceName: string): RawArticle[] {
@@ -207,6 +241,86 @@ function parsePlayConsoleAnnouncements(html: string, baseUrl: string): RawArticl
   return articles
 }
 
+function parseLinkedInShowcase(html: string, baseUrl: string): RawArticle[] {
+  const $ = cheerio.load(html)
+  const articles: RawArticle[] = []
+  const seen = new Set<string>()
+  const source = MOBILE_SOURCES.find((item) => item.name === 'Apple Developer LinkedIn')
+  if (!source) return articles
+
+  const candidateAnchors = $('a[href]').toArray().filter((el) => {
+    const anchor = $(el)
+    const text = normalizeText(anchor.text())
+    const href = toAbsoluteUrl(anchor.attr('href'), baseUrl)
+    if (!href || href === baseUrl) return false
+    if (href.includes('/showcase/appledeveloper')) return false
+    if (text.length < 8) return false
+    if (text.startsWith('#')) return false
+    if (['Apple Developer', 'Report this post', 'Like', 'Comment', 'Share', 'Follow', 'Join now'].includes(text)) return false
+    return true
+  })
+
+  for (const el of candidateAnchors) {
+    const anchor = $(el)
+    const href = toAbsoluteUrl(anchor.attr('href'), baseUrl)
+    if (!href) continue
+
+    let container = anchor.closest('li, article, div, section')
+    let containerText = ''
+    let depth = 0
+
+    while (container.length > 0 && depth < 6) {
+      const text = normalizeText(container.text())
+      if (text.includes('Report this post') || text.includes('Like') || text.includes('Share')) {
+        containerText = text
+        break
+      }
+      container = container.parent()
+      depth += 1
+    }
+
+    if (!containerText) continue
+
+    const title = normalizeText(anchor.text())
+    const relativeDate = containerText.match(/\b\d+\s*(?:d|w|mo|y)\b/i)?.[0]
+    const description = normalizeText(
+      containerText
+        .replace(/Apple Developer/g, '')
+        .replace(/\d[\d,]*\s+followers/g, '')
+        .replace(/\b\d+\s*(?:d|w|mo|y)\b/gi, '')
+        .replace(/Report this post/g, '')
+        .replace(/Like Comment Share/g, '')
+        .replace(title, '')
+    ).slice(0, 1500)
+
+    const key = `${title}::${href}`
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    const { actionRequired, actionType, importantLevel, requiredByDate } = classifyMobileArticle({ title, description })
+    articles.push({
+      title,
+      url: href,
+      description,
+      thumbnailUrl: null,
+      topic: 'mobile',
+      source: 'official',
+      sourceName: source.name,
+      sourceTier: source.sourceTier,
+      platform: source.platform,
+      isOfficial: source.isOfficial,
+      actionRequired,
+      actionType,
+      importantLevel,
+      ...(requiredByDate ? { requiredByDate } : {}),
+      score: null,
+      publishedAt: parseRelativeDate(relativeDate),
+    })
+  }
+
+  return articles.slice(0, source.limit ?? articles.length)
+}
+
 export async function fetchOfficialMobileHtmlArticles(): Promise<RawArticle[]> {
   const htmlSources = MOBILE_SOURCES.filter((source) => source.kind === 'html')
   const results = await Promise.all(
@@ -225,6 +339,8 @@ export async function fetchOfficialMobileHtmlArticles(): Promise<RawArticle[]> {
           articles = parseAppleNews(data, source.url)
         } else if (source.name === 'App Store Connect Release Notes') {
           articles = parseAppStoreConnectReleaseNotes(data, source.url)
+        } else if (source.name === 'Apple Developer LinkedIn') {
+          articles = parseLinkedInShowcase(data, source.url)
         } else if (source.name === 'Play Console Announcements') {
           articles = parsePlayConsoleAnnouncements(data, source.url)
         } else {

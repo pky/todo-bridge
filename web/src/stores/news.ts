@@ -115,6 +115,10 @@ export const useNewsStore = defineStore('news', () => {
     return { latestDate, feedDocs: sortedFeedDocs }
   }
 
+  function shouldKeepVisibleAfterClick(article: NewsArticle, topic: NewsTopic): boolean {
+    return topic === 'mobile' && article.importantLevel === 'urgent'
+  }
+
   async function trackDisplayedArticles(
     uid: string,
     topic: NewsTopic,
@@ -203,7 +207,7 @@ export const useNewsStore = defineStore('news', () => {
       const results = await Promise.all(articlePromises)
       const visibleArticles = results
         .filter((a): a is NewsArticle => a !== null)
-        .filter(article => !excludedUrls.has(article.url))
+        .filter(article => !excludedUrls.has(article.url) || shouldKeepVisibleAfterClick(article, topic))
 
       articles.value = visibleArticles
       await trackDisplayedArticles(uid, topic, latestDate, visibleArticles)
@@ -330,7 +334,7 @@ export const useNewsStore = defineStore('news', () => {
       const visibleArticles = feedDocs
         .filter(feedDoc => !dismissedArticleIds.has(feedDoc.id))
         .map(feedDoc => ({ id: feedDoc.id, ...feedDoc.data() }) as NewsArticle)
-        .filter(article => !excludedUrls.has(article.url))
+        .filter(article => !excludedUrls.has(article.url) || shouldKeepVisibleAfterClick(article, 'mobile'))
         .filter(article => article.isOfficial === true)
 
       const urgent = visibleArticles.filter(article => article.importantLevel === 'urgent').length

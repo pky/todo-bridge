@@ -45,6 +45,7 @@ test('mobile source 設定に主要公式ソースが含まれる', () => {
 
   assert.ok(names.includes('Apple Developer News'))
   assert.ok(names.includes('Apple Developer News RSS'))
+  assert.ok(names.includes('Apple Developer LinkedIn'))
   assert.ok(names.includes('Google Developers Japan'))
   assert.ok(names.includes('Android Developers Japan Blog'))
   assert.ok(names.includes('menthas'))
