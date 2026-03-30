@@ -230,6 +230,28 @@ describe('NewsView', () => {
     expect(link.text()).toContain('確認する')
   })
 
+  it('mobile の重要事項からあとで読むへ追加できる', async () => {
+    routeState.name = 'news-mobile'
+    newsStoreState.articles = [mobileArticleIos]
+
+    const wrapper = mount(NewsView, {
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    await nextTick()
+
+    const button = wrapper.findAll('button').find((node) => node.text() === 'あとで読む')
+    expect(button).toBeTruthy()
+
+    await button?.trigger('click')
+
+    expect(bookmarkArticleMock).toHaveBeenCalledWith(mobileArticleIos)
+  })
+
   it('mobile の重要事項は urgent の記事だけ表示する', async () => {
     routeState.name = 'news-mobile'
     newsStoreState.articles = [

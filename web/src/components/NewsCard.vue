@@ -77,9 +77,9 @@ const titleClass = computed(() => {
 })
 
 const summaryClass = computed(() => {
-  if (props.variant === 'hero') return 'mt-2 text-xs leading-relaxed text-gray-500 line-clamp-3 xl:mt-3 xl:text-sm xl:text-gray-600 xl:line-clamp-4'
-  if (props.variant === 'featured') return 'mt-2 text-xs leading-relaxed text-gray-500 line-clamp-3'
-  return 'mt-2 text-xs leading-relaxed text-gray-500 line-clamp-3'
+  if (props.variant === 'hero') return 'mt-2 text-xs leading-relaxed text-gray-500 xl:mt-3 xl:text-sm xl:text-gray-600'
+  if (props.variant === 'featured') return 'mt-2 text-xs leading-relaxed text-gray-500'
+  return 'mt-2 text-xs leading-relaxed text-gray-500'
 })
 
 const metaClass = computed(() => {

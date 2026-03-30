@@ -330,7 +330,7 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
                 </button>
               </div>
 
-              <p v-if="article.summaryJa" class="mt-2 text-xs leading-relaxed text-gray-600 line-clamp-3">
+              <p v-if="article.summaryJa" class="mt-2 text-xs leading-relaxed text-gray-600">
                 {{ article.summaryJa }}
               </p>
 
@@ -359,15 +359,24 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
                     期限 {{ article.requiredByDate }}
                   </span>
                 </div>
-                <a
-                  class="rounded-full bg-amber-500 px-3 py-1 text-xs font-medium text-white hover:bg-amber-600"
-                  :href="article.url"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  @click.stop="handleArticleClick(article)"
-                >
-                  確認する
-                </a>
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    class="rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-medium text-amber-700 hover:border-amber-300 hover:bg-amber-50"
+                    @click.stop="handleBookmark(article)"
+                  >
+                    あとで読む
+                  </button>
+                  <a
+                    class="rounded-full bg-amber-500 px-3 py-1 text-xs font-medium text-white hover:bg-amber-600"
+                    :href="article.url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    @click.stop="handleArticleClick(article)"
+                  >
+                    確認する
+                  </a>
+                </div>
               </div>
             </article>
           </div>

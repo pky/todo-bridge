@@ -243,4 +243,58 @@ describe('News Store', () => {
     expect(store.mobileAlertCount).toBe(1)
     expect(store.mobileAlertSummary).toEqual({ urgent: 1, review: 1 })
   })
+
+  it('mobile の urgent 記事はクリック済みでも重要事項として残す', async () => {
+    getDocsMock.mockImplementation(async (target: any) => {
+      const path = target.type === 'query' ? target.target.path : target.path
+      const clauses = target.type === 'query' ? target.clauses : []
+
+      if (path === 'users/user-1/newsInteractions') {
+        return createDocs([
+          {
+            id: 'mobile-urgent',
+            data: {
+              topic: 'mobile',
+              articleId: 'mobile-urgent',
+              url: 'https://example.com/mobile-urgent',
+              clickedAt: { seconds: Date.now() / 1000 },
+            },
+          },
+        ])
+      }
+
+      if (path === 'users/user-1/newsFeed/mobile/articles' && clauses.some((clause: any) => clause.type === 'limit')) {
+        return createDocs([{ id: 'mobile-urgent', data: { date: '2026-03-14', displayScore: 20 } }])
+      }
+
+      if (path === 'users/user-1/newsFeed/mobile/articles' && clauses.some((clause: any) => clause.type === 'where')) {
+        return createDocs([
+          {
+            id: 'mobile-urgent',
+            data: {
+              ...articleData,
+              topic: 'mobile',
+              url: 'https://example.com/mobile-urgent',
+              sourceName: 'Apple Developer News',
+              source: 'official',
+              isOfficial: true,
+              actionRequired: true,
+              importantLevel: 'urgent',
+            },
+          },
+        ])
+      }
+
+      return createDocs([])
+    })
+
+    const store = useNewsStore()
+    await store.loadTodayFeed('mobile')
+    await store.loadMobileAlertCount()
+
+    expect(store.articles).toHaveLength(1)
+    expect(store.articles[0]?.id).toBe('mobile-urgent')
+    expect(store.mobileAlertCount).toBe(1)
+    expect(store.mobileAlertSummary).toEqual({ urgent: 1, review: 0 })
+  })
 })

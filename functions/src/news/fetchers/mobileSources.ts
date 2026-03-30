@@ -67,6 +67,16 @@ export const MOBILE_SOURCES: MobileSourceConfig[] = [
   {
     topic: 'mobile',
     platform: 'ios',
+    name: 'Apple Developer LinkedIn',
+    url: 'https://www.linkedin.com/showcase/appledeveloper/',
+    kind: 'html',
+    sourceTier: 'official',
+    isOfficial: true,
+    limit: 6,
+  },
+  {
+    topic: 'mobile',
+    platform: 'ios',
     name: 'Taisyo',
     url: 'http://taisy0.com/feed',
     kind: 'rss',
