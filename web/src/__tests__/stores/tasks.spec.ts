@@ -296,6 +296,60 @@ describe('Tasks Store', () => {
     expect(store.selectedTaskId).toBeNull()
   })
 
+  it('updateTask でサブタスクがないタスクも通常どおりリスト移動できる', async () => {
+    const { updateDoc } = await import('firebase/firestore')
+    vi.mocked(updateDoc).mockResolvedValue(undefined as any)
+
+    const store = useTasksStore()
+    store.$patch({
+      tasks: [
+        { ...baseTask, id: 'task-1', name: '単体タスク' },
+      ],
+      selectedTaskId: 'task-1',
+    })
+
+    await store.updateTask('task-1', { listId: 'work-id' })
+
+    expect(updateDoc).toHaveBeenCalledTimes(1)
+    expect(store.selectedTask?.listId).toBe('work-id')
+  })
+
+  it('updateTask で親タスクのリスト移動時に配下のサブタスクも移動する', async () => {
+    const { getDocs, updateDoc } = await import('firebase/firestore')
+    vi.mocked(updateDoc).mockResolvedValue(undefined as any)
+    vi.mocked(getDocs)
+      .mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'subtask-1',
+            data: () => ({ ...baseTask, name: 'サブタスク1', parentId: 'parent-1' }),
+          },
+          {
+            id: 'subtask-2',
+            data: () => ({ ...baseTask, name: 'サブタスク2', parentId: 'parent-1' }),
+          },
+        ],
+      } as any)
+      .mockResolvedValueOnce({ docs: [] } as any)
+
+    const store = useTasksStore()
+    store.$patch({
+      tasks: [
+        { ...baseTask, id: 'parent-1', name: '親タスク' },
+        { ...baseTask, id: 'subtask-1', name: 'サブタスク1', parentId: 'parent-1' },
+        { ...baseTask, id: 'subtask-2', name: 'サブタスク2', parentId: 'parent-1' },
+      ],
+      selectedTaskId: 'parent-1',
+    })
+
+    await store.updateTask('parent-1', { listId: 'work-id' })
+
+    expect(updateDoc).toHaveBeenCalledTimes(3)
+    expect(store.selectedTask?.listId).toBe('work-id')
+    expect(store.tasks.find((task) => task.id === 'subtask-1')?.listId).toBe('work-id')
+    expect(store.tasks.find((task) => task.id === 'subtask-2')?.listId).toBe('work-id')
+  })
+
   describe('サブタスク機能', () => {
     it('rootTasks は親タスクのみ返す（parentIdがnull）', () => {
       const store = useTasksStore()
