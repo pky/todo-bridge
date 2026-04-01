@@ -299,6 +299,64 @@ export const useTasksStore = defineStore('tasks', () => {
     return doc(getTasksCollectionForSpace(spaceId), id)
   }
 
+  async function getDescendantTasks(parentId: string, spaceId?: string | null): Promise<Task[]> {
+    const descendants: Task[] = []
+    let parentIds = [parentId]
+
+    while (parentIds.length > 0) {
+      const chunks: string[][] = []
+      for (let i = 0; i < parentIds.length; i += 10) {
+        chunks.push(parentIds.slice(i, i + 10))
+      }
+
+      const nextParentIds: string[] = []
+      for (const chunk of chunks) {
+        const snapshot = await getDocs(
+          query(getTasksCollectionForSpace(spaceId), where('parentId', 'in', chunk))
+        )
+
+        snapshot.docs.forEach((docSnap) => {
+          const task = { id: docSnap.id, ...docSnap.data() } as Task
+          if (!isActiveTask(task)) return
+          descendants.push(task)
+          nextParentIds.push(task.id)
+        })
+      }
+
+      parentIds = nextParentIds
+    }
+
+    return descendants
+  }
+
+  function getLoadedDescendantTasks(parentId: string): Task[] {
+    const descendants: Task[] = []
+    const queue = [parentId]
+    const seen = new Set<string>()
+    const loadedTasks = [...tasks.value, ...allTasksCache.value]
+    const taskMap = new Map<string, Task>()
+
+    loadedTasks.forEach((task) => {
+      if (!taskMap.has(task.id)) {
+        taskMap.set(task.id, task)
+      }
+    })
+
+    while (queue.length > 0) {
+      const currentParentId = queue.shift()
+      if (!currentParentId) continue
+
+      taskMap.forEach((task) => {
+        if (task.parentId !== currentParentId || seen.has(task.id)) return
+        seen.add(task.id)
+        descendants.push(task)
+        queue.push(task.id)
+      })
+    }
+
+    return descendants
+  }
+
   function applySmartListCountDelta(
     beforeTask: Pick<Task, 'completed' | 'parentId' | 'dueDate'> | null,
     afterTask: Pick<Task, 'completed' | 'parentId' | 'dueDate'> | null
@@ -947,14 +1005,46 @@ export const useTasksStore = defineStore('tasks', () => {
     // カレンダー更新はCloud Functionsのトリガーが担当するため不要
 
     const existingTask = tasks.value.find((t) => t.id === id) || allTasksCache.value.find((t) => t.id === id)
+    const listChanged = !!existingTask && input.listId !== undefined && input.listId !== existingTask.listId
     const docRef = getTaskDocRef(id, existingTask?.spaceId)
     await updateDoc(docRef, {
       ...input,
       dateModified: serverTimestamp(),
     })
 
+    let descendants: Task[] = []
+    if (listChanged && input.listId) {
+      descendants = getLoadedDescendantTasks(id)
+
+      try {
+        const fetchedDescendants = await getDescendantTasks(id, existingTask?.spaceId)
+        const descendantMap = new Map<string, Task>()
+        descendants.forEach((task) => descendantMap.set(task.id, task))
+        fetchedDescendants.forEach((task) => descendantMap.set(task.id, task))
+        descendants = Array.from(descendantMap.values())
+      } catch (error) {
+        console.warn('[tasks] updateTask: failed to fetch descendant tasks', error)
+      }
+
+      if (descendants.length > 0) {
+        try {
+          await Promise.all(
+            descendants.map((descendant) =>
+              updateDoc(getTaskDocRef(descendant.id, descendant.spaceId ?? existingTask?.spaceId), {
+                listId: input.listId,
+                dateModified: serverTimestamp(),
+              })
+            )
+          )
+        } catch (error) {
+          console.warn('[tasks] updateTask: failed to move descendant tasks', error)
+        }
+      }
+    }
+
     // ローカルstateを更新
     const nowTimestamp = Timestamp.now()
+    const descendantIds = new Set(descendants.map((task) => task.id))
     const updateLocalTask = (taskList: Task[]) => {
       const index = taskList.findIndex((t) => t.id === id)
       const existing = taskList[index]
@@ -979,6 +1069,17 @@ export const useTasksStore = defineStore('tasks', () => {
           addToCalendar: input.addToCalendar !== undefined ? input.addToCalendar : existing.addToCalendar,
           calendarEventId: input.calendarEventId !== undefined ? input.calendarEventId : existing.calendarEventId,
         }
+      }
+
+      if (listChanged && input.listId) {
+        taskList.forEach((task, descendantIndex) => {
+          if (!descendantIds.has(task.id)) return
+          taskList[descendantIndex] = {
+            ...task,
+            listId: input.listId!,
+            dateModified: nowTimestamp,
+          }
+        })
       }
     }
 
@@ -1006,6 +1107,13 @@ export const useTasksStore = defineStore('tasks', () => {
             allDay: input.allDay !== undefined ? input.allDay : t.allDay,
             addToCalendar: input.addToCalendar !== undefined ? input.addToCalendar : t.addToCalendar,
             calendarEventId: input.calendarEventId !== undefined ? input.calendarEventId : t.calendarEventId,
+          }
+        }
+        if (listChanged && input.listId && descendantIds.has(t.id)) {
+          return {
+            ...t,
+            listId: input.listId,
+            dateModified: nowTimestamp,
           }
         }
         return t
