@@ -7,6 +7,7 @@ vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
   doc: vi.fn((...segments: string[]) => segments),
   getDocs: vi.fn(),
+  getDocsFromServer: vi.fn(),
 }))
 
 vi.mock('@/services/firebase', () => ({
@@ -42,8 +43,8 @@ describe('Space Store', () => {
   })
 
   it('membership がない場合は personal space を既定にする', async () => {
-    const { getDocs } = await import('firebase/firestore')
-    vi.mocked(getDocs).mockResolvedValueOnce({
+    const { getDocsFromServer } = await import('firebase/firestore')
+    vi.mocked(getDocsFromServer).mockResolvedValueOnce({
       empty: true,
       docs: [],
     } as never)
@@ -56,8 +57,8 @@ describe('Space Store', () => {
   })
 
   it('membership がある場合は spaces パスへ切り替える', async () => {
-    const { getDocs } = await import('firebase/firestore')
-    vi.mocked(getDocs).mockResolvedValueOnce({
+    const { getDocsFromServer } = await import('firebase/firestore')
+    vi.mocked(getDocsFromServer).mockResolvedValueOnce({
       empty: false,
       docs: [
         {
@@ -92,8 +93,8 @@ describe('Space Store', () => {
   })
 
   it('legacy データが personal space より多い場合は移行する', async () => {
-    const { getDocs } = await import('firebase/firestore')
-    vi.mocked(getDocs).mockResolvedValueOnce({
+    const { getDocsFromServer } = await import('firebase/firestore')
+    vi.mocked(getDocsFromServer).mockResolvedValueOnce({
       empty: false,
       docs: [
         {
@@ -117,8 +118,8 @@ describe('Space Store', () => {
   })
 
   it('別ユーザーへ切り替わったら再初期化する', async () => {
-    const { getDocs } = await import('firebase/firestore')
-    vi.mocked(getDocs)
+    const { getDocsFromServer } = await import('firebase/firestore')
+    vi.mocked(getDocsFromServer)
       .mockResolvedValueOnce({
         empty: false,
         docs: [
@@ -162,5 +163,33 @@ describe('Space Store', () => {
 
     await store.initSpace()
     expect(store.currentSpaceId).toBe('family-space-b')
+  })
+
+  it('membership のサーバー取得に失敗した場合はキャッシュ取得へフォールバックする', async () => {
+    const { getDocs, getDocsFromServer } = await import('firebase/firestore')
+    vi.mocked(getDocsFromServer).mockRejectedValueOnce(new Error('offline'))
+    vi.mocked(getDocs).mockResolvedValueOnce({
+      empty: false,
+      docs: [
+        {
+          id: 'personal_test-user-id',
+          data: () => ({
+            spaceId: 'personal_test-user-id',
+            role: 'owner',
+            status: 'active',
+            displayName: 'Personal',
+            joinedAt: null,
+          }),
+        },
+      ],
+    } as never)
+
+    const store = useSpaceStore()
+    await store.initSpace()
+
+    expect(getDocsFromServer).toHaveBeenCalledTimes(1)
+    expect(getDocs).toHaveBeenCalledTimes(1)
+    expect(store.currentSpaceId).toBe('personal_test-user-id')
+    expect(store.useLegacyPath).toBe(false)
   })
 })

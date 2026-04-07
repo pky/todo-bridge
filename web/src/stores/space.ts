@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { collection, doc, getDocs } from 'firebase/firestore'
+import { collection, doc, getDocs, getDocsFromServer } from 'firebase/firestore'
 import { db } from '@/services/firebase'
 import { useAuthStore } from './auth'
 import type { UserMembership } from '@/types'
@@ -28,6 +28,15 @@ export const useSpaceStore = defineStore('space', () => {
   const personalSpaceMigrationChecked = ref(false)
   const initializedUserId = ref<string | null>(null)
 
+  async function getServerFirstSnapshot(collectionRef: ReturnType<typeof collection>) {
+    try {
+      return await getDocsFromServer(collectionRef)
+    } catch (error) {
+      console.warn('[spaceStore] Server fetch failed, falling back to cached snapshot:', error)
+      return await getDocs(collectionRef)
+    }
+  }
+
   async function initSpace(force = false) {
     const authStore = useAuthStore()
     if (!authStore.user) {
@@ -44,7 +53,7 @@ export const useSpaceStore = defineStore('space', () => {
     }
 
     const membershipCollection = collection(db, 'users', authStore.user.uid, 'memberships')
-    const snapshot = await getDocs(membershipCollection)
+    const snapshot = await getServerFirstSnapshot(membershipCollection)
 
     if (snapshot.empty) {
       memberships.value = []
