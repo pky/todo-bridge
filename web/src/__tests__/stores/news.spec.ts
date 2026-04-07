@@ -4,7 +4,9 @@ import { useAuthStore } from '@/stores/auth'
 import { useNewsStore } from '@/stores/news'
 
 const getDocsMock = vi.hoisted(() => vi.fn())
+const getDocsFromServerMock = vi.hoisted(() => vi.fn())
 const getDocMock = vi.hoisted(() => vi.fn())
+const getDocFromServerMock = vi.hoisted(() => vi.fn())
 const setDocMock = vi.hoisted(() => vi.fn())
 const batchSetMock = vi.hoisted(() => vi.fn())
 const batchCommitMock = vi.hoisted(() => vi.fn())
@@ -18,7 +20,9 @@ vi.mock('firebase/firestore', () => ({
   collection: vi.fn((_db: unknown, path: string) => ({ type: 'collection', path })),
   doc: vi.fn((_db: unknown, path: string) => ({ type: 'doc', path })),
   getDocs: getDocsMock,
+  getDocsFromServer: getDocsFromServerMock,
   getDoc: getDocMock,
+  getDocFromServer: getDocFromServerMock,
   setDoc: setDocMock,
   writeBatch: vi.fn(() => ({
     set: batchSetMock,
@@ -73,12 +77,16 @@ describe('News Store', () => {
       exists: () => false,
       data: () => ({}),
     })
+    getDocFromServerMock.mockResolvedValue({
+      exists: () => false,
+      data: () => ({}),
+    })
     setDocMock.mockResolvedValue(undefined)
     batchCommitMock.mockResolvedValue(undefined)
   })
 
   it('同じURLが過去に2回表示済みなら今回のフィードでは除外する', async () => {
-    getDocsMock.mockImplementation(async (target: any) => {
+    getDocsFromServerMock.mockImplementation(async (target: any) => {
       const path = target.type === 'query' ? target.target.path : target.path
       const clauses = target.type === 'query' ? target.clauses : []
 
@@ -116,7 +124,7 @@ describe('News Store', () => {
   })
 
   it('同じ記事は同じ日には表示回数を二重加算しない', async () => {
-    getDocsMock.mockImplementation(async (target: any) => {
+    getDocsFromServerMock.mockImplementation(async (target: any) => {
       const path = target.type === 'query' ? target.target.path : target.path
       const clauses = target.type === 'query' ? target.clauses : []
 
@@ -155,7 +163,7 @@ describe('News Store', () => {
   })
 
   it('mobile の通知件数は urgent と review を分けて数える', async () => {
-    getDocsMock.mockImplementation(async (target: any) => {
+    getDocsFromServerMock.mockImplementation(async (target: any) => {
       const path = target.type === 'query' ? target.target.path : target.path
       const clauses = target.type === 'query' ? target.clauses : []
 
@@ -245,7 +253,7 @@ describe('News Store', () => {
   })
 
   it('mobile の urgent 記事はクリック済みでも重要事項として残す', async () => {
-    getDocsMock.mockImplementation(async (target: any) => {
+    getDocsFromServerMock.mockImplementation(async (target: any) => {
       const path = target.type === 'query' ? target.target.path : target.path
       const clauses = target.type === 'query' ? target.clauses : []
 
@@ -296,5 +304,35 @@ describe('News Store', () => {
     expect(store.articles[0]?.id).toBe('mobile-urgent')
     expect(store.mobileAlertCount).toBe(1)
     expect(store.mobileAlertSummary).toEqual({ urgent: 1, review: 0 })
+  })
+
+  it('AI フィードのサーバー取得失敗時はキャッシュ取得へフォールバックする', async () => {
+    getDocsFromServerMock.mockRejectedValue(new Error('offline'))
+    getDocsMock.mockImplementation(async (target: any) => {
+      const path = target.type === 'query' ? target.target.path : target.path
+      const clauses = target.type === 'query' ? target.clauses : []
+
+      if (path === 'users/user-1/newsInteractions') {
+        return createDocs([])
+      }
+
+      if (path === 'users/user-1/newsFeed/ai/articles' && clauses.some((clause: any) => clause.type === 'limit')) {
+        return createDocs([{ id: 'article-1', data: { date: '2026-03-14', displayScore: 10 } }])
+      }
+
+      if (path === 'users/user-1/newsFeed/ai/articles' && clauses.some((clause: any) => clause.type === 'where')) {
+        return createDocs([{ id: 'article-1', data: articleData }])
+      }
+
+      return createDocs([])
+    })
+
+    const store = useNewsStore()
+    await store.loadTodayFeed('ai')
+
+    expect(getDocsFromServerMock).toHaveBeenCalled()
+    expect(getDocsMock).toHaveBeenCalled()
+    expect(store.articles).toHaveLength(1)
+    expect(store.articles[0]?.id).toBe('article-1')
   })
 })

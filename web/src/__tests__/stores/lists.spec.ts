@@ -12,6 +12,7 @@ vi.mock('firebase/firestore', () => ({
   updateDoc: vi.fn(),
   deleteDoc: vi.fn(),
   getDocs: vi.fn(),
+  getDocsFromServer: vi.fn(),
   onSnapshot: vi.fn(),
   serverTimestamp: vi.fn(() => ({ seconds: Date.now() / 1000 })),
   query: vi.fn(),
@@ -193,10 +194,10 @@ describe('Lists Store', () => {
   })
 
   it('subscribe で実データからスマートリスト件数を再同期する', async () => {
-    const { getDocs, onSnapshot } = await import('firebase/firestore')
+    const { getDocsFromServer, onSnapshot } = await import('firebase/firestore')
     const { refreshSmartListCounts } = await import('@/services/cloudFunctionsService')
 
-    vi.mocked(getDocs)
+    vi.mocked(getDocsFromServer)
       .mockResolvedValueOnce({
         docs: [
           {
@@ -223,9 +224,9 @@ describe('Lists Store', () => {
   })
 
   it('subscribe 後にリストの件数更新を onSnapshot で反映する', async () => {
-    const { getDocs, onSnapshot } = await import('firebase/firestore')
+    const { getDocsFromServer, onSnapshot } = await import('firebase/firestore')
 
-    vi.mocked(getDocs)
+    vi.mocked(getDocsFromServer)
       .mockResolvedValueOnce({
         docs: [
           {
@@ -264,6 +265,32 @@ describe('Lists Store', () => {
     })
 
     expect(store.lists[0]?.incompleteTaskCount).toBe(3)
+  })
+
+  it('subscribe でサーバー取得失敗時はキャッシュ取得へフォールバックする', async () => {
+    const { getDocs, getDocsFromServer, onSnapshot } = await import('firebase/firestore')
+
+    vi.mocked(getDocsFromServer)
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockRejectedValueOnce(new Error('offline'))
+    vi.mocked(getDocs)
+      .mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'inbox-id',
+            data: () => ({ name: 'Inbox', dateCreated: {} as any, dateModified: {} as any }),
+          },
+        ],
+      } as any)
+      .mockResolvedValueOnce({ docs: [] } as any)
+    vi.mocked(onSnapshot).mockReturnValue(() => {})
+
+    const store = useListsStore()
+    await store.subscribe()
+
+    expect(getDocsFromServer).toHaveBeenCalledTimes(2)
+    expect(getDocs).toHaveBeenCalledTimes(2)
+    expect(store.lists[0]?.id).toBe('inbox-id')
   })
 
   it('deleteList がリスト内のタスクも削除する', async () => {

@@ -6,6 +6,7 @@ import {
   updateDoc,
   deleteDoc,
   getDocs,
+  getDocsFromServer,
   onSnapshot,
   serverTimestamp,
   query,
@@ -102,6 +103,15 @@ export const useListsStore = defineStore('lists', () => {
     return spaceStore.getScopedStorageKey('rertm-selected-list-id')
   }
 
+  async function getServerFirstSnapshot(source: ReturnType<typeof getListsCollection> | ReturnType<typeof query>) {
+    try {
+      return await getDocsFromServer(source)
+    } catch (error) {
+      console.warn('[lists] Server fetch failed, falling back to cached snapshot:', error)
+      return await getDocs(source)
+    }
+  }
+
   // リストを1回取得（onSnapshotではなくgetDocsで読み取り削減）
   async function fetchLists() {
     const authStore = useAuthStore()
@@ -137,17 +147,17 @@ export const useListsStore = defineStore('lists', () => {
 
     loading.value = true
     try {
-      // リストは少量データのため常にサーバーから取得（キャッシュ起因の問題を回避）
+      // リストは起動時のキャッシュ誤判定を避けるためサーバー優先で取得する
       const snapshot = spaceStore.useLegacyPath
-        ? await getDocs(getListsCollection())
-        : await getDocs(query(
+        ? await getServerFirstSnapshot(getListsCollection())
+        : await getServerFirstSnapshot(query(
             getListsCollection(),
             where('visibleToMemberIds', 'array-contains', authStore.user.uid)
           ))
       console.log('[lists] fetchLists:', snapshot.docs.length, 'from SERVER')
       const rawLists = snapshot.docs.map((d) => ({
         id: d.id,
-        ...d.data(),
+        ...(d.data() as Omit<TaskList, 'id'>),
       })) as TaskList[]
 
       updateListsState(rawLists)
@@ -293,12 +303,12 @@ export const useListsStore = defineStore('lists', () => {
             getTagsCollection(),
             where('visibleToMemberIds', 'array-contains', authStore.user.uid)
           )
-      // タグは少量データのため常にサーバーから取得
-      const snapshot = await getDocs(q)
+      // タグもリストと同様にサーバー優先で取得する
+      const snapshot = await getServerFirstSnapshot(q)
       console.log('[lists] fetchTags:', snapshot.docs.length, 'from SERVER')
       tags.value = snapshot.docs.map((d) => ({
         id: d.id,
-        ...d.data(),
+        ...(d.data() as Omit<Tag, 'id'>),
       })) as Tag[]
       tags.value = [...tags.value].sort((a, b) => a.name.localeCompare(b.name, 'ja'))
       tagsLoaded = true

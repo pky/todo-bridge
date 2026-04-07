@@ -31,6 +31,7 @@ import type {
 import type { NewsInteraction, NewsTopic } from '@/types/news'
 
 export const useNewsStore = defineStore('news', () => {
+  const NEWS_FETCH_TIMEOUT_MS = 8000
   const authStore = useAuthStore()
   const articles = ref<NewsArticle[]>([])
   const loading = ref(false)
@@ -47,6 +48,49 @@ export const useNewsStore = defineStore('news', () => {
   const dismissedIds = ref<Set<string>>(new Set())
   const mobileAlertCount = ref(0)
   const mobileAlertSummary = ref({ urgent: 0, review: 0 })
+  let activeLoadSequence = 0
+
+  function getJstToday(): string {
+    return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  }
+
+  function getNewsCacheKey(uid: string, topic: NewsTopic): string {
+    return `rertm-news-cache-${uid}-${topic}`
+  }
+
+  function readCachedFeed(uid: string, topic: NewsTopic): { date: string; articles: NewsArticle[] } | null {
+    try {
+      const raw = localStorage.getItem(getNewsCacheKey(uid, topic))
+      if (!raw) return null
+      const parsed = JSON.parse(raw) as { date?: string; articles?: NewsArticle[] }
+      if (!parsed.date || !Array.isArray(parsed.articles)) return null
+      return { date: parsed.date, articles: parsed.articles }
+    } catch {
+      return null
+    }
+  }
+
+  function writeCachedFeed(uid: string, topic: NewsTopic, date: string, nextArticles: NewsArticle[]) {
+    localStorage.setItem(
+      getNewsCacheKey(uid, topic),
+      JSON.stringify({ date, articles: nextArticles })
+    )
+  }
+
+  function updateCachedFeedArticleList(uid: string, topic: NewsTopic, articleId: string) {
+    const cached = readCachedFeed(uid, topic)
+    if (!cached) return
+    writeCachedFeed(uid, topic, cached.date, cached.articles.filter((article) => article.id !== articleId))
+  }
+
+  async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        window.setTimeout(() => reject(new Error(message)), timeoutMs)
+      }),
+    ])
+  }
 
   function getInteractionDocId(topic: NewsTopic, articleId: string): string {
     return `${topic}_${articleId}`
@@ -62,7 +106,6 @@ export const useNewsStore = defineStore('news', () => {
   }> {
     const interactionsRef = collection(db, `users/${uid}/newsInteractions`)
     const interactionsSnap = await getDocs(interactionsRef)
-    const urlShownCounts = new Map<string, number>()
     const excludedUrls = new Set<string>()
     const dismissedArticleIds = new Set<string>()
 
@@ -77,15 +120,6 @@ export const useNewsStore = defineStore('news', () => {
       }
       if (data.clickedAt && data.url) {
         excludedUrls.add(data.url)
-      }
-      if (data.url && typeof data.shownCount === 'number') {
-        urlShownCounts.set(data.url, (urlShownCounts.get(data.url) ?? 0) + data.shownCount)
-      }
-    }
-
-    for (const [url, count] of urlShownCounts.entries()) {
-      if (count >= 2) {
-        excludedUrls.add(url)
       }
     }
 
@@ -162,17 +196,44 @@ export const useNewsStore = defineStore('news', () => {
     }
   }
 
-  async function loadTodayFeed(topic: NewsTopic = 'ai'): Promise<void> {
+  async function loadTodayFeed(topic: NewsTopic = 'ai', forceRefresh = false): Promise<void> {
     const uid = authStore.user?.uid
     if (!uid) return
+    const today = getJstToday()
+    const cachedFeed = readCachedFeed(uid, topic)
+    const loadSequence = ++activeLoadSequence
+
+    if (!forceRefresh && cachedFeed?.date === today) {
+      articles.value = cachedFeed.articles
+      dismissedIds.value = new Set()
+      loading.value = false
+      error.value = null
+      return
+    }
 
     loading.value = true
     error.value = null
 
     try {
-      const { excludedUrls, dismissedArticleIds } = await loadTopicInteractions(uid, topic)
+      const { excludedUrls, dismissedArticleIds, latestDate, sortedFeedDocs } = await withTimeout(
+        (async () => {
+          const [{ excludedUrls, dismissedArticleIds }, { latestDate, feedDocs }] = await Promise.all([
+            loadTopicInteractions(uid, topic),
+            loadLatestFeedDocs(uid, topic),
+          ])
+          return {
+            excludedUrls,
+            dismissedArticleIds,
+            latestDate,
+            sortedFeedDocs: feedDocs,
+          }
+        })(),
+        NEWS_FETCH_TIMEOUT_MS,
+        'news-feed-timeout'
+      )
+
+      if (loadSequence !== activeLoadSequence) return
       dismissedIds.value = dismissedArticleIds
-      const { latestDate, feedDocs: sortedFeedDocs } = await loadLatestFeedDocs(uid, topic)
 
       if (!latestDate) {
         articles.value = []
@@ -209,13 +270,25 @@ export const useNewsStore = defineStore('news', () => {
         .filter((a): a is NewsArticle => a !== null)
         .filter(article => !excludedUrls.has(article.url) || shouldKeepVisibleAfterClick(article, topic))
 
+      if (loadSequence !== activeLoadSequence) return
       articles.value = visibleArticles
-      await trackDisplayedArticles(uid, topic, latestDate, visibleArticles)
+      writeCachedFeed(uid, topic, latestDate, visibleArticles)
+      void trackDisplayedArticles(uid, topic, latestDate, visibleArticles).catch((trackError) => {
+        console.error('[news] trackDisplayedArticles error:', trackError)
+      })
     } catch (err) {
       console.error('[news] loadTodayFeed error:', err)
-      error.value = '記事の読み込みに失敗しました'
+      const fallbackFeed = readCachedFeed(uid, topic)
+      if (fallbackFeed?.articles.length) {
+        articles.value = fallbackFeed.articles
+        error.value = null
+      } else {
+        error.value = '記事の読み込みに失敗しました'
+      }
     } finally {
-      loading.value = false
+      if (loadSequence === activeLoadSequence) {
+        loading.value = false
+      }
     }
   }
 
@@ -311,6 +384,7 @@ export const useNewsStore = defineStore('news', () => {
     // ローカルから即座に除去
     dismissedIds.value.add(articleId)
     articles.value = articles.value.filter(a => a.id !== articleId)
+    updateCachedFeedArticleList(uid, topic, articleId)
   }
 
   async function loadMobileAlertCount(): Promise<void> {
