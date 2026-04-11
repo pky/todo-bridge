@@ -60,6 +60,10 @@ const newsStoreState = reactive({
   articles: [article],
   loading: false,
   error: null as string | null,
+  latestFeedDateByTopic: {
+    ai: '2026-03-14',
+    mobile: '2026-03-14',
+  } as Record<'ai' | 'mobile', string | null>,
   preferences: {
     keywords: [],
     platforms: ['ios', 'android'] as Array<'ios' | 'android'>,
@@ -101,6 +105,10 @@ describe('NewsView', () => {
     newsStoreState.articles = [article]
     newsStoreState.loading = false
     newsStoreState.error = null
+    newsStoreState.latestFeedDateByTopic = {
+      ai: '2026-03-14',
+      mobile: '2026-03-14',
+    }
     loadTodayFeedMock.mockResolvedValue(undefined)
     loadPreferencesMock.mockResolvedValue(undefined)
     dismissArticleMock.mockResolvedValue(undefined)
@@ -131,6 +139,18 @@ describe('NewsView', () => {
       name: 'home',
       query: { target: 'read-later' },
     })
+  })
+
+  it('ヘッダーにフィード更新日を表示する', () => {
+    const wrapper = mount(NewsView, {
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('更新日: 2026/03/14')
   })
 
   it('興味なし押下時にURL付きで dismissArticle を呼ぶ', async () => {

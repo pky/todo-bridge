@@ -5,6 +5,7 @@ import {
   collection,
   doc,
   getDocs,
+  getDocsFromServer,
   getDoc,
   setDoc,
   writeBatch,
@@ -37,6 +38,10 @@ export const useNewsStore = defineStore('news', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const preferences = ref<NewsPreferences>({ keywords: [] })
+  const latestFeedDateByTopic = ref<Record<NewsTopic, string | null>>({
+    ai: null,
+    mobile: null,
+  })
   const mobileNotificationPreferences = ref<MobileNotificationPreferences>({
     discord: {
       enabled: false,
@@ -96,6 +101,15 @@ export const useNewsStore = defineStore('news', () => {
     return `${topic}_${articleId}`
   }
 
+  async function getServerFirstSnapshot(target: ReturnType<typeof collection> | ReturnType<typeof query>) {
+    try {
+      return await getDocsFromServer(target)
+    } catch (error) {
+      console.warn('[news] Server fetch failed, falling back to default getDocs:', error)
+      return await getDocs(target)
+    }
+  }
+
   function isMatchingTopicInteraction(topic: NewsTopic, interaction: Partial<NewsInteraction>): boolean {
     return interaction.topic === topic || (!interaction.topic && topic === 'ai')
   }
@@ -105,7 +119,7 @@ export const useNewsStore = defineStore('news', () => {
     dismissedArticleIds: Set<string>
   }> {
     const interactionsRef = collection(db, `users/${uid}/newsInteractions`)
-    const interactionsSnap = await getDocs(interactionsRef)
+    const interactionsSnap = await getServerFirstSnapshot(interactionsRef)
     const excludedUrls = new Set<string>()
     const dismissedArticleIds = new Set<string>()
 
@@ -114,6 +128,9 @@ export const useNewsStore = defineStore('news', () => {
       if (!isMatchingTopicInteraction(topic, data)) continue
 
       const interactionArticleId = data.articleId ?? interactionDoc.id
+      if (typeof data.shownCount === 'number' && data.shownCount >= 2 && data.url) {
+        excludedUrls.add(data.url)
+      }
       if (data.dismissed === true) {
         dismissedArticleIds.add(interactionArticleId)
         if (data.url) excludedUrls.add(data.url)
@@ -128,21 +145,24 @@ export const useNewsStore = defineStore('news', () => {
 
   async function loadLatestFeedDocs(uid: string, topic: NewsTopic) {
     const feedRef = collection(db, `users/${uid}/newsFeed/${topic}/articles`)
-    const feedSnap = await getDocs(query(feedRef, orderBy('date', 'desc'), limit(1)))
+    const feedSnap = await getServerFirstSnapshot(query(feedRef, orderBy('date', 'desc'), limit(1)))
 
     if (feedSnap.empty || !feedSnap.docs[0]) {
       return { latestDate: null, feedDocs: [] as typeof feedSnap.docs }
     }
 
-    const latestDate = feedSnap.docs[0].data()?.date
+    const latestDocData = feedSnap.docs[0].data() as { date?: string } | undefined
+    const latestDate = latestDocData?.date
     if (!latestDate) {
       return { latestDate: null, feedDocs: [] as typeof feedSnap.docs }
     }
 
-    const latestFeedSnap = await getDocs(query(feedRef, where('date', '==', latestDate)))
+    const latestFeedSnap = await getServerFirstSnapshot(query(feedRef, where('date', '==', latestDate)))
     const sortedFeedDocs = [...latestFeedSnap.docs].sort((a, b) => {
-      const aScore = typeof a.data()?.displayScore === 'number' ? a.data().displayScore : 0
-      const bScore = typeof b.data()?.displayScore === 'number' ? b.data().displayScore : 0
+      const aData = a.data() as { displayScore?: number } | undefined
+      const bData = b.data() as { displayScore?: number } | undefined
+      const aScore = typeof aData?.displayScore === 'number' ? aData.displayScore : 0
+      const bScore = typeof bData?.displayScore === 'number' ? bData.displayScore : 0
       return bScore - aScore
     })
 
@@ -162,7 +182,7 @@ export const useNewsStore = defineStore('news', () => {
     if (displayedArticles.length === 0) return
 
     const interactionsRef = collection(db, `users/${uid}/newsInteractions`)
-    const interactionsSnap = await getDocs(interactionsRef)
+    const interactionsSnap = await getServerFirstSnapshot(interactionsRef)
     const interactionMap = new Map(
       interactionsSnap.docs.map((snap) => {
         const data = snap.data() as Partial<NewsInteraction>
@@ -205,6 +225,10 @@ export const useNewsStore = defineStore('news', () => {
 
     if (!forceRefresh && cachedFeed?.date === today) {
       articles.value = cachedFeed.articles
+      latestFeedDateByTopic.value = {
+        ...latestFeedDateByTopic.value,
+        [topic]: cachedFeed.date,
+      }
       dismissedIds.value = new Set()
       loading.value = false
       error.value = null
@@ -237,25 +261,29 @@ export const useNewsStore = defineStore('news', () => {
 
       if (!latestDate) {
         articles.value = []
+        latestFeedDateByTopic.value = {
+          ...latestFeedDateByTopic.value,
+          [topic]: null,
+        }
         return
       }
 
       const articlePromises = sortedFeedDocs
         .filter(feedDoc => !dismissedIds.value.has(feedDoc.id))
         .map(async (feedDoc) => {
-          const data = feedDoc.data()
+          const data = feedDoc.data() as Record<string, unknown>
           
           // 新形式（記事データがそのまま入っている場合）
-          if (data.title) {
+          if (typeof data.title === 'string') {
             return { id: feedDoc.id, ...data } as NewsArticle
           }
           
           // 旧形式（articleRefしかない場合）
-          if (data.articleRef) {
+          if (typeof data.articleRef === 'string') {
             try {
               const articleSnap = await getDoc(doc(db, data.articleRef))
               if (!articleSnap.exists()) return null
-              return { id: articleSnap.id, ...articleSnap.data() } as NewsArticle
+              return { id: articleSnap.id, ...(articleSnap.data() as Record<string, unknown>) } as NewsArticle
             } catch (e) {
               console.warn('[news] Failed to fetch referenced article', e)
               return null
@@ -272,6 +300,10 @@ export const useNewsStore = defineStore('news', () => {
 
       if (loadSequence !== activeLoadSequence) return
       articles.value = visibleArticles
+      latestFeedDateByTopic.value = {
+        ...latestFeedDateByTopic.value,
+        [topic]: latestDate,
+      }
       writeCachedFeed(uid, topic, latestDate, visibleArticles)
       void trackDisplayedArticles(uid, topic, latestDate, visibleArticles).catch((trackError) => {
         console.error('[news] trackDisplayedArticles error:', trackError)
@@ -279,10 +311,18 @@ export const useNewsStore = defineStore('news', () => {
     } catch (err) {
       console.error('[news] loadTodayFeed error:', err)
       const fallbackFeed = readCachedFeed(uid, topic)
-      if (fallbackFeed?.articles.length) {
+      if (fallbackFeed?.date === today && fallbackFeed.articles.length) {
         articles.value = fallbackFeed.articles
+        latestFeedDateByTopic.value = {
+          ...latestFeedDateByTopic.value,
+          [topic]: fallbackFeed.date,
+        }
         error.value = null
       } else {
+        latestFeedDateByTopic.value = {
+          ...latestFeedDateByTopic.value,
+          [topic]: null,
+        }
         error.value = '記事の読み込みに失敗しました'
       }
     } finally {
@@ -407,7 +447,7 @@ export const useNewsStore = defineStore('news', () => {
 
       const visibleArticles = feedDocs
         .filter(feedDoc => !dismissedArticleIds.has(feedDoc.id))
-        .map(feedDoc => ({ id: feedDoc.id, ...feedDoc.data() }) as NewsArticle)
+        .map(feedDoc => ({ id: feedDoc.id, ...(feedDoc.data() as Record<string, unknown>) }) as NewsArticle)
         .filter(article => !excludedUrls.has(article.url) || shouldKeepVisibleAfterClick(article, 'mobile'))
         .filter(article => article.isOfficial === true)
 
@@ -484,6 +524,7 @@ export const useNewsStore = defineStore('news', () => {
     loading,
     error,
     preferences,
+    latestFeedDateByTopic,
     mobileNotificationPreferences,
     dismissedIds,
     loadTodayFeed,

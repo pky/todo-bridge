@@ -7,6 +7,7 @@ vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
   doc: vi.fn((...segments: string[]) => segments),
   getDocs: vi.fn(),
+  getDocsFromCache: vi.fn(),
   getDocsFromServer: vi.fn(),
 }))
 
@@ -43,7 +44,8 @@ describe('Space Store', () => {
   })
 
   it('membership がない場合は personal space を既定にする', async () => {
-    const { getDocsFromServer } = await import('firebase/firestore')
+    const { getDocsFromCache, getDocsFromServer } = await import('firebase/firestore')
+    vi.mocked(getDocsFromCache).mockRejectedValueOnce(new Error('cache-miss'))
     vi.mocked(getDocsFromServer).mockResolvedValueOnce({
       empty: true,
       docs: [],
@@ -57,7 +59,8 @@ describe('Space Store', () => {
   })
 
   it('membership がある場合は spaces パスへ切り替える', async () => {
-    const { getDocsFromServer } = await import('firebase/firestore')
+    const { getDocsFromCache, getDocsFromServer } = await import('firebase/firestore')
+    vi.mocked(getDocsFromCache).mockRejectedValueOnce(new Error('cache-miss'))
     vi.mocked(getDocsFromServer).mockResolvedValueOnce({
       empty: false,
       docs: [
@@ -93,7 +96,8 @@ describe('Space Store', () => {
   })
 
   it('legacy データが personal space より多い場合は移行する', async () => {
-    const { getDocsFromServer } = await import('firebase/firestore')
+    const { getDocsFromCache, getDocsFromServer } = await import('firebase/firestore')
+    vi.mocked(getDocsFromCache).mockRejectedValueOnce(new Error('cache-miss'))
     vi.mocked(getDocsFromServer).mockResolvedValueOnce({
       empty: false,
       docs: [
@@ -118,7 +122,10 @@ describe('Space Store', () => {
   })
 
   it('別ユーザーへ切り替わったら再初期化する', async () => {
-    const { getDocsFromServer } = await import('firebase/firestore')
+    const { getDocsFromCache, getDocsFromServer } = await import('firebase/firestore')
+    vi.mocked(getDocsFromCache)
+      .mockRejectedValueOnce(new Error('cache-miss'))
+      .mockRejectedValueOnce(new Error('cache-miss'))
     vi.mocked(getDocsFromServer)
       .mockResolvedValueOnce({
         empty: false,
@@ -166,7 +173,8 @@ describe('Space Store', () => {
   })
 
   it('membership のサーバー取得に失敗した場合はキャッシュ取得へフォールバックする', async () => {
-    const { getDocs, getDocsFromServer } = await import('firebase/firestore')
+    const { getDocs, getDocsFromCache, getDocsFromServer } = await import('firebase/firestore')
+    vi.mocked(getDocsFromCache).mockRejectedValueOnce(new Error('cache-miss'))
     vi.mocked(getDocsFromServer).mockRejectedValueOnce(new Error('offline'))
     vi.mocked(getDocs).mockResolvedValueOnce({
       empty: false,
@@ -191,5 +199,47 @@ describe('Space Store', () => {
     expect(getDocs).toHaveBeenCalledTimes(1)
     expect(store.currentSpaceId).toBe('personal_test-user-id')
     expect(store.useLegacyPath).toBe(false)
+  })
+
+  it('membership キャッシュがあればサーバー待ちせず初期化する', async () => {
+    const { getDocsFromCache, getDocsFromServer } = await import('firebase/firestore')
+    vi.mocked(getDocsFromCache).mockResolvedValueOnce({
+      empty: false,
+      docs: [
+        {
+          id: 'personal_test-user-id',
+          data: () => ({
+            spaceId: 'personal_test-user-id',
+            role: 'owner',
+            status: 'active',
+            displayName: 'Personal',
+            joinedAt: null,
+          }),
+        },
+      ],
+    } as never)
+    vi.mocked(getDocsFromServer).mockResolvedValueOnce({
+      empty: false,
+      docs: [
+        {
+          id: 'personal_test-user-id',
+          data: () => ({
+            spaceId: 'personal_test-user-id',
+            role: 'owner',
+            status: 'active',
+            displayName: 'Personal',
+            joinedAt: null,
+          }),
+        },
+      ],
+    } as never)
+
+    const store = useSpaceStore()
+    await store.initSpace()
+
+    expect(store.currentSpaceId).toBe('personal_test-user-id')
+    expect(store.useLegacyPath).toBe(false)
+    expect(getDocsFromCache).toHaveBeenCalledTimes(1)
+    expect(getDocsFromServer).toHaveBeenCalledTimes(1)
   })
 })
