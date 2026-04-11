@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { collection, doc, getDocs, getDocsFromServer } from 'firebase/firestore'
+import { collection, doc, getDocs, getDocsFromCache, getDocsFromServer } from 'firebase/firestore'
 import { db } from '@/services/firebase'
 import { useAuthStore } from './auth'
 import type { UserMembership } from '@/types'
@@ -28,12 +28,68 @@ export const useSpaceStore = defineStore('space', () => {
   const personalSpaceMigrationChecked = ref(false)
   const initializedUserId = ref<string | null>(null)
 
+  async function getCachedSnapshot(collectionRef: ReturnType<typeof collection>) {
+    try {
+      return await getDocsFromCache(collectionRef)
+    } catch (error) {
+      console.warn('[spaceStore] Cache fetch failed:', error)
+      return null
+    }
+  }
+
   async function getServerFirstSnapshot(collectionRef: ReturnType<typeof collection>) {
     try {
       return await getDocsFromServer(collectionRef)
     } catch (error) {
       console.warn('[spaceStore] Server fetch failed, falling back to cached snapshot:', error)
       return await getDocs(collectionRef)
+    }
+  }
+
+  function applyMembershipSnapshot(snapshot: Awaited<ReturnType<typeof getDocs>>, userId: string) {
+    if (snapshot.empty) {
+      memberships.value = []
+      currentSpaceId.value = buildPersonalSpaceId(userId)
+      useLegacyPath.value = true
+      initialized.value = true
+      initializedUserId.value = userId
+      return
+    }
+
+    memberships.value = snapshot.docs.map((documentSnapshot) => ({
+      ...(documentSnapshot.data() as UserMembership),
+      spaceId: documentSnapshot.id,
+    }))
+
+    const savedSpaceId = localStorage.getItem(CURRENT_SPACE_KEY)
+    const defaultSpaceId =
+      memberships.value.find((membership) => membership.spaceId === savedSpaceId)?.spaceId
+      ?? memberships.value.find((membership) => membership.spaceId === buildPersonalSpaceId(userId))?.spaceId
+      ?? memberships.value[0]?.spaceId
+      ?? buildPersonalSpaceId(userId)
+
+    currentSpaceId.value = defaultSpaceId
+    useLegacyPath.value = false
+    initialized.value = true
+    initializedUserId.value = userId
+    localStorage.setItem(CURRENT_SPACE_KEY, defaultSpaceId)
+  }
+
+  async function refreshMembershipsInBackground(userId: string, force = false) {
+    const authStore = useAuthStore()
+    if (!authStore.user || authStore.user.uid !== userId) return
+
+    const membershipCollection = collection(db, 'users', userId, 'memberships')
+    const snapshot = await getServerFirstSnapshot(membershipCollection)
+
+    if (!authStore.user || authStore.user.uid !== userId) return
+
+    applyMembershipSnapshot(snapshot, userId)
+
+    try {
+      await maybeMigratePersonalSpace(force)
+    } catch (error) {
+      console.warn('[spaceStore] Failed to migrate personal space:', error)
     }
   }
 
@@ -52,22 +108,20 @@ export const useSpaceStore = defineStore('space', () => {
       return
     }
 
-    const membershipCollection = collection(db, 'users', authStore.user.uid, 'memberships')
-    const snapshot = await getServerFirstSnapshot(membershipCollection)
+    const userId = authStore.user.uid
+    const membershipCollection = collection(db, 'users', userId, 'memberships')
 
-    if (snapshot.empty) {
-      memberships.value = []
-      currentSpaceId.value = buildPersonalSpaceId(authStore.user.uid)
-      useLegacyPath.value = true
-      initialized.value = true
-      initializedUserId.value = authStore.user.uid
-      return
+    if (!force) {
+      const cachedSnapshot = await getCachedSnapshot(membershipCollection)
+      if (cachedSnapshot && !cachedSnapshot.empty) {
+        applyMembershipSnapshot(cachedSnapshot, userId)
+        void refreshMembershipsInBackground(userId)
+        return
+      }
     }
 
-    memberships.value = snapshot.docs.map((documentSnapshot) => ({
-      ...(documentSnapshot.data() as UserMembership),
-      spaceId: documentSnapshot.id,
-    }))
+    const snapshot = await getServerFirstSnapshot(membershipCollection)
+    applyMembershipSnapshot(snapshot, userId)
 
     try {
       await maybeMigratePersonalSpace(force)
@@ -75,18 +129,9 @@ export const useSpaceStore = defineStore('space', () => {
       console.warn('[spaceStore] Failed to migrate personal space:', error)
     }
 
-    const savedSpaceId = localStorage.getItem(CURRENT_SPACE_KEY)
-    const defaultSpaceId =
-      memberships.value.find((membership) => membership.spaceId === savedSpaceId)?.spaceId
-      ?? memberships.value.find((membership) => membership.spaceId === buildPersonalSpaceId(authStore.user!.uid))?.spaceId
-      ?? memberships.value[0]?.spaceId
-      ?? buildPersonalSpaceId(authStore.user.uid)
-
-    currentSpaceId.value = defaultSpaceId
-    useLegacyPath.value = false
-    initialized.value = true
-    initializedUserId.value = authStore.user.uid
-    localStorage.setItem(CURRENT_SPACE_KEY, defaultSpaceId)
+    if (snapshot.empty) {
+      return
+    }
   }
 
   function selectSpace(spaceId: string) {

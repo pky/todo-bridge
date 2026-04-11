@@ -20,6 +20,14 @@ const currentTopic = computed<NewsTopic>(() => route.name === 'news-mobile' ? 'm
 const pageTitle = computed(() => currentTopic.value === 'mobile' ? 'モバイルニュース' : 'AIニュース')
 const pageSubtitle = computed(() => currentTopic.value === 'mobile' ? 'Apple / Android の公式情報を優先表示' : '毎朝6時更新')
 const isMobileTopic = computed(() => currentTopic.value === 'mobile')
+const latestFeedDate = computed(() => newsStore.latestFeedDateByTopic[currentTopic.value])
+
+function formatFeedDate(value: string | null): string {
+  if (!value) return '更新日: 不明'
+  const [year, month, day] = value.split('-')
+  if (!year || !month || !day) return `更新日: ${value}`
+  return `更新日: ${year}/${month}/${day}`
+}
 
 function isImportantArticle(article: NewsArticle): boolean {
   return article.importantLevel === 'urgent'
@@ -213,7 +221,7 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
 </script>
 
 <template>
-  <div class="flex flex-col min-h-screen bg-gray-50 pt-[65px]">
+  <div class="flex flex-col min-h-screen bg-gray-50 pt-[88px]">
     <!-- ヘッダー (fixed で固定) -->
     <header class="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 shadow-sm">
       <button
@@ -228,6 +236,7 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
       <div>
         <h1 class="text-base font-semibold text-gray-800">{{ pageTitle }}</h1>
         <p class="text-xs text-gray-400">{{ pageSubtitle }}</p>
+        <p class="text-[11px] text-gray-400">{{ formatFeedDate(latestFeedDate) }}</p>
       </div>
       <button
         type="button"

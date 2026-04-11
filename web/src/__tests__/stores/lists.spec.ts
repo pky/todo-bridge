@@ -12,6 +12,7 @@ vi.mock('firebase/firestore', () => ({
   updateDoc: vi.fn(),
   deleteDoc: vi.fn(),
   getDocs: vi.fn(),
+  getDocsFromCache: vi.fn(),
   getDocsFromServer: vi.fn(),
   onSnapshot: vi.fn(),
   serverTimestamp: vi.fn(() => ({ seconds: Date.now() / 1000 })),
@@ -194,9 +195,12 @@ describe('Lists Store', () => {
   })
 
   it('subscribe で実データからスマートリスト件数を再同期する', async () => {
-    const { getDocsFromServer, onSnapshot } = await import('firebase/firestore')
+    const { getDocsFromCache, getDocsFromServer, onSnapshot } = await import('firebase/firestore')
     const { refreshSmartListCounts } = await import('@/services/cloudFunctionsService')
 
+    vi.mocked(getDocsFromCache)
+      .mockRejectedValueOnce(new Error('cache-miss'))
+      .mockRejectedValueOnce(new Error('cache-miss'))
     vi.mocked(getDocsFromServer)
       .mockResolvedValueOnce({
         docs: [
@@ -218,14 +222,18 @@ describe('Lists Store', () => {
 
     const store = useListsStore()
     await store.subscribe()
+    await Promise.resolve()
 
     expect(refreshSmartListCounts).toHaveBeenCalled()
     expect(store.smartListCounts.overdue).toBe(2)
   })
 
   it('subscribe 後にリストの件数更新を onSnapshot で反映する', async () => {
-    const { getDocsFromServer, onSnapshot } = await import('firebase/firestore')
+    const { getDocsFromCache, getDocsFromServer, onSnapshot } = await import('firebase/firestore')
 
+    vi.mocked(getDocsFromCache)
+      .mockRejectedValueOnce(new Error('cache-miss'))
+      .mockRejectedValueOnce(new Error('cache-miss'))
     vi.mocked(getDocsFromServer)
       .mockResolvedValueOnce({
         docs: [
@@ -268,8 +276,11 @@ describe('Lists Store', () => {
   })
 
   it('subscribe でサーバー取得失敗時はキャッシュ取得へフォールバックする', async () => {
-    const { getDocs, getDocsFromServer, onSnapshot } = await import('firebase/firestore')
+    const { getDocs, getDocsFromCache, getDocsFromServer, onSnapshot } = await import('firebase/firestore')
 
+    vi.mocked(getDocsFromCache)
+      .mockRejectedValueOnce(new Error('cache-miss'))
+      .mockRejectedValueOnce(new Error('cache-miss'))
     vi.mocked(getDocsFromServer)
       .mockRejectedValueOnce(new Error('offline'))
       .mockRejectedValueOnce(new Error('offline'))

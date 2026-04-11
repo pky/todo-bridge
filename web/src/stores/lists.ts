@@ -6,6 +6,7 @@ import {
   updateDoc,
   deleteDoc,
   getDocs,
+  getDocsFromCache,
   getDocsFromServer,
   onSnapshot,
   serverTimestamp,
@@ -103,6 +104,15 @@ export const useListsStore = defineStore('lists', () => {
     return spaceStore.getScopedStorageKey('rertm-selected-list-id')
   }
 
+  async function getCachedSnapshot(source: ReturnType<typeof getListsCollection> | ReturnType<typeof query>) {
+    try {
+      return await getDocsFromCache(source)
+    } catch (error) {
+      console.warn('[lists] Cache fetch failed:', error)
+      return null
+    }
+  }
+
   async function getServerFirstSnapshot(source: ReturnType<typeof getListsCollection> | ReturnType<typeof query>) {
     try {
       return await getDocsFromServer(source)
@@ -110,6 +120,19 @@ export const useListsStore = defineStore('lists', () => {
       console.warn('[lists] Server fetch failed, falling back to cached snapshot:', error)
       return await getDocs(source)
     }
+  }
+
+  function restoreSelectedList() {
+    if (selectedListId.value) return
+
+    const savedListId = localStorage.getItem(getSelectedListStorageKey())
+    if (savedListId && lists.value.some((l) => l.id === savedListId)) {
+      selectedListId.value = savedListId
+      return
+    }
+
+    const inbox = lists.value.find((l) => l.name === 'Inbox')
+    selectedListId.value = inbox?.id ?? lists.value[0]?.id ?? null
   }
 
   // リストを1回取得（onSnapshotではなくgetDocsで読み取り削減）
@@ -147,13 +170,26 @@ export const useListsStore = defineStore('lists', () => {
 
     loading.value = true
     try {
-      // リストは起動時のキャッシュ誤判定を避けるためサーバー優先で取得する
-      const snapshot = spaceStore.useLegacyPath
-        ? await getServerFirstSnapshot(getListsCollection())
-        : await getServerFirstSnapshot(query(
+      const targetQuery = spaceStore.useLegacyPath
+        ? getListsCollection()
+        : query(
             getListsCollection(),
             where('visibleToMemberIds', 'array-contains', authStore.user.uid)
-          ))
+          )
+
+      const cachedSnapshot = await getCachedSnapshot(targetQuery)
+      if (cachedSnapshot && cachedSnapshot.docs.length > 0) {
+        console.log('[lists] fetchLists:', cachedSnapshot.docs.length, 'from CACHE')
+        const cachedLists = cachedSnapshot.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<TaskList, 'id'>),
+        })) as TaskList[]
+        updateListsState(cachedLists)
+        restoreSelectedList()
+        return
+      }
+
+      const snapshot = await getServerFirstSnapshot(targetQuery)
       console.log('[lists] fetchLists:', snapshot.docs.length, 'from SERVER')
       const rawLists = snapshot.docs.map((d) => ({
         id: d.id,
@@ -203,16 +239,7 @@ export const useListsStore = defineStore('lists', () => {
         await createList({ name: 'Inbox' })
       }
 
-      // 選択中のリストを復元（ローカルストレージから）
-      if (!selectedListId.value) {
-        const savedListId = localStorage.getItem(getSelectedListStorageKey())
-        if (savedListId && lists.value.some((l) => l.id === savedListId)) {
-          selectedListId.value = savedListId
-        } else {
-          const inbox = lists.value.find((l) => l.name === 'Inbox')
-          if (inbox) selectedListId.value = inbox.id
-        }
-      }
+      restoreSelectedList()
     } catch (err) {
       error.value = (err as Error).message
     } finally {
@@ -303,9 +330,9 @@ export const useListsStore = defineStore('lists', () => {
             getTagsCollection(),
             where('visibleToMemberIds', 'array-contains', authStore.user.uid)
           )
-      // タグもリストと同様にサーバー優先で取得する
-      const snapshot = await getServerFirstSnapshot(q)
-      console.log('[lists] fetchTags:', snapshot.docs.length, 'from SERVER')
+      const cachedSnapshot = await getCachedSnapshot(q)
+      const snapshot = cachedSnapshot ?? await getServerFirstSnapshot(q)
+      console.log('[lists] fetchTags:', snapshot.docs.length, cachedSnapshot ? 'from CACHE' : 'from SERVER')
       tags.value = snapshot.docs.map((d) => ({
         id: d.id,
         ...(d.data() as Omit<Tag, 'id'>),
@@ -323,15 +350,16 @@ export const useListsStore = defineStore('lists', () => {
     await Promise.all([fetchLists(), fetchTags()])
     subscribeToLists()
     subscribeToSmartListCounts()
-    try {
-      const refreshedCounts = await refreshSmartListCounts()
-      smartListCounts.value = {
-        ...smartListCounts.value,
-        ...refreshedCounts,
-      }
-    } catch (err) {
-      console.error('Smart list counts refresh error:', err)
-    }
+    void refreshSmartListCounts()
+      .then((refreshedCounts) => {
+        smartListCounts.value = {
+          ...smartListCounts.value,
+          ...refreshedCounts,
+        }
+      })
+      .catch((err) => {
+        console.error('Smart list counts refresh error:', err)
+      })
   }
 
   function unsubscribe() {
