@@ -147,11 +147,26 @@ export const useTasksStore = defineStore('tasks', () => {
   // 検索結果（キャッシュから検索、サブタスクも含む）
   const searchResults = computed(() => {
     if (!isSearching.value) return []
-    const q = searchQuery.value.toLowerCase().trim()
+    const searchTerms = searchQuery.value.toLowerCase().trim().split(/\s+/)
     return allTasksCache.value
       .filter((t) => {
         if (!searchIncludeCompleted.value && t.completed) return false
-        return t.name.toLowerCase().includes(q)
+        const nameLower = t.name.toLowerCase()
+        const tagsLower = t.tags.map((tag) => tag.toLowerCase())
+        const notesLower = t.notes.map((note) => note.toLowerCase())
+
+        return searchTerms.every((term) => {
+          if (term.startsWith('#')) {
+            const tagTerm = term.slice(1)
+            return tagsLower.some((tag) => tag.includes(tagTerm))
+          }
+
+          return (
+            nameLower.includes(term)
+            || tagsLower.some((tag) => tag.includes(term))
+            || notesLower.some((note) => note.includes(term))
+          )
+        })
       })
       .sort(mainSort)
   })

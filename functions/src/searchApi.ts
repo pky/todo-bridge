@@ -28,6 +28,26 @@ interface SearchResult {
   parentId: string | null
 }
 
+export function matchesTaskSearchTerms(task: Pick<TaskData, 'name' | 'tags' | 'notes'>, searchTerms: string[]): boolean {
+  const nameLower = task.name.toLowerCase()
+  const tagsLower = (task.tags || []).map((t) => t.toLowerCase())
+  const notesLower = (task.notes || []).map((note) => note.toLowerCase())
+
+  // 全ての検索語が名前、タグ、メモのいずれかに含まれるかチェック
+  return searchTerms.every((term) => {
+    if (term.startsWith('#')) {
+      const tagTerm = term.slice(1)
+      return tagsLower.some((t) => t.includes(tagTerm))
+    }
+
+    return (
+      nameLower.includes(term)
+      || tagsLower.some((t) => t.includes(term))
+      || notesLower.some((note) => note.includes(term))
+    )
+  })
+}
+
 // タスク検索API（Callable Function）
 export const searchTasks = functions
   .region('asia-northeast1')
@@ -80,19 +100,7 @@ export const searchTasks = functions
         const visibleToMemberIds = (task as TaskData & { visibleToMemberIds?: string[] }).visibleToMemberIds || []
         if (!visibleToMemberIds.includes(userId)) return
       }
-      const nameLower = task.name.toLowerCase()
-      const tagsLower = (task.tags || []).map((t) => t.toLowerCase())
-
-      // 全ての検索語が名前またはタグに含まれるかチェック
-      const matches = searchTerms.every((term) => {
-        if (term.startsWith('#')) {
-          // タグ検索
-          const tagTerm = term.slice(1)
-          return tagsLower.some((t) => t.includes(tagTerm))
-        }
-        // 名前検索
-        return nameLower.includes(term) || tagsLower.some((t) => t.includes(term))
-      })
+      const matches = matchesTaskSearchTerms(task, searchTerms)
 
       if (matches) {
         results.push({

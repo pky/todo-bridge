@@ -66,6 +66,7 @@ describe('News Store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    localStorage.clear()
 
     const authStore = useAuthStore()
     authStore.$patch({
@@ -334,5 +335,170 @@ describe('News Store', () => {
     expect(getDocsMock).toHaveBeenCalled()
     expect(store.articles).toHaveLength(1)
     expect(store.articles[0]?.id).toBe('article-1')
+  })
+
+  it('前日分しかなくてもキャッシュ済みフィードと更新日を先に表示する', async () => {
+    localStorage.setItem(
+      'rertm-news-cache-user-1-ai',
+      JSON.stringify({
+        date: '2026-03-14',
+        articles: [{ id: 'article-1', ...articleData }],
+      })
+    )
+
+    let resolveServerFetch: (() => void) | null = null
+    getDocsFromServerMock.mockImplementation(async (target: any) => {
+      const path = target.type === 'query' ? target.target.path : target.path
+      const clauses = target.type === 'query' ? target.clauses : []
+
+      if (path === 'users/user-1/newsInteractions') {
+        return createDocs([])
+      }
+
+      if (path === 'users/user-1/newsFeed/ai/articles' && clauses.some((clause: any) => clause.type === 'limit')) {
+        await new Promise<void>((resolve) => {
+          resolveServerFetch = resolve
+        })
+        return createDocs([{ id: 'article-1', data: { date: '2026-03-14', displayScore: 10 } }])
+      }
+
+      if (path === 'users/user-1/newsFeed/ai/articles' && clauses.some((clause: any) => clause.type === 'where')) {
+        return createDocs([{ id: 'article-1', data: articleData }])
+      }
+
+      return createDocs([])
+    })
+
+    const store = useNewsStore()
+    const loadPromise = store.loadTodayFeed('ai')
+
+    expect(store.articles).toHaveLength(1)
+    expect(store.articles[0]?.id).toBe('article-1')
+    expect(store.latestFeedDateByTopic.ai).toBe('2026-03-14')
+
+    resolveServerFetch?.()
+    await loadPromise
+
+    expect(store.articles).toHaveLength(1)
+    expect(store.latestFeedDateByTopic.ai).toBe('2026-03-14')
+  })
+
+  it('空キャッシュしかなくてもサーバー取得を開始する', async () => {
+    localStorage.setItem(
+      'rertm-news-cache-user-1-ai',
+      JSON.stringify({
+        date: '2026-03-14',
+        articles: [],
+      })
+    )
+
+    getDocsFromServerMock.mockImplementation(async (target: any) => {
+      const path = target.type === 'query' ? target.target.path : target.path
+      const clauses = target.type === 'query' ? target.clauses : []
+
+      if (path === 'users/user-1/newsInteractions') {
+        return createDocs([])
+      }
+
+      if (path === 'users/user-1/newsFeed/ai/articles' && clauses.some((clause: any) => clause.type === 'limit')) {
+        return createDocs([{ id: 'article-1', data: { date: '2026-03-14', displayScore: 10 } }])
+      }
+
+      if (path === 'users/user-1/newsFeed/ai/articles' && clauses.some((clause: any) => clause.type === 'where')) {
+        return createDocs([{ id: 'article-1', data: articleData }])
+      }
+
+      return createDocs([])
+    })
+
+    const store = useNewsStore()
+    await store.loadTodayFeed('ai')
+
+    expect(getDocsFromServerMock).toHaveBeenCalled()
+    expect(store.articles).toHaveLength(1)
+    expect(store.feedDiagnosticsByTopic.ai.state).toBe('showing')
+  })
+
+  it('個別フィードが未生成なら共有記事をフォールバック表示する', async () => {
+    getDocsFromServerMock.mockImplementation(async (target: any) => {
+      const path = target.type === 'query' ? target.target.path : target.path
+      const clauses = target.type === 'query' ? target.clauses : []
+
+      if (path === 'users/user-1/newsInteractions') {
+        return createDocs([])
+      }
+
+      if (path === 'users/user-1/newsFeed/ai/articles' && clauses.some((clause: any) => clause.type === 'limit')) {
+        return createDocs([])
+      }
+
+      if (path === 'topics/ai/articles' && clauses.some((clause: any) => clause.type === 'limit')) {
+        return createDocs([{ id: 'shared-article-1', data: { date: '2026-03-14', score: 20 } }])
+      }
+
+      if (path === 'topics/ai/articles' && clauses.some((clause: any) => clause.type === 'where')) {
+        return createDocs([{ id: 'shared-article-1', data: articleData }])
+      }
+
+      return createDocs([])
+    })
+
+    const store = useNewsStore()
+    await store.loadTodayFeed('ai')
+
+    expect(store.articles).toHaveLength(1)
+    expect(store.articles[0]?.id).toBe('shared-article-1')
+    expect(store.latestFeedDateByTopic.ai).toBe('2026-03-14')
+    expect(store.feedDiagnosticsByTopic.ai.message).toBe('個別フィード生成前のため、共有記事を表示しています')
+  })
+
+  it('個別フィード取得が遅くても共有記事を先に表示する', async () => {
+    let resolveInteractions: (() => void) | null = null
+    let resolvePersonalizedFeed: (() => void) | null = null
+
+    getDocsFromServerMock.mockImplementation(async (target: any) => {
+      const path = target.type === 'query' ? target.target.path : target.path
+      const clauses = target.type === 'query' ? target.clauses : []
+
+      if (path === 'users/user-1/newsInteractions') {
+        await new Promise<void>((resolve) => {
+          resolveInteractions = resolve
+        })
+        return createDocs([])
+      }
+
+      if (path === 'users/user-1/newsFeed/ai/articles' && clauses.some((clause: any) => clause.type === 'limit')) {
+        await new Promise<void>((resolve) => {
+          resolvePersonalizedFeed = resolve
+        })
+        return createDocs([])
+      }
+
+      if (path === 'topics/ai/articles' && clauses.some((clause: any) => clause.type === 'limit')) {
+        return createDocs([{ id: 'shared-article-1', data: { date: '2026-03-14', score: 20 } }])
+      }
+
+      if (path === 'topics/ai/articles' && clauses.some((clause: any) => clause.type === 'where')) {
+        return createDocs([{ id: 'shared-article-1', data: articleData }])
+      }
+
+      return createDocs([])
+    })
+
+    const store = useNewsStore()
+    const loadPromise = store.loadTodayFeed('ai')
+
+    await vi.waitFor(() => {
+      expect(store.articles).toHaveLength(1)
+    })
+    expect(store.articles[0]?.id).toBe('shared-article-1')
+    expect(store.feedDiagnosticsByTopic.ai.message).toBe('個別フィード生成前のため、共有記事を表示しています')
+
+    resolveInteractions?.()
+    resolvePersonalizedFeed?.()
+    await loadPromise
+
+    expect(store.articles).toHaveLength(1)
+    expect(store.articles[0]?.id).toBe('shared-article-1')
   })
 })

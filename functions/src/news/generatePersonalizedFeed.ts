@@ -4,6 +4,8 @@ import * as admin from 'firebase-admin'
 import { summarizeArticle } from './geminiService'
 import type { NewsArticle, NewsPreferences, NewsTopic } from './types'
 
+type NewsArticleWithId = NewsArticle & { id: string }
+
 // ひらがな・カタカナを含む場合のみ日本語と判定（漢字のみはCJK全般に含まれるため除外）
 function isJapanese(text: string): boolean {
   return /[\u3040-\u30FF]/.test(text)
@@ -205,6 +207,76 @@ function isInteractionForTopic(topic: NewsTopic, data: FirebaseFirestore.Documen
   return !interactionTopic ? topic === 'ai' : interactionTopic === topic
 }
 
+function needsSharedSummary(article: NewsArticle): boolean {
+  if (!article.titleJa || !article.summaryJa || !article.tags || article.tags.length === 0) {
+    return true
+  }
+
+  return !isJapanese(article.title) && !isJapanese(article.titleJa)
+}
+
+async function enrichSharedArticles(
+  topic: NewsTopic,
+  articles: NewsArticleWithId[],
+  logPrefix: string
+): Promise<void> {
+  const batch = db.batch()
+  let translatedCount = 0
+  let skippedCount = 0
+  let hasUpdates = false
+
+  for (const article of articles) {
+    if (!needsSharedSummary(article)) {
+      skippedCount++
+      continue
+    }
+
+    const articleRef = db.doc(`topics/${topic}/articles/${article.id}`)
+
+    try {
+      const { titleJa, summaryJa, tags } = await summarizeArticle(
+        article.title,
+        article.content ?? article.description ?? ''
+      )
+      const nextTitleJa = titleJa || article.title
+      const nextSummaryJa = summaryJa || (article.description ?? '').slice(0, 300)
+      const nextTags = tags ?? []
+
+      batch.update(articleRef, {
+        titleJa: nextTitleJa,
+        summaryJa: nextSummaryJa,
+        tags: nextTags,
+      })
+      article.titleJa = nextTitleJa
+      article.summaryJa = nextSummaryJa
+      article.tags = nextTags
+      translatedCount++
+      hasUpdates = true
+    } catch (err) {
+      console.error(`[${logPrefix}] Shared summary failed for ${article.url}:`, err)
+      const fallbackTitleJa = article.titleJa ?? article.title
+      const fallbackSummaryJa = article.summaryJa ?? (article.description ?? '').slice(0, 300)
+      const fallbackTags = article.tags ?? []
+
+      batch.update(articleRef, {
+        titleJa: fallbackTitleJa,
+        summaryJa: fallbackSummaryJa,
+        tags: fallbackTags,
+      })
+      article.titleJa = fallbackTitleJa
+      article.summaryJa = fallbackSummaryJa
+      article.tags = fallbackTags
+      hasUpdates = true
+    }
+  }
+
+  if (hasUpdates) {
+    await batch.commit()
+  }
+
+  console.log(`[${logPrefix}] Shared summaries translated=${translatedCount}, skipped=${skippedCount}`)
+}
+
 export const generatePersonalizedFeed = functions
   .region('asia-northeast1')
   .runWith({ timeoutSeconds: 540, memory: '256MB', secrets: ['GEMINI_API_KEY'] })
@@ -235,6 +307,8 @@ export const generatePersonalizedFeed = functions
         seenUrls.add(a.url)
         return true
       })
+
+    await enrichSharedArticles(topic, articles, 'generatePersonalizedFeed')
 
     // HN・GitHubの最大スコアを算出（人気スコア正規化用）
     const maxHnScore = articles
@@ -332,76 +406,6 @@ export const generatePersonalizedFeed = functions
           .sort((a, b) => b.displayScore - a.displayScore)
           .slice(0, 40)
 
-        // 3.5. 英語記事は翻訳 + 要約、日本語記事もタグ抽出のため Gemini を通す
-        const translationBatch = db.batch()
-        let translatedCount = 0
-        let skippedCount = 0
-
-        for (const item of ranked) {
-          const article = item.article
-          const articleRef = db.doc(`topics/${topic}/articles/${article.id}`)
-
-          if (isJapanese(article.title)) {
-            // 日本語記事: タグ未抽出、または要約未生成なら Gemini で補完する
-            if (!article.titleJa || !article.summaryJa || !article.tags || article.tags.length === 0) {
-              try {
-                const { titleJa, summaryJa, tags } = await summarizeArticle(
-                  article.title,
-                  article.content ?? article.description ?? ''
-                )
-                translationBatch.update(articleRef, { titleJa, summaryJa, tags })
-                article.titleJa = titleJa || article.title
-                article.summaryJa = summaryJa || (article.description ?? '').slice(0, 300)
-                article.tags = tags
-                translatedCount++
-              } catch (err) {
-                console.error(`[generatePersonalizedFeed] Tagging failed for ${article.url}:`, err)
-                const fallbackSummary = article.summaryJa ?? (article.description ?? '').slice(0, 300)
-                translationBatch.update(articleRef, {
-                  titleJa: article.titleJa ?? article.title,
-                  summaryJa: fallbackSummary,
-                  tags: article.tags ?? []
-                })
-                article.titleJa = article.titleJa ?? article.title
-                article.summaryJa = fallbackSummary
-                article.tags = article.tags ?? []
-              }
-            } else {
-              // 日本語記事: 既存データが揃っていればそのまま使う
-              skippedCount++
-            }
-          } else if (!article.titleJa || !isJapanese(article.titleJa)) {
-            // 日本語以外の記事: 未翻訳、または以前の処理で日本語以外のtitleJaがセットされた場合も再翻訳
-            try {
-              const { titleJa, summaryJa, tags } = await summarizeArticle(
-                article.title,
-                article.content ?? article.description ?? ''
-              )
-              translationBatch.update(articleRef, { titleJa, summaryJa, tags })
-              article.titleJa = titleJa
-              article.summaryJa = summaryJa
-              article.tags = tags
-              translatedCount++
-            } catch (err) {
-              console.error(`[generatePersonalizedFeed] Translation failed for ${article.url}:`, err)
-              const fallbackSummary = (article.description ?? '').slice(0, 300)
-              translationBatch.update(articleRef, {
-                titleJa: article.title,
-                summaryJa: fallbackSummary,
-                tags: []
-              })
-              article.titleJa = article.title
-              article.summaryJa = fallbackSummary
-              article.tags = []
-            }
-          } else {
-            skippedCount++ // 翻訳済み
-          }
-        }
-
-        await translationBatch.commit()
-        console.log(`[generatePersonalizedFeed] Translated ${translatedCount} articles, skipped ${skippedCount}`)
-
         // 4. ユーザーのフィードに保存
         const feedRef = db.collection(`users/${uid}/newsFeed/${topic}/articles`)
         const batch = db.batch()
@@ -453,6 +457,8 @@ export const generateMobilePersonalizedFeed = functions
         seenUrls.add(a.url)
         return true
       })
+
+    await enrichSharedArticles(topic, articles, 'generateMobilePersonalizedFeed')
 
     const usersSnap = await db.collection('users').get()
 
@@ -515,52 +521,6 @@ export const generateMobilePersonalizedFeed = functions
           .filter(item => item.displayScore >= 0)
           .sort((a, b) => b.displayScore - a.displayScore)
           .slice(0, 40)
-
-        const translationBatch = db.batch()
-        for (const item of scored) {
-          const article = item.article
-          const articleRef = db.doc(`topics/${topic}/articles/${article.id}`)
-
-          if (isJapanese(article.title)) {
-            if (!article.titleJa || !article.summaryJa || !article.tags || article.tags.length === 0) {
-              try {
-                const { titleJa, summaryJa, tags } = await summarizeArticle(
-                  article.title,
-                  article.content ?? article.description ?? ''
-                )
-                translationBatch.update(articleRef, { titleJa, summaryJa, tags })
-                article.titleJa = titleJa || article.title
-                article.summaryJa = summaryJa || (article.description ?? '').slice(0, 300)
-                article.tags = tags
-              } catch (err) {
-                console.error(`[generateMobilePersonalizedFeed] Tagging failed for ${article.url}:`, err)
-              }
-            }
-          } else if (!article.titleJa || !isJapanese(article.titleJa)) {
-            try {
-              const { titleJa, summaryJa, tags } = await summarizeArticle(
-                article.title,
-                article.content ?? article.description ?? ''
-              )
-              translationBatch.update(articleRef, { titleJa, summaryJa, tags })
-              article.titleJa = titleJa
-              article.summaryJa = summaryJa
-              article.tags = tags
-            } catch (err) {
-              console.error(`[generateMobilePersonalizedFeed] Translation failed for ${article.url}:`, err)
-              const fallbackSummary = (article.description ?? '').slice(0, 300)
-              translationBatch.update(articleRef, {
-                titleJa: article.title,
-                summaryJa: fallbackSummary,
-                tags: article.tags ?? [],
-              })
-              article.titleJa = article.title
-              article.summaryJa = fallbackSummary
-              article.tags = article.tags ?? []
-            }
-          }
-        }
-        await translationBatch.commit()
 
         const feedRef = db.collection(`users/${uid}/newsFeed/${topic}/articles`)
         const batch = db.batch()

@@ -31,6 +31,19 @@ import type {
 } from '@/types'
 import type { NewsInteraction, NewsTopic } from '@/types/news'
 
+type FeedLoadState =
+  | 'idle'
+  | 'loading'
+  | 'showing'
+  | 'no-feed'
+  | 'all-filtered'
+  | 'fetch-failed'
+
+interface FeedDiagnostic {
+  state: FeedLoadState
+  message: string
+}
+
 export const useNewsStore = defineStore('news', () => {
   const NEWS_FETCH_TIMEOUT_MS = 8000
   const authStore = useAuthStore()
@@ -41,6 +54,16 @@ export const useNewsStore = defineStore('news', () => {
   const latestFeedDateByTopic = ref<Record<NewsTopic, string | null>>({
     ai: null,
     mobile: null,
+  })
+  const feedDiagnosticsByTopic = ref<Record<NewsTopic, FeedDiagnostic>>({
+    ai: {
+      state: 'idle',
+      message: 'まだニュース取得を開始していません',
+    },
+    mobile: {
+      state: 'idle',
+      message: 'まだニュース取得を開始していません',
+    },
   })
   const mobileNotificationPreferences = ref<MobileNotificationPreferences>({
     discord: {
@@ -54,10 +77,6 @@ export const useNewsStore = defineStore('news', () => {
   const mobileAlertCount = ref(0)
   const mobileAlertSummary = ref({ urgent: 0, review: 0 })
   let activeLoadSequence = 0
-
-  function getJstToday(): string {
-    return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
-  }
 
   function getNewsCacheKey(uid: string, topic: NewsTopic): string {
     return `rertm-news-cache-${uid}-${topic}`
@@ -169,6 +188,66 @@ export const useNewsStore = defineStore('news', () => {
     return { latestDate, feedDocs: sortedFeedDocs }
   }
 
+  async function loadLatestTopicArticleDocs(topic: NewsTopic) {
+    const articlesRef = collection(db, `topics/${topic}/articles`)
+    const articlesSnap = await getServerFirstSnapshot(query(articlesRef, orderBy('date', 'desc'), limit(1)))
+
+    if (articlesSnap.empty || !articlesSnap.docs[0]) {
+      return { latestDate: null, articleDocs: [] as typeof articlesSnap.docs }
+    }
+
+    const latestDocData = articlesSnap.docs[0].data() as { date?: string } | undefined
+    const latestDate = latestDocData?.date
+    if (!latestDate) {
+      return { latestDate: null, articleDocs: [] as typeof articlesSnap.docs }
+    }
+
+    const latestArticlesSnap = await getServerFirstSnapshot(query(articlesRef, where('date', '==', latestDate)))
+    const sortedArticleDocs = [...latestArticlesSnap.docs].sort((a, b) => {
+      const aData = a.data() as Partial<NewsArticle>
+      const bData = b.data() as Partial<NewsArticle>
+      const aPublishedAt = typeof aData.publishedAt?.toMillis === 'function' ? aData.publishedAt.toMillis() : 0
+      const bPublishedAt = typeof bData.publishedAt?.toMillis === 'function' ? bData.publishedAt.toMillis() : 0
+      const aScore = typeof aData.score === 'number' ? aData.score : 0
+      const bScore = typeof bData.score === 'number' ? bData.score : 0
+
+      if (bPublishedAt !== aPublishedAt) return bPublishedAt - aPublishedAt
+      return bScore - aScore
+    })
+
+    return { latestDate, articleDocs: sortedArticleDocs }
+  }
+
+  async function resolveArticleDocs(feedDocs: Array<{ id: string; data: () => unknown }>): Promise<NewsArticle[]> {
+    const articlePromises = feedDocs.map(async (feedDoc) => {
+      const rawData = feedDoc.data()
+      if (!rawData || typeof rawData !== 'object') return null
+      const data = rawData as Record<string, unknown>
+
+      // 新形式（記事データがそのまま入っている場合）
+      if (typeof data.title === 'string') {
+        return { id: feedDoc.id, ...data } as NewsArticle
+      }
+
+      // 旧形式（articleRefしかない場合）
+      if (typeof data.articleRef === 'string') {
+        try {
+          const articleSnap = await getDoc(doc(db, data.articleRef))
+          if (!articleSnap.exists()) return null
+          return { id: articleSnap.id, ...(articleSnap.data() as Record<string, unknown>) } as NewsArticle
+        } catch (e) {
+          console.warn('[news] Failed to fetch referenced article', e)
+          return null
+        }
+      }
+
+      return null
+    })
+
+    const results = await Promise.all(articlePromises)
+    return results.filter((article): article is NewsArticle => article !== null)
+  }
+
   function shouldKeepVisibleAfterClick(article: NewsArticle, topic: NewsTopic): boolean {
     return topic === 'mobile' && article.importantLevel === 'urgent'
   }
@@ -218,38 +297,115 @@ export const useNewsStore = defineStore('news', () => {
 
   async function loadTodayFeed(topic: NewsTopic = 'ai', forceRefresh = false): Promise<void> {
     const uid = authStore.user?.uid
-    if (!uid) return
-    const today = getJstToday()
+    if (!uid) {
+      feedDiagnosticsByTopic.value = {
+        ...feedDiagnosticsByTopic.value,
+        [topic]: {
+          state: 'idle',
+          message: '認証後にニュース取得を開始します',
+        },
+      }
+      return
+    }
     const cachedFeed = readCachedFeed(uid, topic)
     const loadSequence = ++activeLoadSequence
 
-    if (!forceRefresh && cachedFeed?.date === today) {
+    if (!forceRefresh && cachedFeed) {
       articles.value = cachedFeed.articles
       latestFeedDateByTopic.value = {
         ...latestFeedDateByTopic.value,
         [topic]: cachedFeed.date,
       }
-      dismissedIds.value = new Set()
-      loading.value = false
       error.value = null
-      return
-    }
 
-    loading.value = true
+      if (cachedFeed.articles.length > 0) {
+        loading.value = true
+        feedDiagnosticsByTopic.value = {
+          ...feedDiagnosticsByTopic.value,
+          [topic]: {
+            state: 'showing',
+            message: '保存済みの記事を表示しつつ、サーバーの更新を確認しています',
+          },
+        }
+      } else {
+        dismissedIds.value = new Set()
+        loading.value = true
+        feedDiagnosticsByTopic.value = {
+          ...feedDiagnosticsByTopic.value,
+          [topic]: {
+            state: 'loading',
+            message: '保存済みの記事がないため、サーバーから最新ニュースを取得しています',
+          },
+        }
+      }
+    } else {
+      loading.value = true
+      feedDiagnosticsByTopic.value = {
+        ...feedDiagnosticsByTopic.value,
+        [topic]: {
+          state: 'loading',
+          message: 'サーバーから最新ニュースを取得しています',
+        },
+      }
+    }
     error.value = null
 
     try {
-      const { excludedUrls, dismissedArticleIds, latestDate, sortedFeedDocs } = await withTimeout(
+      const interactionsPromise = loadTopicInteractions(uid, topic)
+      const personalizedFeedPromise = loadLatestFeedDocs(uid, topic)
+      const sharedFeedPromise = loadLatestTopicArticleDocs(topic)
+
+      if (!cachedFeed?.articles.length) {
+        void sharedFeedPromise
+          .then(async (sharedFeed) => {
+            if (loadSequence !== activeLoadSequence || !sharedFeed.latestDate || sharedFeed.articleDocs.length === 0) {
+              return
+            }
+            if (articles.value.length > 0) return
+
+            const sharedArticles = await resolveArticleDocs(sharedFeed.articleDocs)
+            if (loadSequence !== activeLoadSequence || articles.value.length > 0 || sharedArticles.length === 0) {
+              return
+            }
+
+            articles.value = sharedArticles
+            latestFeedDateByTopic.value = {
+              ...latestFeedDateByTopic.value,
+              [topic]: sharedFeed.latestDate,
+            }
+            feedDiagnosticsByTopic.value = {
+              ...feedDiagnosticsByTopic.value,
+              [topic]: {
+                state: 'showing',
+                message: '個別フィード生成前のため、共有記事を表示しています',
+              },
+            }
+            writeCachedFeed(uid, topic, sharedFeed.latestDate, sharedArticles)
+          })
+          .catch((sharedError) => {
+            console.warn('[news] shared feed early fallback failed:', sharedError)
+          })
+      }
+
+      const { excludedUrls, dismissedArticleIds, latestDate, sortedFeedDocs, isSharedFallback } = await withTimeout(
         (async () => {
-          const [{ excludedUrls, dismissedArticleIds }, { latestDate, feedDocs }] = await Promise.all([
-            loadTopicInteractions(uid, topic),
-            loadLatestFeedDocs(uid, topic),
+          const [{ excludedUrls, dismissedArticleIds }, personalizedFeed, sharedFeed] = await Promise.all([
+            interactionsPromise,
+            personalizedFeedPromise,
+            sharedFeedPromise,
           ])
+
+          const shouldUseSharedFallback = (
+            !!sharedFeed.latestDate &&
+            (!personalizedFeed.latestDate || sharedFeed.latestDate > personalizedFeed.latestDate)
+          )
+
           return {
             excludedUrls,
             dismissedArticleIds,
-            latestDate,
-            sortedFeedDocs: feedDocs,
+            latestDate: shouldUseSharedFallback ? sharedFeed.latestDate : personalizedFeed.latestDate,
+            sortedFeedDocs: shouldUseSharedFallback ? sharedFeed.articleDocs : personalizedFeed.feedDocs,
+            isSharedFallback: shouldUseSharedFallback,
           }
         })(),
         NEWS_FETCH_TIMEOUT_MS,
@@ -265,37 +421,18 @@ export const useNewsStore = defineStore('news', () => {
           ...latestFeedDateByTopic.value,
           [topic]: null,
         }
+        feedDiagnosticsByTopic.value = {
+          ...feedDiagnosticsByTopic.value,
+          [topic]: {
+            state: 'no-feed',
+            message: 'サーバーには最新の配信データがまだありません',
+          },
+        }
         return
       }
 
-      const articlePromises = sortedFeedDocs
-        .filter(feedDoc => !dismissedIds.value.has(feedDoc.id))
-        .map(async (feedDoc) => {
-          const data = feedDoc.data() as Record<string, unknown>
-          
-          // 新形式（記事データがそのまま入っている場合）
-          if (typeof data.title === 'string') {
-            return { id: feedDoc.id, ...data } as NewsArticle
-          }
-          
-          // 旧形式（articleRefしかない場合）
-          if (typeof data.articleRef === 'string') {
-            try {
-              const articleSnap = await getDoc(doc(db, data.articleRef))
-              if (!articleSnap.exists()) return null
-              return { id: articleSnap.id, ...(articleSnap.data() as Record<string, unknown>) } as NewsArticle
-            } catch (e) {
-              console.warn('[news] Failed to fetch referenced article', e)
-              return null
-            }
-          }
-          
-          return null
-        })
-
-      const results = await Promise.all(articlePromises)
+      const results = await resolveArticleDocs(sortedFeedDocs.filter(feedDoc => !dismissedIds.value.has(feedDoc.id)))
       const visibleArticles = results
-        .filter((a): a is NewsArticle => a !== null)
         .filter(article => !excludedUrls.has(article.url) || shouldKeepVisibleAfterClick(article, topic))
 
       if (loadSequence !== activeLoadSequence) return
@@ -304,6 +441,22 @@ export const useNewsStore = defineStore('news', () => {
         ...latestFeedDateByTopic.value,
         [topic]: latestDate,
       }
+      feedDiagnosticsByTopic.value = {
+        ...feedDiagnosticsByTopic.value,
+        [topic]: visibleArticles.length > 0
+          ? {
+              state: 'showing',
+              message: isSharedFallback
+                ? '個別フィード生成前のため、共有記事を表示しています'
+                : 'ニュースを表示しています',
+            }
+          : {
+              state: 'all-filtered',
+              message: isSharedFallback
+                ? '共有記事は取得できましたが、既読・非表示条件により表示対象がありません'
+                : '取得は成功しましたが、既読・非表示条件により表示対象がありません',
+            },
+      }
       writeCachedFeed(uid, topic, latestDate, visibleArticles)
       void trackDisplayedArticles(uid, topic, latestDate, visibleArticles).catch((trackError) => {
         console.error('[news] trackDisplayedArticles error:', trackError)
@@ -311,17 +464,31 @@ export const useNewsStore = defineStore('news', () => {
     } catch (err) {
       console.error('[news] loadTodayFeed error:', err)
       const fallbackFeed = readCachedFeed(uid, topic)
-      if (fallbackFeed?.date === today && fallbackFeed.articles.length) {
+      if (fallbackFeed && fallbackFeed.articles.length) {
         articles.value = fallbackFeed.articles
         latestFeedDateByTopic.value = {
           ...latestFeedDateByTopic.value,
           [topic]: fallbackFeed.date,
+        }
+        feedDiagnosticsByTopic.value = {
+          ...feedDiagnosticsByTopic.value,
+          [topic]: {
+            state: 'fetch-failed',
+            message: 'サーバー取得に失敗したため、保存済みの記事を表示しています',
+          },
         }
         error.value = null
       } else {
         latestFeedDateByTopic.value = {
           ...latestFeedDateByTopic.value,
           [topic]: null,
+        }
+        feedDiagnosticsByTopic.value = {
+          ...feedDiagnosticsByTopic.value,
+          [topic]: {
+            state: 'fetch-failed',
+            message: 'サーバーからニュースを取得できませんでした',
+          },
         }
         error.value = '記事の読み込みに失敗しました'
       }
@@ -525,6 +692,7 @@ export const useNewsStore = defineStore('news', () => {
     error,
     preferences,
     latestFeedDateByTopic,
+    feedDiagnosticsByTopic,
     mobileNotificationPreferences,
     dismissedIds,
     loadTodayFeed,

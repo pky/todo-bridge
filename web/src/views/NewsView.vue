@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import { useNewsStore } from '@/stores/news'
 import NewsCard from '@/components/NewsCard.vue'
 import type { NewsArticle } from '@/types'
@@ -10,6 +11,7 @@ import type { NewsTopic } from '@/types/news'
 const router = useRouter()
 const route = useRoute()
 
+const authStore = useAuthStore()
 const newsStore = useNewsStore()
 const bookmarkToast = ref(false)
 const showScrollTop = ref(false)
@@ -21,6 +23,8 @@ const pageTitle = computed(() => currentTopic.value === 'mobile' ? 'モバイル
 const pageSubtitle = computed(() => currentTopic.value === 'mobile' ? 'Apple / Android の公式情報を優先表示' : '毎朝6時更新')
 const isMobileTopic = computed(() => currentTopic.value === 'mobile')
 const latestFeedDate = computed(() => newsStore.latestFeedDateByTopic[currentTopic.value])
+const feedDiagnostic = computed(() => newsStore.feedDiagnosticsByTopic[currentTopic.value])
+const hasVisibleArticles = computed(() => filteredArticles.value.length > 0)
 
 function formatFeedDate(value: string | null): string {
   if (!value) return '更新日: 不明'
@@ -177,21 +181,28 @@ const scrollToTop = () => {
   }
 }
 
-onMounted(async () => {
+onMounted(() => {
   window.addEventListener('scroll', handleScroll)
   if (listContainerRef.value) {
     listContainerRef.value.addEventListener('scroll', handleScroll)
   }
-  await newsStore.loadPreferences(currentTopic.value)
-  await newsStore.loadTodayFeed(currentTopic.value)
 })
 
-watch(currentTopic, async (topic, previousTopic) => {
-  if (topic === previousTopic) return
-  mobileFilter.value = topic === 'mobile' ? 'required' : 'all'
-  await newsStore.loadPreferences(topic)
-  await newsStore.loadTodayFeed(topic)
-})
+watch(
+  [currentTopic, () => authStore.user?.uid, () => authStore.loading],
+  async ([topic, uid, authLoading], [previousTopic, previousUid]) => {
+    if (topic !== previousTopic) {
+      mobileFilter.value = topic === 'mobile' ? 'required' : 'all'
+    }
+
+    if (authLoading || !uid) return
+    if (topic === previousTopic && uid === previousUid) return
+
+    await newsStore.loadPreferences(topic)
+    await newsStore.loadTodayFeed(topic)
+  },
+  { immediate: true }
+)
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll)
@@ -283,7 +294,7 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
       </div>
 
       <!-- ローディング -->
-      <div v-if="newsStore.loading" class="flex justify-center items-center py-12">
+      <div v-if="newsStore.loading && !hasVisibleArticles" class="flex justify-center items-center py-12">
         <div class="text-sm text-gray-400">読み込み中...</div>
       </div>
 
@@ -300,12 +311,28 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
 
       <!-- 記事なし -->
       <div v-else-if="filteredArticles.length === 0" class="px-4 py-12 text-center">
-        <p class="text-sm text-gray-400">今日の記事はまだありません</p>
-        <p class="text-xs text-gray-300 mt-1">毎朝6時に更新されます</p>
+        <p class="text-sm text-gray-500">{{ feedDiagnostic.message }}</p>
+        <p class="text-xs text-gray-300 mt-1">
+          {{
+            feedDiagnostic.state === 'no-feed'
+              ? '配信データの作成を待っています'
+              : feedDiagnostic.state === 'all-filtered'
+                ? '既読・非表示条件を見直すと表示される可能性があります'
+                : feedDiagnostic.state === 'fetch-failed'
+                  ? '通信状態を確認して再読み込みしてください'
+                  : feedDiagnostic.state === 'idle'
+                    ? 'まだ取得処理は開始されていません'
+                    : '読み込み状況を確認しています'
+          }}
+        </p>
       </div>
 
       <!-- 記事一覧 -->
       <div v-else class="px-3 py-3 pb-20">
+        <div v-if="newsStore.loading && hasVisibleArticles" class="pb-2 text-right">
+          <p class="text-xs text-gray-400">{{ feedDiagnostic.message }}</p>
+        </div>
+
         <section
           v-if="isMobileTopic"
           class="mb-3 overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-red-50"

@@ -249,6 +249,32 @@ describe('Tasks Store', () => {
     )
   })
 
+  it('検索結果はメモ本文も対象にする', async () => {
+    const store = useTasksStore()
+    await store.createTask({
+      name: '会議準備',
+      notes: ['議事録に予算レビューの内容を残す'],
+    })
+
+    store.setSearchQuery('予算レビュー')
+
+    expect(store.searchResults).toHaveLength(1)
+    expect(store.searchResults[0]?.name).toBe('会議準備')
+  })
+
+  it('検索結果は複数語をメモ本文とタスク名にまたがって判定する', async () => {
+    const store = useTasksStore()
+    await store.createTask({
+      name: '会議準備',
+      notes: ['議事録に予算レビューの内容を残す'],
+    })
+
+    store.setSearchQuery('会議 予算レビュー')
+
+    expect(store.searchResults).toHaveLength(1)
+    expect(store.searchResults[0]?.name).toBe('会議準備')
+  })
+
   it('toggleComplete で期限切れ件数を即時に減算する', async () => {
     const store = useTasksStore()
     const listsStore = useListsStore()

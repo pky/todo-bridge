@@ -11,6 +11,10 @@ const trackClickMock = vi.hoisted(() => vi.fn())
 const bookmarkArticleMock = vi.hoisted(() => vi.fn())
 const routeState = vi.hoisted(() => ({ name: 'news-ai' as string }))
 const pushMock = vi.hoisted(() => vi.fn())
+const authStoreState = reactive({
+  user: { uid: 'user-1' } as { uid: string } | null,
+  loading: false,
+})
 
 const article: NewsArticle = {
   id: 'article-1',
@@ -64,6 +68,10 @@ const newsStoreState = reactive({
     ai: '2026-03-14',
     mobile: '2026-03-14',
   } as Record<'ai' | 'mobile', string | null>,
+  feedDiagnosticsByTopic: {
+    ai: { state: 'showing', message: 'ニュースを表示しています' },
+    mobile: { state: 'showing', message: 'ニュースを表示しています' },
+  } as Record<'ai' | 'mobile', { state: string; message: string }>,
   preferences: {
     keywords: [],
     platforms: ['ios', 'android'] as Array<'ios' | 'android'>,
@@ -92,6 +100,10 @@ vi.mock('@/stores/news', () => ({
   }),
 }))
 
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => authStoreState,
+}))
+
 vi.mock('@/components/NewsCard.vue', () => ({
   default: {
     props: ['article'],
@@ -109,12 +121,18 @@ describe('NewsView', () => {
       ai: '2026-03-14',
       mobile: '2026-03-14',
     }
+    newsStoreState.feedDiagnosticsByTopic = {
+      ai: { state: 'showing', message: 'ニュースを表示しています' },
+      mobile: { state: 'showing', message: 'ニュースを表示しています' },
+    }
     loadTodayFeedMock.mockResolvedValue(undefined)
     loadPreferencesMock.mockResolvedValue(undefined)
     dismissArticleMock.mockResolvedValue(undefined)
     trackClickMock.mockResolvedValue(undefined)
     bookmarkArticleMock.mockResolvedValue(undefined)
     routeState.name = 'news-ai'
+    authStoreState.user = { uid: 'user-1' }
+    authStoreState.loading = false
     newsStoreState.preferences = {
       keywords: [],
       platforms: ['ios', 'android'],
@@ -151,6 +169,68 @@ describe('NewsView', () => {
     })
 
     expect(wrapper.text()).toContain('更新日: 2026/03/14')
+  })
+
+  it('認証待ちのあとに uid が入ったらニュース取得を開始する', async () => {
+    authStoreState.user = null
+    authStoreState.loading = true
+
+    mount(NewsView, {
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    expect(loadTodayFeedMock).not.toHaveBeenCalled()
+
+    authStoreState.user = { uid: 'user-1' }
+    authStoreState.loading = false
+    await nextTick()
+    await nextTick()
+
+    expect(loadPreferencesMock).toHaveBeenCalledWith('ai')
+    expect(loadTodayFeedMock).toHaveBeenCalledWith('ai')
+  })
+
+  it('記事がある間は loading 中でも一覧を隠さない', () => {
+    newsStoreState.loading = true
+    newsStoreState.feedDiagnosticsByTopic.ai = {
+      state: 'showing',
+      message: '保存済みの記事を表示しつつ、サーバーの更新を確認しています',
+    }
+
+    const wrapper = mount(NewsView, {
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('保存済みの記事を表示しつつ、サーバーの更新を確認しています')
+    expect(wrapper.text()).toContain('OpenAI releases update')
+    expect(wrapper.text()).not.toContain('読み込み中...')
+  })
+
+  it('記事が空なら原因メッセージを表示する', () => {
+    newsStoreState.articles = []
+    newsStoreState.feedDiagnosticsByTopic.ai = {
+      state: 'fetch-failed',
+      message: 'サーバーからニュースを取得できませんでした',
+    }
+
+    const wrapper = mount(NewsView, {
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('サーバーからニュースを取得できませんでした')
+    expect(wrapper.text()).toContain('通信状態を確認して再読み込みしてください')
   })
 
   it('興味なし押下時にURL付きで dismissArticle を呼ぶ', async () => {
