@@ -693,11 +693,16 @@ const priorityOptions = [
               <!-- 表示モード -->
               <div v-else class="flex items-start gap-2">
                 <p
-                  @click="handleStartEditNote(index)"
-                  class="flex-1 text-xs sm:text-sm text-gray-700 whitespace-pre-wrap cursor-pointer hover:bg-gray-100 rounded px-1 -mx-1 break-words"
+                  class="flex-1 text-xs sm:text-sm text-gray-700 whitespace-pre-wrap break-words select-text"
                 >
                   {{ note }}
                 </p>
+                <button
+                  @click="handleStartEditNote(index)"
+                  class="text-xs text-gray-500 hover:text-gray-800 flex-shrink-0"
+                >
+                  編集
+                </button>
                 <button
                   @click="handleCopyNote(note)"
                   class="text-xs text-blue-600 hover:text-blue-800 flex-shrink-0"

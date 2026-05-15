@@ -104,4 +104,30 @@ describe('TaskDetail', () => {
     expect(wrapper.text()).toContain('←')
     expect(wrapper.text()).not.toContain('サブタスクなし')
   })
+
+  it('メモ本文クリックでは編集モードに入らず、編集ボタンで編集できる', async () => {
+    if (tasksStoreState.selectedTask) {
+      tasksStoreState.selectedTask.notes = ['選択してコピーしたいメモ']
+    }
+
+    const wrapper = mount(TaskDetail, {
+      global: {
+        stubs: {
+          TaskItem: {
+            props: ['task'],
+            template: '<div class="task-item-stub">{{ task.name }}</div>',
+          },
+        },
+      },
+    })
+
+    await wrapper.get('p.whitespace-pre-wrap').trigger('click')
+    expect(wrapper.find('textarea').exists()).toBe(false)
+
+    const editButton = wrapper.findAll('button').find((button) => button.text() === '編集')
+    expect(editButton).toBeDefined()
+    await editButton?.trigger('click')
+
+    expect(wrapper.get('textarea').element.value).toBe('選択してコピーしたいメモ')
+  })
 })
