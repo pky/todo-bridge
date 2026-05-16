@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { nextTick, reactive } from 'vue'
 import NewsView from '@/views/NewsView.vue'
 import type { NewsArticle } from '@/types'
@@ -111,8 +111,11 @@ vi.mock('@/components/NewsCard.vue', () => ({
   },
 }))
 
+enableAutoUnmount(afterEach)
+
 describe('NewsView', () => {
   beforeEach(() => {
+    vi.useRealTimers()
     vi.clearAllMocks()
     newsStoreState.articles = [article]
     newsStoreState.loading = false
@@ -140,6 +143,10 @@ describe('NewsView', () => {
       includeCommunity: true,
       actionRequiredOnly: false,
     }
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('あとで読むを開くボタンからTodo画面へ遷移できる', async () => {
@@ -192,6 +199,63 @@ describe('NewsView', () => {
 
     expect(loadPreferencesMock).toHaveBeenCalledWith('ai')
     expect(loadTodayFeedMock).toHaveBeenCalledWith('ai')
+  })
+
+  it('日付が変わってから画面へ戻ったらニュースを再取得する', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-03-14T10:00:00+09:00'))
+
+    mount(NewsView, {
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    await nextTick()
+    await nextTick()
+
+    expect(loadTodayFeedMock).toHaveBeenCalledTimes(1)
+
+    window.dispatchEvent(new Event('focus'))
+    await nextTick()
+    await nextTick()
+
+    expect(loadTodayFeedMock).toHaveBeenCalledTimes(1)
+
+    vi.setSystemTime(new Date('2026-03-15T09:00:00+09:00'))
+    window.dispatchEvent(new Event('focus'))
+    await nextTick()
+    await nextTick()
+
+    expect(loadPreferencesMock).toHaveBeenCalledTimes(2)
+    expect(loadTodayFeedMock).toHaveBeenCalledTimes(2)
+    expect(loadTodayFeedMock).toHaveBeenLastCalledWith('ai')
+  })
+
+  it('日付が変わってからタブが再表示されたらニュースを再取得する', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-03-14T10:00:00+09:00'))
+
+    mount(NewsView, {
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    await nextTick()
+    await nextTick()
+
+    vi.setSystemTime(new Date('2026-03-15T09:00:00+09:00'))
+    document.dispatchEvent(new Event('visibilitychange'))
+    await nextTick()
+    await nextTick()
+
+    expect(loadTodayFeedMock).toHaveBeenCalledTimes(2)
+    expect(loadTodayFeedMock).toHaveBeenLastCalledWith('ai')
   })
 
   it('記事がある間は loading 中でも一覧を隠さない', () => {

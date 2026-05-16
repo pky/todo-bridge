@@ -17,6 +17,11 @@ const bookmarkToast = ref(false)
 const showScrollTop = ref(false)
 const listContainerRef = ref<HTMLElement | null>(null)
 const mobileFilter = ref<'all' | 'required' | 'ios' | 'android'>('required')
+const lastFeedCheckDateByTopic = ref<Record<NewsTopic, string | null>>({
+  ai: null,
+  mobile: null,
+})
+const activeFeedRefreshByTopic: Partial<Record<NewsTopic, Promise<void>>> = {}
 
 const currentTopic = computed<NewsTopic>(() => route.name === 'news-mobile' ? 'mobile' : 'ai')
 const pageTitle = computed(() => currentTopic.value === 'mobile' ? 'モバイルニュース' : 'AIニュース')
@@ -31,6 +36,53 @@ function formatFeedDate(value: string | null): string {
   const [year, month, day] = value.split('-')
   if (!year || !month || !day) return `更新日: ${value}`
   return `更新日: ${year}/${month}/${day}`
+}
+
+function getLocalDateKey(date: Date = new Date()): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+async function refreshFeedForCurrentTopic(): Promise<void> {
+  const uid = authStore.user?.uid
+  if (authStore.loading || !uid) return
+
+  const topic = currentTopic.value
+  if (activeFeedRefreshByTopic[topic]) {
+    await activeFeedRefreshByTopic[topic]
+    return
+  }
+
+  const checkedDate = getLocalDateKey()
+  let refreshPromise!: Promise<void>
+  refreshPromise = (async () => {
+    await newsStore.loadPreferences(topic)
+    await newsStore.loadTodayFeed(topic)
+    lastFeedCheckDateByTopic.value = {
+      ...lastFeedCheckDateByTopic.value,
+      [topic]: checkedDate,
+    }
+  })().finally(() => {
+    if (activeFeedRefreshByTopic[topic] === refreshPromise) {
+      delete activeFeedRefreshByTopic[topic]
+    }
+  })
+
+  activeFeedRefreshByTopic[topic] = refreshPromise
+  await refreshPromise
+}
+
+async function refreshFeedIfDateChanged(): Promise<void> {
+  const uid = authStore.user?.uid
+  if (authStore.loading || !uid) return
+
+  const topic = currentTopic.value
+  const today = getLocalDateKey()
+  if (lastFeedCheckDateByTopic.value[topic] === today) return
+
+  await refreshFeedForCurrentTopic()
 }
 
 function isImportantArticle(article: NewsArticle): boolean {
@@ -183,6 +235,9 @@ const scrollToTop = () => {
 
 onMounted(() => {
   window.addEventListener('scroll', handleScroll)
+  window.addEventListener('focus', refreshFeedIfDateChanged)
+  window.addEventListener('pageshow', refreshFeedIfDateChanged)
+  document.addEventListener('visibilitychange', refreshFeedIfDateChanged)
   if (listContainerRef.value) {
     listContainerRef.value.addEventListener('scroll', handleScroll)
   }
@@ -198,14 +253,16 @@ watch(
     if (authLoading || !uid) return
     if (topic === previousTopic && uid === previousUid) return
 
-    await newsStore.loadPreferences(topic)
-    await newsStore.loadTodayFeed(topic)
+    await refreshFeedForCurrentTopic()
   },
   { immediate: true }
 )
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll)
+  window.removeEventListener('focus', refreshFeedIfDateChanged)
+  window.removeEventListener('pageshow', refreshFeedIfDateChanged)
+  document.removeEventListener('visibilitychange', refreshFeedIfDateChanged)
   if (listContainerRef.value) {
     listContainerRef.value.removeEventListener('scroll', handleScroll)
   }
