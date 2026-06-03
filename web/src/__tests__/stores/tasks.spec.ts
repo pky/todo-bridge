@@ -182,6 +182,25 @@ describe('Tasks Store', () => {
     await vi.waitFor(() => expect(setDoc).toHaveBeenCalled())
   })
 
+  it('createTask は選択中リストがない場合に書き込まない', async () => {
+    const { setDoc } = await import('firebase/firestore')
+    const listsStore = useListsStore()
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    listsStore.$patch({
+      selectedListId: null,
+      lists: [],
+    })
+
+    const store = useTasksStore()
+
+    await expect(store.createTask({ name: 'New Task' })).rejects.toThrow('タスクを追加するリストが選択されていません')
+    expect(setDoc).not.toHaveBeenCalled()
+    expect(store.tasks).toEqual([])
+
+    consoleErrorSpy.mockRestore()
+  })
+
   it('createTask が選択中リストの共有範囲を継承する', async () => {
     const { setDoc } = await import('firebase/firestore')
 

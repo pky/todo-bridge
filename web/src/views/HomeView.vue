@@ -16,6 +16,8 @@ const tasksStore = useTasksStore()
 const router = useRouter()
 const route = useRoute()
 let reloadSequence = 0
+let hiddenAt: number | null = null
+const BACKGROUND_RELOAD_THRESHOLD_MS = 30 * 1000
 
 // リスト選択が変更されたらタスクを再購読
 // immediate: trueで初回ロード時も処理（リスナー登録の一元管理）
@@ -93,15 +95,39 @@ async function applyRequestedNavigationTarget() {
   await router.replace({ name: 'home' })
 }
 
+async function handleVisibilityChange() {
+  if (document.visibilityState === 'hidden') {
+    hiddenAt = Date.now()
+    return
+  }
+
+  if (!hiddenAt) return
+
+  const hiddenDurationMs = Date.now() - hiddenAt
+  hiddenAt = null
+
+  if (hiddenDurationMs < BACKGROUND_RELOAD_THRESHOLD_MS) return
+  if (!authStore.isAuthenticated || !spaceStore.initialized) return
+
+  console.log('[HomeView] Resuming after background, rebuilding subscriptions', {
+    hiddenDurationMs,
+    currentSpaceId: spaceStore.currentSpaceId,
+    selectedListId: listsStore.selectedListId,
+  })
+  await reloadHomeData()
+}
+
 onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   await reloadHomeData()
   await applyRequestedNavigationTarget()
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   reloadSequence++
   listsStore.unsubscribe()
   tasksStore.unsubscribe()

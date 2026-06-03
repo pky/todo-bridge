@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import { useNewsStore } from '@/stores/news'
@@ -64,6 +64,7 @@ const articleData = {
 
 describe('News Store', () => {
   beforeEach(() => {
+    vi.useRealTimers()
     setActivePinia(createPinia())
     vi.clearAllMocks()
     localStorage.clear()
@@ -84,6 +85,10 @@ describe('News Store', () => {
     })
     setDocMock.mockResolvedValue(undefined)
     batchCommitMock.mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('同じURLが過去に2回表示済みなら今回のフィードでは除外する', async () => {
@@ -338,6 +343,9 @@ describe('News Store', () => {
   })
 
   it('前日分しかなくてもキャッシュ済みフィードと更新日を先に表示する', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-03-15T09:00:00+09:00'))
+
     localStorage.setItem(
       'rertm-news-cache-user-1-ai',
       JSON.stringify({
@@ -381,6 +389,33 @@ describe('News Store', () => {
 
     expect(store.articles).toHaveLength(1)
     expect(store.latestFeedDateByTopic.ai).toBe('2026-03-14')
+  })
+
+  it('今日分の記事キャッシュがあればサーバー取得をスキップする', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-03-14T10:00:00+09:00'))
+
+    localStorage.setItem(
+      'rertm-news-cache-user-1-ai',
+      JSON.stringify({
+        date: '2026-03-14',
+        articles: [{ id: 'article-1', ...articleData }],
+      })
+    )
+
+    const store = useNewsStore()
+    await store.loadTodayFeed('ai')
+
+    expect(getDocsFromServerMock).not.toHaveBeenCalled()
+    expect(getDocsMock).not.toHaveBeenCalled()
+    expect(store.loading).toBe(false)
+    expect(store.articles).toHaveLength(1)
+    expect(store.articles[0]?.id).toBe('article-1')
+    expect(store.latestFeedDateByTopic.ai).toBe('2026-03-14')
+    expect(store.feedDiagnosticsByTopic.ai).toEqual({
+      state: 'showing',
+      message: 'ニュースを表示しています',
+    })
   })
 
   it('空キャッシュしかなくてもサーバー取得を開始する', async () => {

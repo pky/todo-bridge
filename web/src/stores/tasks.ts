@@ -927,6 +927,16 @@ export const useTasksStore = defineStore('tasks', () => {
     if (!authStore.user) throw new Error('認証が必要です')
     const nowTimestamp = Timestamp.now()
     const listId = input.listId || listsStore.selectedListId || ''
+    if (!listId) {
+      console.error('[tasks] createTask aborted: selected list is missing', {
+        selectedListId: listsStore.selectedListId,
+        selectedSmartList: listsStore.selectedSmartList,
+        currentListId,
+        currentSpaceId: spaceStore.currentSpaceId,
+        useLegacyPath: spaceStore.useLegacyPath,
+      })
+      throw new Error('タスクを追加するリストが選択されていません')
+    }
     const targetList = listsStore.lists.find((list) => list.id === listId)
     const targetSpaceId = input.spaceId ?? targetList?.spaceId ?? spaceStore.currentSpaceId
     const visibleToMemberIds = targetList?.visibleToMemberIds?.length
@@ -1001,17 +1011,45 @@ export const useTasksStore = defineStore('tasks', () => {
       allTasksCache.value = [newTask, ...allTasksCache.value]
     }
 
-    // バックグラウンドでFirestoreに書き込み（リトライあり）
-    retryWithBackoff(() => setDoc(docRef, taskData)).catch(() => {
-      // 全リトライ失敗: ロールバック
-      tasks.value = tasks.value.filter((t) => t.id !== docRef.id)
-      if (isCurrentScopeTarget) {
-        const cachedAfter = tasksByList.get(listId) || []
-        tasksByList.set(listId, cachedAfter.filter((t) => t.id !== docRef.id))
-        allTasksCache.value = allTasksCache.value.filter((t) => t.id !== docRef.id)
-      }
-      showError('タスクの追加に失敗しました')
+    console.log('[tasks] createTask: optimistic update applied', {
+      taskId: docRef.id,
+      listId,
+      targetSpaceId,
+      currentListId,
+      selectedListId: listsStore.selectedListId,
+      currentSpaceId: spaceStore.currentSpaceId,
+      visibilityState: document.visibilityState,
     })
+
+    // バックグラウンドでFirestoreに書き込み（リトライあり）
+    retryWithBackoff(() => setDoc(docRef, taskData))
+      .then(() => {
+        console.log('[tasks] createTask: write committed', {
+          taskId: docRef.id,
+          listId,
+          targetSpaceId,
+        })
+      })
+      .catch((error) => {
+        // 全リトライ失敗: ロールバック
+        tasks.value = tasks.value.filter((t) => t.id !== docRef.id)
+        if (isCurrentScopeTarget) {
+          const cachedAfter = tasksByList.get(listId) || []
+          tasksByList.set(listId, cachedAfter.filter((t) => t.id !== docRef.id))
+          allTasksCache.value = allTasksCache.value.filter((t) => t.id !== docRef.id)
+        }
+        console.error('[tasks] createTask: write failed after retries', {
+          taskId: docRef.id,
+          listId,
+          targetSpaceId,
+          currentListId,
+          selectedListId: listsStore.selectedListId,
+          currentSpaceId: spaceStore.currentSpaceId,
+          visibilityState: document.visibilityState,
+          error,
+        })
+        showError('タスクの追加に失敗しました')
+      })
 
     return docRef.id
   }
