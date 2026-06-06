@@ -6,6 +6,25 @@ import type { NewsArticle, NewsPreferences, NewsTopic } from './types'
 
 type NewsArticleWithId = NewsArticle & { id: string }
 
+interface RankedFeedItem {
+  article: NewsArticleWithId
+  displayScore: number
+}
+
+export function collectSummaryCandidateArticles(
+  rankedFeeds: RankedFeedItem[][]
+): NewsArticleWithId[] {
+  const candidates = new Map<string, NewsArticleWithId>()
+
+  for (const ranked of rankedFeeds) {
+    for (const item of ranked) {
+      candidates.set(item.article.id, item.article)
+    }
+  }
+
+  return Array.from(candidates.values())
+}
+
 // ひらがな・カタカナを含む場合のみ日本語と判定（漢字のみはCJK全般に含まれるため除外）
 function isJapanese(text: string): boolean {
   return /[\u3040-\u30FF]/.test(text)
@@ -277,6 +296,41 @@ async function enrichSharedArticles(
   console.log(`[${logPrefix}] Shared summaries translated=${translatedCount}, skipped=${skippedCount}`)
 }
 
+async function saveRankedFeed(
+  topic: NewsTopic,
+  uid: string,
+  today: string,
+  ranked: RankedFeedItem[]
+): Promise<void> {
+  const feedRef = db.collection(`users/${uid}/newsFeed/${topic}/articles`)
+  const batch = db.batch()
+
+  const existingSnap = await feedRef.where('date', '==', today).get()
+  existingSnap.docs.forEach(doc => batch.delete(doc.ref))
+
+  ranked.forEach(item => {
+    const docRef = feedRef.doc(item.article.id)
+    batch.set(docRef, {
+      ...item.article,
+      displayScore: item.displayScore,
+    })
+  })
+
+  await batch.commit()
+}
+
+async function enrichSummaryCandidatesWithoutBlockingFeedSave(
+  topic: NewsTopic,
+  candidates: NewsArticleWithId[],
+  logPrefix: string
+): Promise<void> {
+  try {
+    await enrichSharedArticles(topic, candidates, logPrefix)
+  } catch (err) {
+    console.error(`[${logPrefix}] Summary enrichment failed. Saving feeds with existing article data:`, err)
+  }
+}
+
 export const generatePersonalizedFeed = functions
   .region('asia-northeast1')
   .runWith({ timeoutSeconds: 540, memory: '256MB', secrets: ['GEMINI_API_KEY'] })
@@ -308,8 +362,6 @@ export const generatePersonalizedFeed = functions
         return true
       })
 
-    await enrichSharedArticles(topic, articles, 'generatePersonalizedFeed')
-
     // HN・GitHubの最大スコアを算出（人気スコア正規化用）
     const maxHnScore = articles
       .filter(a => a.source === 'hn' && a.score !== null)
@@ -320,6 +372,12 @@ export const generatePersonalizedFeed = functions
 
     // 2. 全ユーザーのnewsPreferencesを取得
     const usersSnap = await db.collection('users').get()
+    const pendingFeeds: Array<{
+      uid: string
+      ranked: RankedFeedItem[]
+      dismissedCount: number
+      learnedCount: number
+    }> = []
 
     for (const userDoc of usersSnap.docs) {
       const uid = userDoc.id
@@ -406,27 +464,34 @@ export const generatePersonalizedFeed = functions
           .sort((a, b) => b.displayScore - a.displayScore)
           .slice(0, 40)
 
-        // 4. ユーザーのフィードに保存
-        const feedRef = db.collection(`users/${uid}/newsFeed/${topic}/articles`)
-        const batch = db.batch()
-
-        // 既存の今日のフィードを削除
-        const existingSnap = await feedRef.where('date', '==', today).get()
-        existingSnap.docs.forEach(doc => batch.delete(doc.ref))
-
-        // 新しいフィードを保存（記事の全データを含める）
-        ranked.forEach(item => {
-          const docRef = feedRef.doc(item.article.id)
-          batch.set(docRef, {
-            ...item.article,
-            displayScore: item.displayScore,
-          })
+        pendingFeeds.push({
+          uid,
+          ranked,
+          dismissedCount: dismissedIds.size,
+          learnedCount: learnedKeywords.length,
         })
-
-        await batch.commit()
-        console.log(`[generatePersonalizedFeed] Saved feed for user ${uid} (dismissed: ${dismissedIds.size}, learned: ${learnedKeywords.length})`)
       } catch (err) {
         console.error(`[generatePersonalizedFeed] Failed for user ${uid}:`, err)
+      }
+    }
+
+    // Gemini要約は、ユーザー別フィード候補に残った共有記事だけに限定する。
+    // 要約に失敗してもフィード保存は止めない。
+    await enrichSummaryCandidatesWithoutBlockingFeedSave(
+      topic,
+      collectSummaryCandidateArticles(pendingFeeds.map(feed => feed.ranked)),
+      'generatePersonalizedFeed'
+    )
+
+    for (const pendingFeed of pendingFeeds) {
+      try {
+        await saveRankedFeed(topic, pendingFeed.uid, today, pendingFeed.ranked)
+        console.log(
+          `[generatePersonalizedFeed] Saved feed for user ${pendingFeed.uid} ` +
+          `(dismissed: ${pendingFeed.dismissedCount}, learned: ${pendingFeed.learnedCount})`
+        )
+      } catch (err) {
+        console.error(`[generatePersonalizedFeed] Failed to save feed for user ${pendingFeed.uid}:`, err)
       }
     }
   })
@@ -458,9 +523,11 @@ export const generateMobilePersonalizedFeed = functions
         return true
       })
 
-    await enrichSharedArticles(topic, articles, 'generateMobilePersonalizedFeed')
-
     const usersSnap = await db.collection('users').get()
+    const pendingFeeds: Array<{
+      uid: string
+      scored: RankedFeedItem[]
+    }> = []
 
     for (const userDoc of usersSnap.docs) {
       const uid = userDoc.id
@@ -522,23 +589,26 @@ export const generateMobilePersonalizedFeed = functions
           .sort((a, b) => b.displayScore - a.displayScore)
           .slice(0, 40)
 
-        const feedRef = db.collection(`users/${uid}/newsFeed/${topic}/articles`)
-        const batch = db.batch()
-        const existingSnap = await feedRef.where('date', '==', today).get()
-        existingSnap.docs.forEach(doc => batch.delete(doc.ref))
-
-        scored.forEach(item => {
-          const docRef = feedRef.doc(item.article.id)
-          batch.set(docRef, {
-            ...item.article,
-            displayScore: item.displayScore,
-          })
-        })
-
-        await batch.commit()
-        console.log(`[generateMobilePersonalizedFeed] Saved feed for user ${uid} (${scored.length} articles)`)
+        pendingFeeds.push({ uid, scored })
       } catch (err) {
         console.error(`[generateMobilePersonalizedFeed] Failed for user ${uid}:`, err)
+      }
+    }
+
+    // Gemini要約は、ユーザー別フィード候補に残った共有記事だけに限定する。
+    // 要約に失敗してもフィード保存は止めない。
+    await enrichSummaryCandidatesWithoutBlockingFeedSave(
+      topic,
+      collectSummaryCandidateArticles(pendingFeeds.map(feed => feed.scored)),
+      'generateMobilePersonalizedFeed'
+    )
+
+    for (const pendingFeed of pendingFeeds) {
+      try {
+        await saveRankedFeed(topic, pendingFeed.uid, today, pendingFeed.scored)
+        console.log(`[generateMobilePersonalizedFeed] Saved feed for user ${pendingFeed.uid} (${pendingFeed.scored.length} articles)`)
+      } catch (err) {
+        console.error(`[generateMobilePersonalizedFeed] Failed to save feed for user ${pendingFeed.uid}:`, err)
       }
     }
   })
