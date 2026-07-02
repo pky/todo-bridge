@@ -116,128 +116,120 @@ export const saveMobileNotificationPreferences = functions
     }
   })
 
-export const sendMobileDiscordUrgentNotifications = functions
-  .region('asia-northeast1')
-  .runWith({ timeoutSeconds: 540, memory: '256MB' })
-  .pubsub.schedule('50 6 * * *').timeZone('Asia/Tokyo')
-  .onRun(async () => {
-    const usersSnap = await db.collection('users').get()
+export async function runSendMobileDiscordUrgentNotifications(): Promise<void> {
+  const usersSnap = await db.collection('users').get()
 
-    for (const userDoc of usersSnap.docs) {
-      const uid = userDoc.id
+  for (const userDoc of usersSnap.docs) {
+    const uid = userDoc.id
 
-      try {
-        const prefDoc = await db.doc(`users/${uid}/notificationPreferences/mobile`).get()
-        const preferences = prefDoc.exists
-          ? (prefDoc.data() as MobileNotificationPreferences)
-          : {}
-        const discord = preferences.discord
+    try {
+      const prefDoc = await db.doc(`users/${uid}/notificationPreferences/mobile`).get()
+      const preferences = prefDoc.exists
+        ? (prefDoc.data() as MobileNotificationPreferences)
+        : {}
+      const discord = preferences.discord
 
-        if (!discord?.enabled || !discord.urgentImmediate || !isDiscordWebhookUrl(discord.webhookUrl)) {
-          continue
-        }
-
-        const [articles, excludedIds] = await Promise.all([
-          loadLatestMobileFeedForUser(uid),
-          loadExcludedMobileArticleIds(uid),
-        ])
-
-        const urgentArticles = articles
-          .filter((article) => article.isOfficial === true)
-          .filter((article) => article.importantLevel === 'urgent')
-          .filter((article) => !excludedIds.has(article.id))
-
-        for (const article of urgentArticles) {
-          const deliveryRef = db.doc(
-            `users/${uid}/mobileNotifications/${getDeliveryDocId(article.id, 'discord', 'urgent_immediate')}`
-          )
-          const deliverySnap = await deliveryRef.get()
-          if (deliverySnap.exists) continue
-
-          const lines = [
-            `【今すぐ確認】${article.titleJa ?? article.title}`,
-            `理由: ${formatReason(article)}`,
-            `ソース: ${article.sourceName}`,
-            article.url,
-          ]
-
-          await postDiscordMessage(discord.webhookUrl!, lines.join('\n'))
-          await deliveryRef.set({
-            articleId: article.id,
-            topic: 'mobile',
-            channel: 'discord',
-            deliveryType: 'urgent_immediate',
-            importantLevel: article.importantLevel ?? 'urgent',
-            sentAt: admin.firestore.FieldValue.serverTimestamp(),
-            date: article.date,
-          })
-        }
-      } catch (err) {
-        console.error(`[sendMobileDiscordUrgentNotifications] Failed for ${uid}:`, err)
+      if (!discord?.enabled || !discord.urgentImmediate || !isDiscordWebhookUrl(discord.webhookUrl)) {
+        continue
       }
-    }
-  })
 
-export const sendMobileDiscordDailyDigest = functions
-  .region('asia-northeast1')
-  .runWith({ timeoutSeconds: 540, memory: '256MB' })
-  .pubsub.schedule('5 7 * * *').timeZone('Asia/Tokyo')
-  .onRun(async () => {
-    const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
-    const usersSnap = await db.collection('users').get()
+      const [articles, excludedIds] = await Promise.all([
+        loadLatestMobileFeedForUser(uid),
+        loadExcludedMobileArticleIds(uid),
+      ])
 
-    for (const userDoc of usersSnap.docs) {
-      const uid = userDoc.id
+      const urgentArticles = articles
+        .filter((article) => article.isOfficial === true)
+        .filter((article) => article.importantLevel === 'urgent')
+        .filter((article) => !excludedIds.has(article.id))
 
-      try {
-        const prefDoc = await db.doc(`users/${uid}/notificationPreferences/mobile`).get()
-        const preferences = prefDoc.exists
-          ? (prefDoc.data() as MobileNotificationPreferences)
-          : {}
-        const discord = preferences.discord
-
-        if (!discord?.enabled || !discord.dailyDigest || !isDiscordWebhookUrl(discord.webhookUrl)) {
-          continue
-        }
-
-        const digestRef = db.doc(`users/${uid}/mobileNotifications/${getDeliveryDocId(today, 'discord', 'daily_digest')}`)
-        const digestSnap = await digestRef.get()
-        if (digestSnap.exists) continue
-
-        const [articles, excludedIds] = await Promise.all([
-          loadLatestMobileFeedForUser(uid),
-          loadExcludedMobileArticleIds(uid),
-        ])
-
-        const visibleArticles = articles
-          .filter((article) => article.isOfficial === true)
-          .filter((article) => !excludedIds.has(article.id))
-
-        const urgentArticles = visibleArticles.filter((article) => article.importantLevel === 'urgent')
-        const reviewArticles = visibleArticles.filter((article) => article.importantLevel === 'review')
-        const topArticles = [...urgentArticles, ...reviewArticles].slice(0, 3)
-
-        if (topArticles.length === 0) continue
+      for (const article of urgentArticles) {
+        const deliveryRef = db.doc(
+          `users/${uid}/mobileNotifications/${getDeliveryDocId(article.id, 'discord', 'urgent_immediate')}`
+        )
+        const deliverySnap = await deliveryRef.get()
+        if (deliverySnap.exists) continue
 
         const lines = [
-          `モバイルニュース要約: 今 ${urgentArticles.length} 件 / 確 ${reviewArticles.length} 件`,
-          ...topArticles.map((article, index) =>
-            `${index + 1}. ${article.titleJa ?? article.title} (${formatReason(article)})`
-          ),
+          `【今すぐ確認】${article.titleJa ?? article.title}`,
+          `理由: ${formatReason(article)}`,
+          `ソース: ${article.sourceName}`,
+          article.url,
         ]
 
         await postDiscordMessage(discord.webhookUrl!, lines.join('\n'))
-        await digestRef.set({
-          articleId: today,
+        await deliveryRef.set({
+          articleId: article.id,
           topic: 'mobile',
           channel: 'discord',
-          deliveryType: 'daily_digest',
-          importantLevel: urgentArticles.length > 0 ? 'urgent' : 'review',
+          deliveryType: 'urgent_immediate',
+          importantLevel: article.importantLevel ?? 'urgent',
           sentAt: admin.firestore.FieldValue.serverTimestamp(),
-          date: today,
+          date: article.date,
         })
-      } catch (err) {
-        console.error(`[sendMobileDiscordDailyDigest] Failed for ${uid}:`, err)
       }
+    } catch (err) {
+      console.error(`[sendMobileDiscordUrgentNotifications] Failed for ${uid}:`, err)
     }
-  })
+  }
+}
+
+export async function runSendMobileDiscordDailyDigest(): Promise<void> {
+  const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const usersSnap = await db.collection('users').get()
+
+  for (const userDoc of usersSnap.docs) {
+    const uid = userDoc.id
+
+    try {
+      const prefDoc = await db.doc(`users/${uid}/notificationPreferences/mobile`).get()
+      const preferences = prefDoc.exists
+        ? (prefDoc.data() as MobileNotificationPreferences)
+        : {}
+      const discord = preferences.discord
+
+      if (!discord?.enabled || !discord.dailyDigest || !isDiscordWebhookUrl(discord.webhookUrl)) {
+        continue
+      }
+
+      const digestRef = db.doc(`users/${uid}/mobileNotifications/${getDeliveryDocId(today, 'discord', 'daily_digest')}`)
+      const digestSnap = await digestRef.get()
+      if (digestSnap.exists) continue
+
+      const [articles, excludedIds] = await Promise.all([
+        loadLatestMobileFeedForUser(uid),
+        loadExcludedMobileArticleIds(uid),
+      ])
+
+      const visibleArticles = articles
+        .filter((article) => article.isOfficial === true)
+        .filter((article) => !excludedIds.has(article.id))
+
+      const urgentArticles = visibleArticles.filter((article) => article.importantLevel === 'urgent')
+      const reviewArticles = visibleArticles.filter((article) => article.importantLevel === 'review')
+      const topArticles = [...urgentArticles, ...reviewArticles].slice(0, 3)
+
+      if (topArticles.length === 0) continue
+
+      const lines = [
+        `モバイルニュース要約: 今 ${urgentArticles.length} 件 / 確 ${reviewArticles.length} 件`,
+        ...topArticles.map((article, index) =>
+          `${index + 1}. ${article.titleJa ?? article.title} (${formatReason(article)})`
+        ),
+      ]
+
+      await postDiscordMessage(discord.webhookUrl!, lines.join('\n'))
+      await digestRef.set({
+        articleId: today,
+        topic: 'mobile',
+        channel: 'discord',
+        deliveryType: 'daily_digest',
+        importantLevel: urgentArticles.length > 0 ? 'urgent' : 'review',
+        sentAt: admin.firestore.FieldValue.serverTimestamp(),
+        date: today,
+      })
+    } catch (err) {
+      console.error(`[sendMobileDiscordDailyDigest] Failed for ${uid}:`, err)
+    }
+  }
+}

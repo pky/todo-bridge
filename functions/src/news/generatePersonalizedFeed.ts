@@ -1,5 +1,4 @@
 // functions/src/news/generatePersonalizedFeed.ts
-import * as functions from 'firebase-functions/v1'
 import * as admin from 'firebase-admin'
 import { summarizeArticle } from './geminiService'
 import type { NewsArticle, NewsPreferences, NewsTopic } from './types'
@@ -31,6 +30,10 @@ function isJapanese(text: string): boolean {
 }
 
 const db = admin.firestore()
+const DEFAULT_GEMINI_DAILY_MAX_REQUESTS = 20
+const DEFAULT_GEMINI_DAILY_MAX_ARTICLES = 20
+let geminiUsageDate = ''
+let geminiUsageCount = 0
 
 // 日本語テキストに混在する英語技術用語も含めて抽出（3文字以上、ストップワード除外）
 const STOP_WORDS = new Set([
@@ -234,6 +237,73 @@ function needsSharedSummary(article: NewsArticle): boolean {
   return !isJapanese(article.title) && !isJapanese(article.titleJa)
 }
 
+export function shouldSkipGeminiForJapaneseArticle(article: Pick<NewsArticle, 'title' | 'description' | 'content'>): boolean {
+  return isJapanese([
+    article.title,
+    article.description,
+    article.content ?? '',
+  ].join(' '))
+}
+
+function parseNonNegativeInteger(value: string | undefined, fallback: number): number {
+  if (!value) return fallback
+
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback
+
+  return parsed
+}
+
+function getGeminiDailyLimit(): number {
+  const maxRequests = parseNonNegativeInteger(
+    process.env.GEMINI_DAILY_MAX_REQUESTS,
+    DEFAULT_GEMINI_DAILY_MAX_REQUESTS
+  )
+  const maxArticles = parseNonNegativeInteger(
+    process.env.GEMINI_DAILY_MAX_ARTICLES,
+    DEFAULT_GEMINI_DAILY_MAX_ARTICLES
+  )
+
+  return Math.min(maxRequests, maxArticles)
+}
+
+function isGeminiEnabled(): boolean {
+  return process.env.GEMINI_ENABLED !== 'false'
+}
+
+function getJstDateString(): string {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+}
+
+function reserveGeminiRequest(dailyLimit: number): boolean {
+  const today = getJstDateString()
+  if (geminiUsageDate !== today) {
+    geminiUsageDate = today
+    geminiUsageCount = 0
+  }
+
+  if (geminiUsageCount >= dailyLimit) return false
+
+  geminiUsageCount++
+  return true
+}
+
+function applySummaryFallback(article: NewsArticleWithId): {
+  titleJa: string
+  summaryJa: string
+  tags: string[]
+} {
+  const titleJa = article.titleJa ?? article.title
+  const summaryJa = article.summaryJa ?? (article.description ?? '').slice(0, 300)
+  const tags = article.tags ?? []
+
+  article.titleJa = titleJa
+  article.summaryJa = summaryJa
+  article.tags = tags
+
+  return { titleJa, summaryJa, tags }
+}
+
 async function enrichSharedArticles(
   topic: NewsTopic,
   articles: NewsArticleWithId[],
@@ -242,7 +312,11 @@ async function enrichSharedArticles(
   const batch = db.batch()
   let translatedCount = 0
   let skippedCount = 0
+  let fallbackCount = 0
   let hasUpdates = false
+  let geminiRequestCount = 0
+  const geminiEnabled = isGeminiEnabled()
+  const dailyLimit = getGeminiDailyLimit()
 
   for (const article of articles) {
     if (!needsSharedSummary(article)) {
@@ -252,7 +326,16 @@ async function enrichSharedArticles(
 
     const articleRef = db.doc(`topics/${topic}/articles/${article.id}`)
 
+    if (shouldSkipGeminiForJapaneseArticle(article) || !geminiEnabled || !reserveGeminiRequest(dailyLimit)) {
+      const fallback = applySummaryFallback(article)
+      batch.update(articleRef, fallback)
+      fallbackCount++
+      hasUpdates = true
+      continue
+    }
+
     try {
+      geminiRequestCount++
       const { titleJa, summaryJa, tags } = await summarizeArticle(
         article.title,
         article.content ?? article.description ?? ''
@@ -273,18 +356,8 @@ async function enrichSharedArticles(
       hasUpdates = true
     } catch (err) {
       console.error(`[${logPrefix}] Shared summary failed for ${article.url}:`, err)
-      const fallbackTitleJa = article.titleJa ?? article.title
-      const fallbackSummaryJa = article.summaryJa ?? (article.description ?? '').slice(0, 300)
-      const fallbackTags = article.tags ?? []
-
-      batch.update(articleRef, {
-        titleJa: fallbackTitleJa,
-        summaryJa: fallbackSummaryJa,
-        tags: fallbackTags,
-      })
-      article.titleJa = fallbackTitleJa
-      article.summaryJa = fallbackSummaryJa
-      article.tags = fallbackTags
+      batch.update(articleRef, applySummaryFallback(article))
+      fallbackCount++
       hasUpdates = true
     }
   }
@@ -293,7 +366,10 @@ async function enrichSharedArticles(
     await batch.commit()
   }
 
-  console.log(`[${logPrefix}] Shared summaries translated=${translatedCount}, skipped=${skippedCount}`)
+  console.log(
+    `[${logPrefix}] Shared summaries translated=${translatedCount}, ` +
+    `fallback=${fallbackCount}, skipped=${skippedCount}, geminiRequests=${geminiRequestCount}`
+  )
 }
 
 async function saveRankedFeed(
@@ -331,11 +407,7 @@ async function enrichSummaryCandidatesWithoutBlockingFeedSave(
   }
 }
 
-export const generatePersonalizedFeed = functions
-  .region('asia-northeast1')
-  .runWith({ timeoutSeconds: 540, memory: '256MB', secrets: ['GEMINI_API_KEY'] })
-  .pubsub.schedule('30 6 * * *').timeZone('Asia/Tokyo')  // collectArticlesの30分後（JST 6:30）
-  .onRun(async () => {
+export async function runGeneratePersonalizedFeed(): Promise<void> {
     console.log('[generatePersonalizedFeed] Starting...')
     const topic: NewsTopic = 'ai'
 
@@ -494,13 +566,9 @@ export const generatePersonalizedFeed = functions
         console.error(`[generatePersonalizedFeed] Failed to save feed for user ${pendingFeed.uid}:`, err)
       }
     }
-  })
+}
 
-export const generateMobilePersonalizedFeed = functions
-  .region('asia-northeast1')
-  .runWith({ timeoutSeconds: 540, memory: '256MB', secrets: ['GEMINI_API_KEY'] })
-  .pubsub.schedule('40 6 * * *').timeZone('Asia/Tokyo')
-  .onRun(async () => {
+export async function runGenerateMobilePersonalizedFeed(): Promise<void> {
     console.log('[generateMobilePersonalizedFeed] Starting...')
     const topic: NewsTopic = 'mobile'
     const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
@@ -611,4 +679,4 @@ export const generateMobilePersonalizedFeed = functions
         console.error(`[generateMobilePersonalizedFeed] Failed to save feed for user ${pendingFeed.uid}:`, err)
       }
     }
-  })
+}

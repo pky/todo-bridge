@@ -108,48 +108,44 @@ async function cleanupOldBackups(userId: string): Promise<number> {
 /**
  * 毎日AM3:00（JST）に全ユーザーのデータをバックアップ
  */
-export const dailyBackup = functions
-  .region('asia-northeast1')
-  .pubsub.schedule('0 3 * * *')
-  .timeZone('Asia/Tokyo')
-  .onRun(async () => {
-    const today = new Date().toISOString().split('T')[0]
-    console.log(`Starting daily backup for ${today}`)
+export async function runDailyBackup(): Promise<{ success: true; results: BackupResult[] }> {
+  const today = new Date().toISOString().split('T')[0]
+  console.log(`Starting daily backup for ${today}`)
 
-    // 全ユーザーを取得
-    const usersSnapshot = await db.collection('users').get()
-    const results: BackupResult[] = []
+  // 全ユーザーを取得
+  const usersSnapshot = await db.collection('users').get()
+  const results: BackupResult[] = []
 
-    for (const userDoc of usersSnapshot.docs) {
-      const userId = userDoc.id
+  for (const userDoc of usersSnapshot.docs) {
+    const userId = userDoc.id
 
-      try {
-        // ユーザーデータをエクスポート
-        const data = await exportUserData(userId)
+    try {
+      // ユーザーデータをエクスポート
+      const data = await exportUserData(userId)
 
-        // Cloud Storageに保存
-        const filePath = await saveBackupToStorage(userId, data, today)
+      // Cloud Storageに保存
+      const filePath = await saveBackupToStorage(userId, data, today)
 
-        // 古いバックアップを削除
-        await cleanupOldBackups(userId)
+      // 古いバックアップを削除
+      await cleanupOldBackups(userId)
 
-        results.push({
-          userId,
-          tasksCount: data.tasks.length,
-          listsCount: data.lists.length,
-          tagsCount: data.tags.length,
-          filePath,
-        })
+      results.push({
+        userId,
+        tasksCount: data.tasks.length,
+        listsCount: data.lists.length,
+        tagsCount: data.tags.length,
+        filePath,
+      })
 
-        console.log(`Backup completed for user ${userId}: ${data.tasks.length} tasks`)
-      } catch (error) {
-        console.error(`Backup failed for user ${userId}:`, error)
-      }
+      console.log(`Backup completed for user ${userId}: ${data.tasks.length} tasks`)
+    } catch (error) {
+      console.error(`Backup failed for user ${userId}:`, error)
     }
+  }
 
-    console.log(`Daily backup completed. ${results.length} users backed up.`)
-    return { success: true, results }
-  })
+  console.log(`Daily backup completed. ${results.length} users backed up.`)
+  return { success: true, results }
+}
 
 /**
  * 手動バックアップ（テスト・緊急時用）

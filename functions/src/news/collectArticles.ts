@@ -1,5 +1,4 @@
 // functions/src/news/collectArticles.ts
-import * as functions from 'firebase-functions/v1'
 import * as admin from 'firebase-admin'
 import { fetchHNArticles } from './fetchers/hnFetcher'
 import { fetchRSSArticles } from './fetchers/rssFetcher'
@@ -232,42 +231,34 @@ async function saveArticlesForTopic(topic: NewsTopic, rawArticles: RawArticle[])
   }
 }
 
-export const collectArticles = functions
-  .region('asia-northeast1')
-  .runWith({ timeoutSeconds: 540, memory: '512MB' })
-  .pubsub.schedule('0 6 * * *').timeZone('Asia/Tokyo')  // 毎朝6時 JST
-  .onRun(async () => {
-    console.log('[collectArticles] Starting...')
+export async function runCollectArticles(): Promise<void> {
+  console.log('[collectArticles] Starting...')
 
-    // 1. 各ソースから記事を収集
-    const [hnArticles, rssArticles, githubArticles] = await Promise.all([
-      fetchHNArticles(50).catch(e => { console.error('[hn]', e); return [] as RawArticle[] }),
-      fetchRSSArticles(10).catch(e => { console.error('[rss]', e); return [] as RawArticle[] }),
-      fetchGitHubTrending(10).catch(e => { console.error('[github]', e); return [] as RawArticle[] }),
-    ])
+  // 1. 各ソースから記事を収集
+  const [hnArticles, rssArticles, githubArticles] = await Promise.all([
+    fetchHNArticles(50).catch(e => { console.error('[hn]', e); return [] as RawArticle[] }),
+    fetchRSSArticles(10).catch(e => { console.error('[rss]', e); return [] as RawArticle[] }),
+    fetchGitHubTrending(10).catch(e => { console.error('[github]', e); return [] as RawArticle[] }),
+  ])
 
-    console.log(`[collectArticles] Sources: hn=${hnArticles.length}, rss=${rssArticles.length}, github=${githubArticles.length}`)
-    const allRaw = deduplicateArticles([...hnArticles, ...rssArticles, ...githubArticles])
-    console.log(`[collectArticles] Collected ${allRaw.length} articles after dedup`)
-    await saveArticlesForTopic('ai', allRaw)
-  })
+  console.log(`[collectArticles] Sources: hn=${hnArticles.length}, rss=${rssArticles.length}, github=${githubArticles.length}`)
+  const allRaw = deduplicateArticles([...hnArticles, ...rssArticles, ...githubArticles])
+  console.log(`[collectArticles] Collected ${allRaw.length} articles after dedup`)
+  await saveArticlesForTopic('ai', allRaw)
+}
 
-export const collectMobileArticles = functions
-  .region('asia-northeast1')
-  .runWith({ timeoutSeconds: 540, memory: '512MB' })
-  .pubsub.schedule('10 6 * * *').timeZone('Asia/Tokyo')
-  .onRun(async () => {
-    console.log('[collectMobileArticles] Starting...')
+export async function runCollectMobileArticles(): Promise<void> {
+  console.log('[collectMobileArticles] Starting...')
 
-    const [officialHtmlArticles, rssArticles] = await Promise.all([
-      fetchOfficialMobileHtmlArticles().catch(e => { console.error('[mobile-official]', e); return [] as RawArticle[] }),
-      fetchMobileRssArticles().catch(e => { console.error('[mobile-rss]', e); return [] as RawArticle[] }),
-    ])
+  const [officialHtmlArticles, rssArticles] = await Promise.all([
+    fetchOfficialMobileHtmlArticles().catch(e => { console.error('[mobile-official]', e); return [] as RawArticle[] }),
+    fetchMobileRssArticles().catch(e => { console.error('[mobile-rss]', e); return [] as RawArticle[] }),
+  ])
 
-    console.log(`[collectMobileArticles] Sources: officialHtml=${officialHtmlArticles.length}, rss=${rssArticles.length}`)
-    const freshArticles = filterMobileArticlesByFreshness([...officialHtmlArticles, ...rssArticles])
-    const allRaw = deduplicateArticlesByPriority(freshArticles)
-    console.log(`[collectMobileArticles] Collected ${allRaw.length} articles after freshness filter + dedup`)
+  console.log(`[collectMobileArticles] Sources: officialHtml=${officialHtmlArticles.length}, rss=${rssArticles.length}`)
+  const freshArticles = filterMobileArticlesByFreshness([...officialHtmlArticles, ...rssArticles])
+  const allRaw = deduplicateArticlesByPriority(freshArticles)
+  console.log(`[collectMobileArticles] Collected ${allRaw.length} articles after freshness filter + dedup`)
 
-    await saveArticlesForTopic('mobile', allRaw)
-  })
+  await saveArticlesForTopic('mobile', allRaw)
+}

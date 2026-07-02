@@ -14,22 +14,18 @@ export {
 // AIニュース収集・パーソナライズ関数をエクスポート
 export {
   saveMobileNotificationPreferences,
-  collectArticles,
-  collectMobileArticles,
-  generatePersonalizedFeed,
-  generateMobilePersonalizedFeed,
-  sendMobileDiscordUrgentNotifications,
-  sendMobileDiscordDailyDigest,
 } from './news'
 
+// 日次処理は Scheduler 無料枠に収めるため3本に集約する
+export { dailyMaintenance, dailyBackupJob, dailyNewsPipeline } from './scheduledJobs'
+
 // 自動バックアップ関数をエクスポート
-export { dailyBackup, manualBackup, listBackups, restoreFromBackup } from './scheduledBackup'
+export { manualBackup, listBackups, restoreFromBackup } from './scheduledBackup'
 
 // スマートリスト集計関数をエクスポート
 export {
   updateSmartListCounts,
   updateSpaceSmartListCounts,
-  recalculateAllSmartLists,
   getSmartListTasks,
   refreshSmartListCounts,
 } from './smartLists'

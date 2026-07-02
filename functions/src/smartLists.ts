@@ -271,25 +271,21 @@ export const updateSpaceSmartListCounts = functions
   })
 
 // 毎日0時（JST）にスマートリストカウントを再計算（期限切れの更新用）
-export const recalculateAllSmartLists = functions
-  .region('asia-northeast1')
-  .pubsub.schedule('0 0 * * *')
-  .timeZone('Asia/Tokyo')
-  .onRun(async () => {
-    const usersSnapshot = await db.collection('users').get()
-    const userPromises = usersSnapshot.docs.map((doc) => recalculateSmartListCounts(doc.id))
+export async function runRecalculateAllSmartLists(): Promise<void> {
+  const usersSnapshot = await db.collection('users').get()
+  const userPromises = usersSnapshot.docs.map((doc) => recalculateSmartListCounts(doc.id))
 
-    const spacesSnapshot = await db.collection('spaces').get()
-    const spacePromises = spacesSnapshot.docs.map(async (spaceDoc) => {
-      const counts = await recalculateSmartListCounts(spaceDoc.data().ownerUid ?? '', spaceDoc.id, {
-        filterByUserVisibility: false,
-      })
-      await db.doc(buildSmartListCountsDocPath('', spaceDoc.id)).set({ smartListCounts: counts }, { merge: true })
+  const spacesSnapshot = await db.collection('spaces').get()
+  const spacePromises = spacesSnapshot.docs.map(async (spaceDoc) => {
+    const counts = await recalculateSmartListCounts(spaceDoc.data().ownerUid ?? '', spaceDoc.id, {
+      filterByUserVisibility: false,
     })
-
-    await Promise.all([...userPromises, ...spacePromises])
-    console.log(`Updated smart list counts for ${usersSnapshot.size} users and ${spacesSnapshot.size} spaces`)
+    await db.doc(buildSmartListCountsDocPath('', spaceDoc.id)).set({ smartListCounts: counts }, { merge: true })
   })
+
+  await Promise.all([...userPromises, ...spacePromises])
+  console.log(`Updated smart list counts for ${usersSnapshot.size} users and ${spacesSnapshot.size} spaces`)
+}
 
 // スマートリストのタスクを取得（Callable Function）
 export const getSmartListTasks = functions
