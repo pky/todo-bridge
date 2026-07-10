@@ -10,18 +10,46 @@ interface RankedFeedItem {
   displayScore: number
 }
 
+const AI_FEED_MAX_ARTICLES = 25
+const AI_FEED_SOURCE_LIMITS = {
+  hn: 6,
+  github: 5,
+  japanese: 7,
+  otherRss: 7,
+}
+
 export function collectSummaryCandidateArticles(
   rankedFeeds: RankedFeedItem[][]
 ): NewsArticleWithId[] {
-  const candidates = new Map<string, NewsArticleWithId>()
+  const candidates = new Map<string, {
+    article: NewsArticleWithId
+    displayScore: number
+  }>()
 
   for (const ranked of rankedFeeds) {
     for (const item of ranked) {
-      candidates.set(item.article.id, item.article)
+      const existing = candidates.get(item.article.id)
+      if (!existing || item.displayScore > existing.displayScore) {
+        candidates.set(item.article.id, {
+          article: item.article,
+          displayScore: item.displayScore,
+        })
+      }
     }
   }
 
   return Array.from(candidates.values())
+    .sort((a, b) => {
+      const aNeedsEnglishSummary = needsSharedSummary(a.article) && !shouldSkipGeminiForJapaneseArticle(a.article)
+      const bNeedsEnglishSummary = needsSharedSummary(b.article) && !shouldSkipGeminiForJapaneseArticle(b.article)
+
+      if (aNeedsEnglishSummary !== bNeedsEnglishSummary) {
+        return aNeedsEnglishSummary ? -1 : 1
+      }
+
+      return b.displayScore - a.displayScore
+    })
+    .map(candidate => candidate.article)
 }
 
 // ひらがな・カタカナを含む場合のみ日本語と判定（漢字のみはCJK全般に含まれるため除外）
@@ -304,6 +332,61 @@ function applySummaryFallback(article: NewsArticleWithId): {
   return { titleJa, summaryJa, tags }
 }
 
+function applyReusableSummary(
+  article: NewsArticleWithId,
+  summary: { titleJa: string; summaryJa: string; tags: string[] }
+): { titleJa: string; summaryJa: string; tags: string[] } {
+  article.titleJa = summary.titleJa
+  article.summaryJa = summary.summaryJa
+  article.tags = summary.tags
+
+  return summary
+}
+
+async function findReusableSummary(
+  topic: NewsTopic,
+  article: NewsArticleWithId
+): Promise<{ titleJa: string; summaryJa: string; tags: string[] } | null> {
+  const snap = await db.collection(`topics/${topic}/articles`)
+    .where('url', '==', article.url)
+    .limit(5)
+    .get()
+
+  for (const doc of snap.docs) {
+    if (doc.id === article.id) continue
+
+    const data = doc.data() as Partial<NewsArticle>
+    if (
+      typeof data.titleJa !== 'string' ||
+      typeof data.summaryJa !== 'string'
+    ) {
+      continue
+    }
+
+    if (!isJapanese(data.titleJa) && !isJapanese(data.summaryJa)) {
+      continue
+    }
+
+    return {
+      titleJa: data.titleJa,
+      summaryJa: data.summaryJa,
+      tags: Array.isArray(data.tags)
+        ? data.tags.filter((tag): tag is string => typeof tag === 'string')
+        : [],
+    }
+  }
+
+  return null
+}
+
+function isReadableArticle(article: NewsArticle): boolean {
+  if (isJapanese(article.title)) return true
+  if (article.titleJa && isJapanese(article.titleJa)) return true
+  if (article.summaryJa && isJapanese(article.summaryJa)) return true
+
+  return false
+}
+
 async function enrichSharedArticles(
   topic: NewsTopic,
   articles: NewsArticleWithId[],
@@ -313,6 +396,8 @@ async function enrichSharedArticles(
   let translatedCount = 0
   let skippedCount = 0
   let fallbackCount = 0
+  let reusedCount = 0
+  let limitSkippedCount = 0
   let hasUpdates = false
   let geminiRequestCount = 0
   const geminiEnabled = isGeminiEnabled()
@@ -326,11 +411,24 @@ async function enrichSharedArticles(
 
     const articleRef = db.doc(`topics/${topic}/articles/${article.id}`)
 
-    if (shouldSkipGeminiForJapaneseArticle(article) || !geminiEnabled || !reserveGeminiRequest(dailyLimit)) {
+    const reusableSummary = await findReusableSummary(topic, article)
+    if (reusableSummary) {
+      batch.update(articleRef, applyReusableSummary(article, reusableSummary))
+      reusedCount++
+      hasUpdates = true
+      continue
+    }
+
+    if (shouldSkipGeminiForJapaneseArticle(article) || !geminiEnabled) {
       const fallback = applySummaryFallback(article)
       batch.update(articleRef, fallback)
       fallbackCount++
       hasUpdates = true
+      continue
+    }
+
+    if (!reserveGeminiRequest(dailyLimit)) {
+      limitSkippedCount++
       continue
     }
 
@@ -368,7 +466,8 @@ async function enrichSharedArticles(
 
   console.log(
     `[${logPrefix}] Shared summaries translated=${translatedCount}, ` +
-    `fallback=${fallbackCount}, skipped=${skippedCount}, geminiRequests=${geminiRequestCount}`
+    `reused=${reusedCount}, fallback=${fallbackCount}, ` +
+    `limitSkipped=${limitSkippedCount}, skipped=${skippedCount}, geminiRequests=${geminiRequestCount}`
   )
 }
 
@@ -518,23 +617,22 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
             sourceName: article.sourceName,
           }))
 
-        // B案: HN(10) + GitHub(8) + Zenn/Qiita(12) + その他RSS(10) = 40件
+        // 読み切れる量に絞り、Gemini要約枠を上位英語記事へ集中させる
         const sort = (arr: typeof scored) => arr.sort((a, b) => b.displayScore - a.displayScore)
 
-        const hnTop = sort(scored.filter(a => a.source === 'hn')).slice(0, 10)
-        const githubTop = sort(scored.filter(a => a.source === 'github')).slice(0, 8)
+        const hnTop = sort(scored.filter(a => a.source === 'hn')).slice(0, AI_FEED_SOURCE_LIMITS.hn)
+        const githubTop = sort(scored.filter(a => a.source === 'github')).slice(0, AI_FEED_SOURCE_LIMITS.github)
         const japaneseTop = sort(
           scored.filter(a => a.sourceName.startsWith('Zenn') || a.sourceName.startsWith('Qiita'))
-        ).slice(0, 12)
+        ).slice(0, AI_FEED_SOURCE_LIMITS.japanese)
         const otherRssTop = sort(
           scored.filter(a => a.source !== 'hn' && a.source !== 'github'
             && !a.sourceName.startsWith('Zenn') && !a.sourceName.startsWith('Qiita'))
-        ).slice(0, 10)
+        ).slice(0, AI_FEED_SOURCE_LIMITS.otherRss)
 
-        // 合算して再ソート（計40件）
         const ranked = [...hnTop, ...githubTop, ...japaneseTop, ...otherRssTop]
           .sort((a, b) => b.displayScore - a.displayScore)
-          .slice(0, 40)
+          .slice(0, AI_FEED_MAX_ARTICLES)
 
         pendingFeeds.push({
           uid,
@@ -557,10 +655,15 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
 
     for (const pendingFeed of pendingFeeds) {
       try {
-        await saveRankedFeed(topic, pendingFeed.uid, today, pendingFeed.ranked)
+        const readableRanked = pendingFeed.ranked
+          .filter(item => isReadableArticle(item.article))
+          .slice(0, AI_FEED_MAX_ARTICLES)
+
+        await saveRankedFeed(topic, pendingFeed.uid, today, readableRanked)
         console.log(
           `[generatePersonalizedFeed] Saved feed for user ${pendingFeed.uid} ` +
-          `(dismissed: ${pendingFeed.dismissedCount}, learned: ${pendingFeed.learnedCount})`
+          `(${readableRanked.length} articles, dismissed: ${pendingFeed.dismissedCount}, ` +
+          `learned: ${pendingFeed.learnedCount})`
         )
       } catch (err) {
         console.error(`[generatePersonalizedFeed] Failed to save feed for user ${pendingFeed.uid}:`, err)
