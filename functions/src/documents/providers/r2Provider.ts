@@ -2,6 +2,7 @@ import {
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
@@ -9,6 +10,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import {
   CreateDownloadUrlInput,
   CreateUploadUrlInput,
+  ListedObject,
   ObjectStorageProvider,
   SignedDownload,
   SignedUpload,
@@ -141,6 +143,31 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
       if (isNotFoundError(error)) return null
       throw error
     }
+  }
+
+  async listObjects(prefix: string): Promise<ListedObject[]> {
+    const objects: ListedObject[] = []
+    let continuationToken: string | undefined
+    do {
+      const result = await this.client.send(new ListObjectsV2Command({
+        Bucket: this.config.bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }))
+      result.Contents?.forEach((object) => {
+        if (!object.Key) return
+        objects.push({
+          objectKey: object.Key,
+          sizeBytes: object.Size ?? 0,
+          lastModifiedAt: object.LastModified ?? null,
+        })
+      })
+      continuationToken = result.IsTruncated ? result.NextContinuationToken : undefined
+      if (result.IsTruncated && !continuationToken) {
+        throw new Error('R2オブジェクト一覧の継続トークンを取得できませんでした')
+      }
+    } while (continuationToken)
+    return objects
   }
 
   async readObject(objectKey: string): Promise<Buffer | null> {

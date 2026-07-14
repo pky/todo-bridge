@@ -34,6 +34,7 @@ export type FamilyDocumentPreviewStatus =
   | 'skipped'
 
 export type FamilyDocumentDeletionStatus = 'idle' | 'processing' | 'failed'
+export type FamilyDocumentIntegrityStatus = 'unchecked' | 'ok' | 'missing_original'
 
 export interface FamilyDocument {
   id: string
@@ -65,6 +66,9 @@ export interface FamilyDocument {
   statusBeforeTrash: Exclude<FamilyDocumentStatus, 'trashed'> | null
   deletionStatus: FamilyDocumentDeletionStatus
   deletionError: string | null
+  integrityStatus: FamilyDocumentIntegrityStatus
+  integrityError: string | null
+  integrityCheckedAt: Timestamp | null
 }
 
 export type DocumentSuggestionType =

@@ -52,6 +52,7 @@ const isAtWarning = computed(() => {
 })
 const canPreviewSelectedDocument = computed(() => (
   !!selectedDocument.value
+  && selectedDocument.value.integrityStatus !== 'missing_original'
   && ['uploaded', 'processing', 'ready', 'trashed'].includes(selectedDocument.value.status)
 ))
 const selectedPreviewType = computed<'image' | 'pdf' | 'other'>(() => {
@@ -113,7 +114,9 @@ async function loadSelectedAccessUrl(document: FamilyDocument | null): Promise<v
   const sequence = ++accessSequence
   accessUrl.value = null
   accessError.value = null
-  if (!document || !['uploaded', 'processing', 'ready', 'trashed'].includes(document.status)) return
+  if (!document
+    || document.integrityStatus === 'missing_original'
+    || !['uploaded', 'processing', 'ready', 'trashed'].includes(document.status)) return
 
   accessLoading.value = true
   try {
@@ -302,7 +305,7 @@ watch(selectedDocument, (document) => {
                 <div class="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-slate-500">
                   <span>{{ categoryLabels[document.category] }}</span>
                   <span>{{ formatBytes(document.sizeBytes) }}</span>
-                  <span :class="document.status === 'failed' ? 'text-red-600' : ''">{{ statusLabels[document.status] }}</span>
+                  <span :class="document.status === 'failed' || document.integrityStatus === 'missing_original' ? 'text-red-600' : ''">{{ document.integrityStatus === 'missing_original' ? '原本を確認できません' : statusLabels[document.status] }}</span>
                 </div>
                 <button
                   v-if="document.previewStatus === 'failed' && (document.mimeType.startsWith('image/') || document.mimeType === 'application/pdf')"
@@ -332,7 +335,10 @@ watch(selectedDocument, (document) => {
           </div>
 
           <div class="flex-1 p-3 sm:p-4">
-            <div v-if="!canPreviewSelectedDocument" class="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
+            <div v-if="selectedDocument.integrityStatus === 'missing_original'" class="rounded-lg bg-red-50 p-4 text-sm text-red-700">
+              保存先で原本を確認できませんでした。ごみ箱から完全削除するか、原本をもう一度追加してください。
+            </div>
+            <div v-else-if="!canPreviewSelectedDocument" class="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
               {{ statusLabels[selectedDocument.status] }}です。保存完了後に原本を表示できます。
             </div>
             <div v-else-if="selectedPreviewType === 'pdf'">

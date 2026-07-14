@@ -41,6 +41,9 @@ test('アップロード開始用の安全な初期レコードを生成する',
   assert.equal(record.deletionStatus, 'idle')
   assert.equal(record.deletionError, null)
   assert.equal(record.statusBeforeTrash, null)
+  assert.equal(record.integrityStatus, 'unchecked')
+  assert.equal(record.integrityError, null)
+  assert.equal(record.integrityCheckedAt, null)
 })
 
 test('R2のサイズ、MIME、ハッシュが要求と一致することを検証する', () => {

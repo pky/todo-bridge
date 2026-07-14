@@ -35,6 +35,12 @@ export interface StoredObject {
   metadata: Record<string, string>
 }
 
+export interface ListedObject {
+  objectKey: string
+  sizeBytes: number
+  lastModifiedAt: Date | null
+}
+
 export interface WriteObjectInput {
   objectKey: string
   contentType: string
@@ -46,6 +52,7 @@ export interface ObjectStorageProvider {
   createUploadUrl(input: CreateUploadUrlInput): Promise<SignedUpload>
   createDownloadUrl(input: CreateDownloadUrlInput): Promise<SignedDownload>
   stat(objectKey: string): Promise<StoredObject | null>
+  listObjects(prefix: string): Promise<ListedObject[]>
   readObject(objectKey: string): Promise<Buffer | null>
   writeObject(input: WriteObjectInput): Promise<void>
   deleteObjects(objectKeys: string[]): Promise<void>

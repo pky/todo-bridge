@@ -126,6 +126,12 @@ test('ローカルproviderが保存状態と削除を管理する', async () => 
   assert.equal(typeof storedObject?.etag, 'string')
   assert.equal(storedObject?.lastModifiedAt instanceof Date, true)
   assert.deepEqual(storedObject?.metadata, { sha256: 'hash' })
+  assert.equal(
+    (await provider.listObjects('spaces/test/documents/')).some(
+      (object) => object.objectKey === objectKey && object.sizeBytes === 4
+    ),
+    true
+  )
 
   await provider.deleteObjects([objectKey])
   assert.equal(await provider.stat(objectKey), null)

@@ -4,6 +4,14 @@ import { runGenerateMobilePersonalizedFeed, runGeneratePersonalizedFeed } from '
 import { runSendMobileDiscordDailyDigest, runSendMobileDiscordUrgentNotifications } from './news/mobileNotifications'
 import { runDailyBackup } from './scheduledBackup'
 import { runRecalculateAllSmartLists } from './smartLists'
+import { runDocumentConsistency } from './documents/consistency'
+
+const R2_SECRETS = [
+  'R2_ACCOUNT_ID',
+  'R2_BUCKET',
+  'R2_ACCESS_KEY_ID',
+  'R2_SECRET_ACCESS_KEY',
+]
 
 async function runPipelineStep(name: string, run: () => Promise<unknown>): Promise<void> {
   try {
@@ -17,10 +25,14 @@ async function runPipelineStep(name: string, run: () => Promise<unknown>): Promi
 
 export const dailyMaintenance = functions
   .region('asia-northeast1')
+  .runWith({ timeoutSeconds: 540, memory: '512MB', secrets: R2_SECRETS })
   .pubsub.schedule('0 0 * * *')
   .timeZone('Asia/Tokyo')
   .onRun(async () => {
-    await runRecalculateAllSmartLists()
+    await Promise.all([
+      runRecalculateAllSmartLists(),
+      runDocumentConsistency(),
+    ])
   })
 
 export const dailyBackupJob = functions

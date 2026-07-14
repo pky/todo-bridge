@@ -1,10 +1,11 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
-import { mkdir, readFile, rm, stat as fileStat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rm, stat as fileStat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   CreateDownloadUrlInput,
   CreateUploadUrlInput,
+  ListedObject,
   ObjectStorageProvider,
   SignedDownload,
   SignedUpload,
@@ -180,6 +181,37 @@ export class LocalObjectStorageProvider implements ObjectStorageProvider {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
       throw error
     }
+  }
+
+  async listObjects(prefix: string): Promise<ListedObject[]> {
+    let fileNames: string[]
+    try {
+      fileNames = await readdir(LOCAL_STORAGE_DIRECTORY)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+      throw error
+    }
+    const objects = await Promise.all(fileNames
+      .filter((fileName) => fileName.endsWith('.json'))
+      .map(async (fileName): Promise<ListedObject | null> => {
+        try {
+          const metadata = JSON.parse(
+            await readFile(join(LOCAL_STORAGE_DIRECTORY, fileName), 'utf8')
+          ) as LocalObjectMetadata
+          if (!metadata.objectKey.startsWith(prefix)) return null
+          const storedObject = await this.stat(metadata.objectKey)
+          if (!storedObject) return null
+          return {
+            objectKey: storedObject.objectKey,
+            sizeBytes: storedObject.sizeBytes,
+            lastModifiedAt: storedObject.lastModifiedAt,
+          }
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+          throw error
+        }
+      }))
+    return objects.filter((object): object is ListedObject => object !== null)
   }
 
   async readObject(objectKey: string): Promise<Buffer | null> {

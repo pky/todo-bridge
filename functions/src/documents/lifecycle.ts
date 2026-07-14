@@ -49,6 +49,9 @@ export function buildInitialDocumentRecord(
     statusBeforeTrash: null,
     deletionStatus: 'idle',
     deletionError: null,
+    integrityStatus: 'unchecked',
+    integrityError: null,
+    integrityCheckedAt: null,
   }
 }
 
