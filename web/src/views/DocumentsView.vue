@@ -6,7 +6,9 @@ import { useSpaceStore } from '@/stores/space'
 import type { FamilyDocument } from '@/types'
 import type { DocumentTextResult } from '@/services/documentService'
 import DocumentSearch from '@/components/documents/DocumentSearch.vue'
+import DocumentSuggestions from '@/components/documents/DocumentSuggestions.vue'
 import type { DocumentSearchResult } from '@/stores/documentSearch'
+import type { UpdateDocumentSuggestionInput } from '@/stores/documents'
 
 const documentsStore = useDocumentsStore()
 const spaceStore = useSpaceStore()
@@ -203,6 +205,30 @@ function selectSearchResult(result: DocumentSearchResult): void {
   documentsStore.selectDocument(result.documentId)
 }
 
+function openSuggestionPage(pageNumber: number): void {
+  if (accessUrl.value) {
+    const url = selectedPreviewType.value === 'pdf'
+      ? `${accessUrl.value}#page=${pageNumber}`
+      : accessUrl.value
+    window.open(url, '_blank', 'noopener')
+    return
+  }
+  void scrollToSearchPage(pageNumber)
+}
+
+async function saveSuggestion(
+  suggestionId: string,
+  input: UpdateDocumentSuggestionInput
+): Promise<void> {
+  const document = selectedDocument.value
+  if (!document) return
+  try {
+    await documentsStore.updateSuggestion(document.id, suggestionId, input)
+  } catch {
+    // Storeのエラーを候補欄に表示する
+  }
+}
+
 function closeDetail(): void {
   documentsStore.selectDocument(null)
 }
@@ -274,6 +300,9 @@ watch(
 watch(selectedDocument, (document) => {
   void loadSelectedAccessUrl(document)
   void loadSelectedText(document)
+  documentsStore.subscribeSuggestions(
+    document && document.status !== 'trashed' ? document.id : null
+  )
 }, { immediate: true })
 
 watch(textResult, async () => {
@@ -508,6 +537,16 @@ watch(textResult, async () => {
                 @click="retrySelectedText"
               >{{ textRetrying ? '再読み取り中...' : '文字を再読み取り' }}</button>
             </section>
+
+            <DocumentSuggestions
+              v-if="selectedDocument.status !== 'trashed' && selectedDocument.classificationVersion != null"
+              :suggestions="documentsStore.suggestions"
+              :loading="documentsStore.suggestionsLoading"
+              :error="documentsStore.suggestionsError"
+              :saving-ids="documentsStore.suggestionSavingIds"
+              @save="saveSuggestion"
+              @open-page="openSuggestionPage"
+            />
           </div>
           <div class="border-t border-slate-100 p-4">
             <button

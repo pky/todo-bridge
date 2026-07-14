@@ -6,6 +6,8 @@ import {
   onSnapshot,
   orderBy,
   query,
+  serverTimestamp,
+  updateDoc,
   type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from '@/services/firebase'
@@ -23,7 +25,20 @@ import {
   type DocumentTextResult,
 } from '@/services/documentService'
 import { useSpaceStore } from './space'
-import type { DocumentUsage, FamilyDocument, FamilyDocumentSource } from '@/types'
+import { useAuthStore } from './auth'
+import type {
+  DocumentSuggestion,
+  DocumentSuggestionStatus,
+  DocumentUsage,
+  FamilyDocument,
+  FamilyDocumentSource,
+} from '@/types'
+
+export interface UpdateDocumentSuggestionInput {
+  title: string
+  value: Record<string, unknown>
+  status: DocumentSuggestionStatus
+}
 
 export const useDocumentsStore = defineStore('documents', () => {
   const documents = ref<FamilyDocument[]>([])
@@ -35,9 +50,15 @@ export const useDocumentsStore = defineStore('documents', () => {
   const thumbnailLoadingIds = ref<string[]>([])
   const error = ref<string | null>(null)
   const usage = ref<DocumentUsage | null>(null)
+  const suggestions = ref<DocumentSuggestion[]>([])
+  const suggestionsLoading = ref(false)
+  const suggestionsError = ref<string | null>(null)
+  const suggestionSavingIds = ref<string[]>([])
   let unsubscribeSnapshot: Unsubscribe | null = null
   let unsubscribeUsage: Unsubscribe | null = null
+  let unsubscribeSuggestionSnapshot: Unsubscribe | null = null
   let subscribedSpaceId: string | null = null
+  let subscribedSuggestionDocumentId: string | null = null
 
   async function loadThumbnailUrl(
     spaceId: string,
@@ -130,6 +151,7 @@ export const useDocumentsStore = defineStore('documents', () => {
   function unsubscribe(): void {
     unsubscribeSnapshot?.()
     unsubscribeUsage?.()
+    unsubscribeSuggestions()
     unsubscribeSnapshot = null
     unsubscribeUsage = null
     subscribedSpaceId = null
@@ -139,6 +161,92 @@ export const useDocumentsStore = defineStore('documents', () => {
     thumbnailLoadingIds.value = []
     usage.value = null
     loading.value = false
+  }
+
+  function unsubscribeSuggestions(): void {
+    unsubscribeSuggestionSnapshot?.()
+    unsubscribeSuggestionSnapshot = null
+    subscribedSuggestionDocumentId = null
+    suggestions.value = []
+    suggestionsLoading.value = false
+    suggestionsError.value = null
+    suggestionSavingIds.value = []
+  }
+
+  function subscribeSuggestions(documentId: string | null): void {
+    if (!documentId) {
+      unsubscribeSuggestions()
+      return
+    }
+    const spaceId = requireCurrentSpaceId()
+    if (unsubscribeSuggestionSnapshot
+      && subscribedSuggestionDocumentId === documentId
+      && subscribedSpaceId === spaceId) return
+    unsubscribeSuggestions()
+    suggestionsLoading.value = true
+    subscribedSuggestionDocumentId = documentId
+    const suggestionQuery = query(
+      collection(db, 'spaces', spaceId, 'documents', documentId, 'suggestions'),
+      orderBy('createdAt', 'asc')
+    )
+    unsubscribeSuggestionSnapshot = onSnapshot(
+      suggestionQuery,
+      (snapshot) => {
+        if (subscribedSuggestionDocumentId !== documentId) return
+        suggestions.value = snapshot.docs.map((suggestionSnapshot) => ({
+          ...(suggestionSnapshot.data() as Omit<DocumentSuggestion, 'id'>),
+          id: suggestionSnapshot.id,
+        }))
+        suggestionsLoading.value = false
+      },
+      (snapshotError) => {
+        if (subscribedSuggestionDocumentId !== documentId) return
+        suggestionsError.value = snapshotError.message
+        suggestionsLoading.value = false
+      }
+    )
+  }
+
+  async function updateSuggestion(
+    documentId: string,
+    suggestionId: string,
+    input: UpdateDocumentSuggestionInput
+  ): Promise<void> {
+    const title = input.title.trim()
+    const rejectUpdate = (message: string): never => {
+      suggestionsError.value = message
+      throw new Error(message)
+    }
+    if (!title) rejectUpdate('候補のタイトルを入力してください')
+    if (title.length > 500) rejectUpdate('候補のタイトルは500文字以内にしてください')
+    const current = suggestions.value.find((suggestion) => suggestion.id === suggestionId)
+    if (!current) rejectUpdate('更新する候補が見つかりません')
+    const userId = useAuthStore().user?.uid
+    if (!userId) rejectUpdate('候補を更新するにはログインが必要です')
+    if (suggestionSavingIds.value.includes(suggestionId)) return
+
+    suggestionSavingIds.value = [...suggestionSavingIds.value, suggestionId]
+    suggestionsError.value = null
+    try {
+      await updateDoc(
+        doc(db, 'spaces', requireCurrentSpaceId(), 'documents', documentId, 'suggestions', suggestionId),
+        {
+          title,
+          value: input.value,
+          status: input.status,
+          acceptedBy: input.status === 'accepted' ? userId : null,
+          acceptedAt: input.status === 'accepted' ? serverTimestamp() : null,
+          updatedAt: serverTimestamp(),
+        }
+      )
+    } catch (updateError) {
+      suggestionsError.value = updateError instanceof Error
+        ? updateError.message
+        : '候補を更新できませんでした'
+      throw updateError
+    } finally {
+      suggestionSavingIds.value = suggestionSavingIds.value.filter((id) => id !== suggestionId)
+    }
   }
 
   function selectDocument(documentId: string | null): void {
@@ -247,6 +355,10 @@ export const useDocumentsStore = defineStore('documents', () => {
     thumbnailLoadingIds,
     error,
     usage,
+    suggestions,
+    suggestionsLoading,
+    suggestionsError,
+    suggestionSavingIds,
     subscribe,
     unsubscribe,
     selectDocument,
@@ -256,6 +368,8 @@ export const useDocumentsStore = defineStore('documents', () => {
     reloadThumbnail,
     retryThumbnail,
     retryText,
+    subscribeSuggestions,
+    updateSuggestion,
     moveToTrash,
     restoreFromTrash,
     permanentlyDelete,

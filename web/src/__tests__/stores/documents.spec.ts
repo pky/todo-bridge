@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useDocumentsStore } from '@/stores/documents'
+import { useAuthStore } from '@/stores/auth'
 import { useSpaceStore } from '@/stores/space'
 
 const {
@@ -14,6 +15,8 @@ const {
   trashDocumentApiMock,
   restoreDocumentApiMock,
   permanentlyDeleteDocumentApiMock,
+  updateDocMock,
+  serverTimestampMock,
 } = vi.hoisted(() => ({
   onSnapshotMock: vi.fn(),
   uploadDocumentMock: vi.fn(),
@@ -25,6 +28,8 @@ const {
   trashDocumentApiMock: vi.fn(),
   restoreDocumentApiMock: vi.fn(),
   permanentlyDeleteDocumentApiMock: vi.fn(),
+  updateDocMock: vi.fn(),
+  serverTimestampMock: vi.fn(() => 'server-timestamp'),
 }))
 
 vi.mock('firebase/firestore', () => ({
@@ -33,6 +38,8 @@ vi.mock('firebase/firestore', () => ({
   query: vi.fn((value: unknown) => value),
   orderBy: vi.fn(() => 'createdAt-desc'),
   onSnapshot: onSnapshotMock,
+  updateDoc: updateDocMock,
+  serverTimestamp: serverTimestampMock,
 }))
 
 vi.mock('@/services/firebase', () => ({ db: {} }))
@@ -57,6 +64,10 @@ describe('documents store', () => {
       currentSpaceId: 'space-1',
       initialized: true,
       useLegacyPath: false,
+    })
+    useAuthStore().$patch({
+      user: { uid: 'alice', email: 'alice@example.com', displayName: 'Alice', photoURL: null },
+      loading: false,
     })
     onSnapshotMock.mockReturnValue(vi.fn())
   })
@@ -151,5 +162,45 @@ describe('documents store', () => {
 
     expect(getDocumentTextApiMock).toHaveBeenCalledWith('space-1', 'document-1')
     expect(retryDocumentTextApiMock).toHaveBeenCalledWith('space-1', 'document-1')
+  })
+
+  it('抽出候補を購読し、修正値と採用者を保存する', async () => {
+    onSnapshotMock.mockImplementation((target, next) => {
+      if (Array.isArray(target) && target.includes('suggestions')) {
+        next({
+          docs: [{
+            id: 'suggestion-1',
+            data: () => ({
+              type: 'calendar_event',
+              status: 'pending',
+              title: '予定：5月15日',
+              value: { date: null, dateText: '5月15日', yearAmbiguous: true },
+            }),
+          }],
+        })
+      }
+      return vi.fn()
+    })
+    const store = useDocumentsStore()
+    store.subscribeSuggestions('document-1')
+
+    await store.updateSuggestion('document-1', 'suggestion-1', {
+      title: '茶話会',
+      value: { date: '2026-05-15', yearAmbiguous: false },
+      status: 'accepted',
+    })
+
+    expect(store.suggestions).toHaveLength(1)
+    expect(updateDocMock).toHaveBeenCalledWith(
+      [{}, 'spaces', 'space-1', 'documents', 'document-1', 'suggestions', 'suggestion-1'],
+      {
+        title: '茶話会',
+        value: { date: '2026-05-15', yearAmbiguous: false },
+        status: 'accepted',
+        acceptedBy: 'alice',
+        acceptedAt: 'server-timestamp',
+        updatedAt: 'server-timestamp',
+      }
+    )
   })
 })
