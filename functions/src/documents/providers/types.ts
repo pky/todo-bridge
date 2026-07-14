@@ -35,10 +35,19 @@ export interface StoredObject {
   metadata: Record<string, string>
 }
 
+export interface WriteObjectInput {
+  objectKey: string
+  contentType: string
+  data: Buffer
+  metadata?: Record<string, string>
+}
+
 export interface ObjectStorageProvider {
   createUploadUrl(input: CreateUploadUrlInput): Promise<SignedUpload>
   createDownloadUrl(input: CreateDownloadUrlInput): Promise<SignedDownload>
   stat(objectKey: string): Promise<StoredObject | null>
+  readObject(objectKey: string): Promise<Buffer | null>
+  writeObject(input: WriteObjectInput): Promise<void>
   deleteObjects(objectKeys: string[]): Promise<void>
 }
 

@@ -182,13 +182,23 @@ watch(selectedDocument, (document) => {
         </div>
         <ul v-else class="divide-y divide-slate-100">
           <li v-for="document in documentsStore.documents" :key="document.id">
-            <button
+            <div
+              role="button"
+              tabindex="0"
               class="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
               :class="document.id === documentsStore.selectedDocumentId ? 'bg-blue-50' : ''"
               @click="selectDocument(document.id)"
+              @keydown.enter="selectDocument(document.id)"
             >
-              <div class="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-xl">
-                {{ document.mimeType.startsWith('image/') ? '🖼️' : document.mimeType === 'application/pdf' ? '📕' : '📄' }}
+              <div class="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 text-xl">
+                <img
+                  v-if="documentsStore.thumbnailUrls[document.id]"
+                  :src="documentsStore.thumbnailUrls[document.id]"
+                  :alt="`${document.name}のサムネイル`"
+                  class="h-full w-full object-cover"
+                  @error="documentsStore.reloadThumbnail(document.id)"
+                />
+                <span v-else>{{ document.mimeType.startsWith('image/') ? '🖼️' : document.mimeType === 'application/pdf' ? '📕' : '📄' }}</span>
               </div>
               <div class="min-w-0 flex-1">
                 <div class="truncate text-sm font-medium">{{ document.name }}</div>
@@ -197,9 +207,16 @@ watch(selectedDocument, (document) => {
                   <span>{{ formatBytes(document.sizeBytes) }}</span>
                   <span :class="document.status === 'failed' ? 'text-red-600' : ''">{{ statusLabels[document.status] }}</span>
                 </div>
+                <button
+                  v-if="document.previewStatus === 'failed' && (document.mimeType.startsWith('image/') || document.mimeType === 'application/pdf')"
+                  class="mt-1 text-xs font-medium text-blue-600 hover:underline"
+                  @click.stop="documentsStore.retryThumbnail(document.id)"
+                >
+                  サムネイルを再作成
+                </button>
                 <div class="mt-1 text-[11px] text-slate-400">{{ formatDate(document) }}</div>
               </div>
-            </button>
+            </div>
           </li>
         </ul>
       </section>

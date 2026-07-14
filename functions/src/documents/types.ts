@@ -26,6 +26,13 @@ export type FamilyDocumentOcrStatus =
   | 'failed'
   | 'skipped'
 
+export type FamilyDocumentPreviewStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'skipped'
+
 export interface FamilyDocument {
   id: string
   spaceId: string
@@ -38,6 +45,10 @@ export interface FamilyDocument {
   pageCount: number | null
   originalObjectKey: string
   thumbnailObjectKey: string | null
+  thumbnailSizeBytes: number
+  previewStatus: FamilyDocumentPreviewStatus
+  previewVersion: number
+  previewError: string | null
   sha256: string | null
   uploadedBy: string
   documentDate: admin.firestore.Timestamp | null

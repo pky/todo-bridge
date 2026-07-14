@@ -9,6 +9,7 @@ import {
   SignedDownload,
   SignedUpload,
   StoredObject,
+  WriteObjectInput,
 } from './types'
 
 const LOCAL_STORAGE_DIRECTORY = join(tmpdir(), 'rertm-document-objects')
@@ -179,6 +180,19 @@ export class LocalObjectStorageProvider implements ObjectStorageProvider {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
       throw error
     }
+  }
+
+  async readObject(objectKey: string): Promise<Buffer | null> {
+    return readLocalObject(objectKey)
+  }
+
+  async writeObject(input: WriteObjectInput): Promise<void> {
+    await writeLocalObject(
+      input.objectKey,
+      input.contentType,
+      input.metadata ?? {},
+      input.data
+    )
   }
 
   async deleteObjects(objectKeys: string[]): Promise<void> {

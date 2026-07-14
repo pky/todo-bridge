@@ -17,6 +17,19 @@ export function buildOriginalObjectKey(
   return `spaces/${spaceId}/documents/${documentId}/original/${objectId}`
 }
 
+export function buildThumbnailObjectKey(
+  spaceId: string,
+  documentId: string,
+  version: number
+): string {
+  assertObjectKeySegment(spaceId, 'spaceId')
+  assertObjectKeySegment(documentId, 'documentId')
+  if (!Number.isSafeInteger(version) || version <= 0) {
+    throw new Error('versionがオブジェクトキーに使用できない形式です')
+  }
+  return `spaces/${spaceId}/documents/${documentId}/thumbnail/v${version}.webp`
+}
+
 export function isObjectKeyInDocument(
   objectKey: string,
   spaceId: string,

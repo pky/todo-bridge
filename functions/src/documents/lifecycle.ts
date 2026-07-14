@@ -29,6 +29,12 @@ export function buildInitialDocumentRecord(
     pageCount: null,
     originalObjectKey: objectKey,
     thumbnailObjectKey: null,
+    thumbnailSizeBytes: 0,
+    previewStatus: input.mimeType.startsWith('image/') || input.mimeType === 'application/pdf'
+      ? 'pending'
+      : 'skipped',
+    previewVersion: 1,
+    previewError: null,
     sha256: input.sha256?.toLowerCase() ?? null,
     uploadedBy,
     documentDate: null,

@@ -13,6 +13,7 @@ import {
   SignedDownload,
   SignedUpload,
   StoredObject,
+  WriteObjectInput,
 } from './types'
 
 export interface R2ProviderConfig {
@@ -131,6 +132,30 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
       if (isNotFoundError(error)) return null
       throw error
     }
+  }
+
+  async readObject(objectKey: string): Promise<Buffer | null> {
+    try {
+      const result = await this.client.send(new GetObjectCommand({
+        Bucket: this.config.bucket,
+        Key: objectKey,
+      }))
+      if (!result.Body) return null
+      return Buffer.from(await result.Body.transformToByteArray())
+    } catch (error) {
+      if (isNotFoundError(error)) return null
+      throw error
+    }
+  }
+
+  async writeObject(input: WriteObjectInput): Promise<void> {
+    await this.client.send(new PutObjectCommand({
+      Bucket: this.config.bucket,
+      Key: input.objectKey,
+      Body: input.data,
+      ContentType: input.contentType,
+      Metadata: input.metadata,
+    }))
   }
 
   async deleteObjects(objectKeys: string[]): Promise<void> {

@@ -3,10 +3,18 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useDocumentsStore } from '@/stores/documents'
 import { useSpaceStore } from '@/stores/space'
 
-const { onSnapshotMock, uploadDocumentMock, getDocumentAccessUrlApiMock } = vi.hoisted(() => ({
+const {
+  onSnapshotMock,
+  uploadDocumentMock,
+  getDocumentAccessUrlApiMock,
+  getDocumentThumbnailAccessUrlApiMock,
+  retryDocumentThumbnailApiMock,
+} = vi.hoisted(() => ({
   onSnapshotMock: vi.fn(),
   uploadDocumentMock: vi.fn(),
   getDocumentAccessUrlApiMock: vi.fn(),
+  getDocumentThumbnailAccessUrlApiMock: vi.fn(),
+  retryDocumentThumbnailApiMock: vi.fn(),
 }))
 
 vi.mock('firebase/firestore', () => ({
@@ -21,6 +29,8 @@ vi.mock('@/services/firebase', () => ({ db: {} }))
 vi.mock('@/services/documentService', () => ({
   uploadDocument: uploadDocumentMock,
   getDocumentAccessUrlApi: getDocumentAccessUrlApiMock,
+  getDocumentThumbnailAccessUrlApi: getDocumentThumbnailAccessUrlApiMock,
+  retryDocumentThumbnailApi: retryDocumentThumbnailApiMock,
 }))
 
 describe('documents store', () => {
@@ -73,5 +83,34 @@ describe('documents store', () => {
       expect.any(Function),
       expect.any(Function)
     )
+  })
+
+  it('生成済みサムネイルだけの署名URLを取得する', async () => {
+    let snapshotHandler: ((snapshot: { docs: unknown[] }) => void) | undefined
+    onSnapshotMock.mockImplementation((_query, next) => {
+      snapshotHandler = next
+      return vi.fn()
+    })
+    getDocumentThumbnailAccessUrlApiMock.mockResolvedValue({
+      url: 'https://storage.example/thumbnail',
+      expiresAt: new Date().toISOString(),
+    })
+    const store = useDocumentsStore()
+    store.subscribe()
+
+    snapshotHandler?.({
+      docs: [{
+        id: 'document-1',
+        data: () => ({
+          previewStatus: 'completed',
+          thumbnailObjectKey: 'spaces/space-1/documents/document-1/thumbnail/v1.webp',
+        }),
+      }],
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(getDocumentThumbnailAccessUrlApiMock).toHaveBeenCalledWith('space-1', 'document-1')
+    expect(store.thumbnailUrls['document-1']).toBe('https://storage.example/thumbnail')
   })
 })

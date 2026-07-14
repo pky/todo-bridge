@@ -248,3 +248,29 @@ export const getDocumentAccessUrl = documentRuntime
       name: document.name,
     }
   })
+
+export const getDocumentThumbnailAccessUrl = documentRuntime
+  .region('asia-northeast1')
+  .https.onCall(async (data, context) => {
+    const { spaceId, documentId } = parseDocumentRequest(data)
+    await requireActiveMember(context, spaceId)
+    const documentSnapshot = await db.doc(`spaces/${spaceId}/documents/${documentId}`).get()
+    if (!documentSnapshot.exists) {
+      throw new functions.https.HttpsError('not-found', '書類が見つかりません')
+    }
+    const document = documentSnapshot.data() as FamilyDocument
+    if (document.previewStatus !== 'completed'
+      || !document.thumbnailObjectKey
+      || !isObjectKeyInDocument(document.thumbnailObjectKey, spaceId, documentId)) {
+      throw new functions.https.HttpsError('failed-precondition', 'サムネイルを閲覧できる状態ではありません')
+    }
+
+    const access = await createObjectStorageProvider().createDownloadUrl({
+      objectKey: document.thumbnailObjectKey,
+      expiresInSeconds: DOWNLOAD_URL_EXPIRY_SECONDS,
+    })
+    return {
+      url: access.url,
+      expiresAt: access.expiresAt.toISOString(),
+    }
+  })

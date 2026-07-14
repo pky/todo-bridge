@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 
 const {
   buildOriginalObjectKey,
+  buildThumbnailObjectKey,
   isObjectKeyInDocument,
 } = require('../lib/documents/objectKeys')
 const {
@@ -31,6 +32,14 @@ test('パス区切りを含む識別子を拒否する', () => {
     () => buildOriginalObjectKey('../family', 'document_1', 'object_1'),
     /spaceId/
   )
+})
+
+test('version固定のサムネイルキーを生成する', () => {
+  assert.equal(
+    buildThumbnailObjectKey('family_1', 'document_1', 1),
+    'spaces/family_1/documents/document_1/thumbnail/v1.webp'
+  )
+  assert.throws(() => buildThumbnailObjectKey('family_1', 'document_1', 0), /version/)
 })
 
 test('R2設定の不足項目を秘密値なしで報告する', () => {

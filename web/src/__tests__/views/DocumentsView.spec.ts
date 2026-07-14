@@ -30,12 +30,16 @@ vi.mock('@/stores/documents', () => ({
     loading: false,
     uploading: false,
     uploadFileName: null,
+    thumbnailUrls: {},
+    thumbnailLoadingIds: [],
     error: null,
     subscribe: subscribeMock,
     unsubscribe: unsubscribeMock,
     addDocument: addDocumentMock,
     selectDocument: selectDocumentMock,
     getAccessUrl: getAccessUrlMock,
+    reloadThumbnail: vi.fn(),
+    retryThumbnail: vi.fn(),
   }),
 }))
 

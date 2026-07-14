@@ -26,6 +26,11 @@ export interface DocumentAccessResult {
   name: string
 }
 
+export interface DocumentThumbnailAccessResult {
+  url: string
+  expiresAt: string
+}
+
 export async function calculateFileSha256(file: File): Promise<string | null> {
   if (!globalThis.crypto?.subtle) return null
   const hash = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
@@ -78,6 +83,28 @@ export async function getDocumentAccessUrlApi(
     DocumentAccessResult
   >(functions, 'getDocumentAccessUrl')
   return (await callable({ spaceId, documentId })).data
+}
+
+export async function getDocumentThumbnailAccessUrlApi(
+  spaceId: string,
+  documentId: string
+): Promise<DocumentThumbnailAccessResult> {
+  const callable = httpsCallable<
+    { spaceId: string; documentId: string },
+    DocumentThumbnailAccessResult
+  >(functions, 'getDocumentThumbnailAccessUrl')
+  return (await callable({ spaceId, documentId })).data
+}
+
+export async function retryDocumentThumbnailApi(
+  spaceId: string,
+  documentId: string
+): Promise<void> {
+  const callable = httpsCallable<
+    { spaceId: string; documentId: string },
+    { success: boolean }
+  >(functions, 'retryDocumentThumbnail')
+  await callable({ spaceId, documentId })
 }
 
 export async function uploadDocument(

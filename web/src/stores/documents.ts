@@ -10,6 +10,8 @@ import {
 import { db } from '@/services/firebase'
 import {
   getDocumentAccessUrlApi,
+  getDocumentThumbnailAccessUrlApi,
+  retryDocumentThumbnailApi,
   uploadDocument,
   type DocumentAccessResult,
 } from '@/services/documentService'
@@ -22,9 +24,44 @@ export const useDocumentsStore = defineStore('documents', () => {
   const loading = ref(false)
   const uploading = ref(false)
   const uploadFileName = ref<string | null>(null)
+  const thumbnailUrls = ref<Record<string, string>>({})
+  const thumbnailLoadingIds = ref<string[]>([])
   const error = ref<string | null>(null)
   let unsubscribeSnapshot: Unsubscribe | null = null
   let subscribedSpaceId: string | null = null
+
+  async function loadThumbnailUrl(
+    spaceId: string,
+    documentId: string,
+    force: boolean = false
+  ): Promise<void> {
+    if (!force && thumbnailUrls.value[documentId]) return
+    if (thumbnailLoadingIds.value.includes(documentId)) return
+    thumbnailLoadingIds.value = [...thumbnailLoadingIds.value, documentId]
+    try {
+      const result = await getDocumentThumbnailAccessUrlApi(spaceId, documentId)
+      if (subscribedSpaceId !== spaceId) return
+      thumbnailUrls.value = { ...thumbnailUrls.value, [documentId]: result.url }
+    } catch {
+      // サムネイル失敗は一覧全体のエラーにしない
+    } finally {
+      thumbnailLoadingIds.value = thumbnailLoadingIds.value.filter((id) => id !== documentId)
+    }
+  }
+
+  function syncThumbnailUrls(spaceId: string, nextDocuments: FamilyDocument[]): void {
+    const availableIds = new Set(
+      nextDocuments
+        .filter((document) => document.previewStatus === 'completed' && document.thumbnailObjectKey)
+        .map((document) => document.id)
+    )
+    thumbnailUrls.value = Object.fromEntries(
+      Object.entries(thumbnailUrls.value).filter(([documentId]) => availableIds.has(documentId))
+    )
+    availableIds.forEach((documentId) => {
+      void loadThumbnailUrl(spaceId, documentId)
+    })
+  }
 
   const selectedDocument = computed(() => (
     documents.value.find((document) => document.id === selectedDocumentId.value) ?? null
@@ -51,10 +88,12 @@ export const useDocumentsStore = defineStore('documents', () => {
       documentQuery,
       (snapshot) => {
         if (subscribedSpaceId !== spaceId) return
-        documents.value = snapshot.docs.map((documentSnapshot) => ({
+        const nextDocuments = snapshot.docs.map((documentSnapshot) => ({
           ...(documentSnapshot.data() as Omit<FamilyDocument, 'id'>),
           id: documentSnapshot.id,
         }))
+        documents.value = nextDocuments
+        syncThumbnailUrls(spaceId, nextDocuments)
         if (selectedDocumentId.value
           && !documents.value.some((document) => document.id === selectedDocumentId.value)) {
           selectedDocumentId.value = null
@@ -75,6 +114,8 @@ export const useDocumentsStore = defineStore('documents', () => {
     subscribedSpaceId = null
     documents.value = []
     selectedDocumentId.value = null
+    thumbnailUrls.value = {}
+    thumbnailLoadingIds.value = []
     loading.value = false
   }
 
@@ -104,6 +145,20 @@ export const useDocumentsStore = defineStore('documents', () => {
     return getDocumentAccessUrlApi(requireCurrentSpaceId(), documentId)
   }
 
+  async function reloadThumbnail(documentId: string): Promise<void> {
+    const spaceId = requireCurrentSpaceId()
+    const nextUrls = { ...thumbnailUrls.value }
+    delete nextUrls[documentId]
+    thumbnailUrls.value = nextUrls
+    await loadThumbnailUrl(spaceId, documentId, true)
+  }
+
+  async function retryThumbnail(documentId: string): Promise<void> {
+    const spaceId = requireCurrentSpaceId()
+    await retryDocumentThumbnailApi(spaceId, documentId)
+    await reloadThumbnail(documentId)
+  }
+
   return {
     documents,
     selectedDocumentId,
@@ -111,11 +166,15 @@ export const useDocumentsStore = defineStore('documents', () => {
     loading,
     uploading,
     uploadFileName,
+    thumbnailUrls,
+    thumbnailLoadingIds,
     error,
     subscribe,
     unsubscribe,
     selectDocument,
     addDocument,
     getAccessUrl,
+    reloadThumbnail,
+    retryThumbnail,
   }
 })

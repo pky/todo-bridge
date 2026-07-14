@@ -46,7 +46,12 @@ export {
   createDocumentUpload,
   completeDocumentUpload,
   getDocumentAccessUrl,
+  getDocumentThumbnailAccessUrl,
 } from './documents/api'
+export {
+  generateDocumentThumbnailOnUpload,
+  retryDocumentThumbnail,
+} from './documents/jobs'
 export { localDocumentObject } from './documents/providers/localObjectHttp'
 
 // TODO: カレンダー自動登録機能を一時無効化
