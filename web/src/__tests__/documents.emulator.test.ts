@@ -4,6 +4,7 @@ import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '@/services/firebase'
 import { validateCurrentUserAccessApi } from '@/services/cloudFunctionsService'
 import {
+  createDocumentUploadApi,
   downloadDocumentSearchIndex,
   getDocumentAccessUrlApi,
   getDocumentSearchIndexApi,
@@ -236,6 +237,33 @@ describeWithEmulators('家族書類ボックス Emulator結合', () => {
       ocrProvider: 'cloud_vision_eu',
       ocrPolicyVersion: 1,
     }))
+  })
+
+  it('保存未完了の書類を容量集計を変えずに削除できる', async () => {
+    const usageBefore = await getDoc(doc(db, 'spaces', spaceId, 'usage', 'documents'))
+    const created = await createDocumentUploadApi({
+      spaceId,
+      name: '中断したアップロード.jpg',
+      source: 'photo',
+      mimeType: 'image/jpeg',
+      sizeBytes: 4,
+      sha256: 'a'.repeat(64),
+    })
+
+    await trashDocumentApi(spaceId, created.documentId)
+    const trashed = await getDoc(doc(db, 'spaces', spaceId, 'documents', created.documentId))
+    expect(trashed.data()).toEqual(expect.objectContaining({
+      status: 'trashed',
+      statusBeforeTrash: 'uploading',
+    }))
+
+    await permanentlyDeleteDocumentApi(spaceId, created.documentId)
+    expect((await getDoc(
+      doc(db, 'spaces', spaceId, 'documents', created.documentId)
+    )).exists()).toBe(false)
+    const usageAfter = await getDoc(doc(db, 'spaces', spaceId, 'usage', 'documents'))
+    expect(usageAfter.data()?.originalBytes).toBe(usageBefore.data()?.originalBytes)
+    expect(usageAfter.data()?.documentCount).toBe(usageBefore.data()?.documentCount)
   })
 
   it('家族スペースの非メンバーは検索インデックスを取得できない', async () => {
