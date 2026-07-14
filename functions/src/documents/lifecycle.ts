@@ -80,6 +80,7 @@ export interface DocumentUsageSnapshot {
   derivedBytes: number
   documentCount: number
   processingPageCountThisMonth: number
+  processingPageMonth: string | null
   limitBytes: number
   warningBytes: number
 }
@@ -100,6 +101,7 @@ export function buildDocumentUsageAfterFinalize(
     derivedBytes,
     documentCount: (current?.documentCount ?? 0) + 1,
     processingPageCountThisMonth: current?.processingPageCountThisMonth ?? 0,
+    processingPageMonth: current?.processingPageMonth ?? null,
     limitBytes,
     warningBytes: current?.warningBytes ?? DEFAULT_DOCUMENT_WARNING_BYTES,
   }

@@ -1,8 +1,21 @@
 import * as admin from 'firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import * as functions from 'firebase-functions/v1'
-import { generatePdfTextArtifact } from './ocr/artifact'
+import {
+  GeneratedDocumentTextArtifact,
+  generatePdfTextArtifact,
+  writeDocumentTextArtifact,
+} from './ocr/artifact'
+import { extractDocumentText } from './ocr/pipeline'
+import { DOCUMENT_OCR_POLICY_VERSION } from './ocrPolicy'
+import {
+  buildOcrReservationId,
+  buildOcrUsageReservation,
+  getOcrUsageMonth,
+} from './ocrUsagePlan'
+import { CloudVisionOcrProvider } from './providers/cloudVisionOcr'
 import { createObjectStorageProvider, isFunctionsEmulator } from './providers/providerFactory'
+import { DocumentOcrProvider } from './providers/types'
 import { generateDocumentThumbnail, supportsDocumentThumbnail } from './preview'
 import { FamilyDocument } from './types'
 
@@ -25,6 +38,91 @@ function normalizePreviewError(error: unknown): string {
 function normalizeOcrError(error: unknown): string {
   const message = error instanceof Error ? error.message : 'PDF文字抽出に失敗しました'
   return message.slice(0, 200)
+}
+
+async function isExternalOcrEnabled(spaceId: string): Promise<boolean> {
+  if (isFunctionsEmulator()) return false
+  const snapshot = await db.doc(`spaces/${spaceId}/settings/documentIntegrations`).get()
+  return snapshot.data()?.ocrEnabled === true
+    && snapshot.data()?.ocrPolicyVersion === DOCUMENT_OCR_POLICY_VERSION
+}
+
+async function reserveOcrPages(
+  spaceId: string,
+  documentId: string,
+  analysisVersion: number,
+  pageCount: number,
+  now: Date = new Date()
+): Promise<void> {
+  const month = getOcrUsageMonth(now)
+  const reservationId = buildOcrReservationId(month, documentId, analysisVersion)
+  const reservationRef = db.doc(`spaces/${spaceId}/ocrUsage/${reservationId}`)
+  const usageRef = db.doc(`spaces/${spaceId}/usage/documents`)
+  await db.runTransaction(async (transaction) => {
+    const [reservationSnapshot, usageSnapshot] = await Promise.all([
+      transaction.get(reservationRef),
+      transaction.get(usageRef),
+    ])
+    if (reservationSnapshot.exists) return
+    const reservation = buildOcrUsageReservation(usageSnapshot.data(), pageCount, month)
+    const timestamp = Timestamp.fromDate(now)
+    transaction.set(usageRef, {
+      processingPageCountThisMonth: reservation.processingPageCountThisMonth,
+      processingPageMonth: reservation.processingPageMonth,
+      updatedAt: timestamp,
+    }, { merge: true })
+    transaction.create(reservationRef, {
+      documentId,
+      analysisVersion,
+      pageCount,
+      month,
+      createdAt: timestamp,
+    })
+  })
+}
+
+function createConsentAwareOcrProvider(spaceId: string): DocumentOcrProvider {
+  const provider = new CloudVisionOcrProvider()
+  return {
+    extractPage: async (input) => {
+      if (!await isExternalOcrEnabled(spaceId)) {
+        throw new Error('外部OCRが無効になったため処理を停止しました')
+      }
+      return provider.extractPage(input)
+    },
+  }
+}
+
+async function retainDocumentTextArtifact(
+  documentRef: admin.firestore.DocumentReference,
+  usageRef: admin.firestore.DocumentReference,
+  initialDocument: FamilyDocument,
+  generated: GeneratedDocumentTextArtifact,
+  ocrStatus: 'completed' | 'skipped',
+  ocrError: string | null = null
+): Promise<void> {
+  await db.runTransaction(async (transaction) => {
+    const latestSnapshot = await transaction.get(documentRef)
+    if (!latestSnapshot.exists) return
+    const latestDocument = latestSnapshot.data() as FamilyDocument
+    if (!['uploaded', 'processing', 'ready'].includes(latestDocument.status)
+      || latestDocument.analysisVersion !== initialDocument.analysisVersion) {
+      return
+    }
+    const previousSize = latestDocument.ocrSizeBytes ?? 0
+    transaction.update(documentRef, {
+      ocrStatus,
+      ocrObjectKey: generated.objectKey,
+      ocrSizeBytes: generated.data.length,
+      ocrError,
+      pageCount: generated.artifact.pageCount,
+      updatedAt: Timestamp.now(),
+    })
+    transaction.set(usageRef, {
+      derivedBytes: FieldValue.increment(generated.data.length - previousSize),
+      updatedAt: Timestamp.now(),
+    }, { merge: true })
+  })
 }
 
 async function processDocumentThumbnail(
@@ -107,15 +205,25 @@ async function processDocumentText(
   documentId: string
 ): Promise<void> {
   const documentRef = db.doc(`spaces/${spaceId}/documents/${documentId}`)
-  const initialSnapshot = await documentRef.get()
-  if (!initialSnapshot.exists) return
-  const initialDocument = initialSnapshot.data() as FamilyDocument
-  if (!['uploaded', 'processing', 'ready'].includes(initialDocument.status)
-    || initialDocument.ocrStatus !== 'pending') {
-    return
-  }
+  const initialDocument = await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(documentRef)
+    if (!snapshot.exists) return null
+    const document = snapshot.data() as FamilyDocument
+    if (!['uploaded', 'processing', 'ready'].includes(document.status)
+      || document.ocrStatus !== 'pending') {
+      return null
+    }
+    transaction.update(documentRef, {
+      ocrStatus: 'processing',
+      ocrError: null,
+      updatedAt: Timestamp.now(),
+    })
+    return document
+  })
+  if (!initialDocument) return
 
-  if (initialDocument.mimeType !== 'application/pdf') {
+  if (initialDocument.mimeType !== 'application/pdf'
+    && !initialDocument.mimeType.startsWith('image/')) {
     await documentRef.set({
       ocrStatus: 'skipped',
       ocrError: null,
@@ -124,58 +232,105 @@ async function processDocumentText(
     return
   }
 
-  await documentRef.set({
-    ocrStatus: 'processing',
-    ocrError: null,
-    updatedAt: Timestamp.now(),
-  }, { merge: true })
-
+  let localArtifact: GeneratedDocumentTextArtifact | null = null
   try {
     const provider = createObjectStorageProvider()
-    const generated = await generatePdfTextArtifact(
+    const usageRef = db.doc(`spaces/${spaceId}/usage/documents`)
+    if (initialDocument.mimeType === 'application/pdf') {
+      localArtifact = await generatePdfTextArtifact(
+        provider,
+        spaceId,
+        documentId,
+        initialDocument
+      )
+    }
+
+    const requiredExternalPages = localArtifact
+      ? localArtifact.artifact.pendingExternalOcrPageNumbers.length
+      : 1
+    if (requiredExternalPages === 0) {
+      await retainDocumentTextArtifact(
+        documentRef,
+        usageRef,
+        initialDocument,
+        localArtifact!,
+        'completed'
+      )
+      return
+    }
+    if (!await isExternalOcrEnabled(spaceId)) {
+      if (localArtifact) {
+        await retainDocumentTextArtifact(
+          documentRef,
+          usageRef,
+          initialDocument,
+          localArtifact,
+          'skipped'
+        )
+      } else {
+        await documentRef.set({
+          ocrStatus: 'skipped',
+          ocrError: null,
+          updatedAt: Timestamp.now(),
+        }, { merge: true })
+      }
+      return
+    }
+
+    await reserveOcrPages(
+      spaceId,
+      documentId,
+      initialDocument.analysisVersion,
+      requiredExternalPages
+    )
+    const original = await provider.readObject(initialDocument.originalObjectKey)
+    if (!original) throw new Error('文字読み取り用の原本が見つかりません')
+    const result = await extractDocumentText(
+      original,
+      initialDocument.mimeType,
+      createConsentAwareOcrProvider(spaceId)
+    )
+    const generated = await writeDocumentTextArtifact(
       provider,
       spaceId,
       documentId,
-      initialDocument
+      initialDocument.analysisVersion,
+      original,
+      result
     )
-    const usageRef = db.doc(`spaces/${spaceId}/usage/documents`)
-    await db.runTransaction(async (transaction) => {
-      const latestSnapshot = await transaction.get(documentRef)
-      if (!latestSnapshot.exists) return
-      const latestDocument = latestSnapshot.data() as FamilyDocument
-      if (!['uploaded', 'processing', 'ready'].includes(latestDocument.status)
-        || latestDocument.analysisVersion !== initialDocument.analysisVersion) {
-        return
-      }
-      const previousSize = latestDocument.ocrSizeBytes ?? 0
-      transaction.update(documentRef, {
-        ocrStatus: generated.artifact.pendingExternalOcrPageNumbers.length === 0
-          ? 'completed'
-          : 'skipped',
-        ocrObjectKey: generated.objectKey,
-        ocrSizeBytes: generated.data.length,
-        ocrError: null,
-        pageCount: generated.artifact.pageCount,
-        updatedAt: Timestamp.now(),
-      })
-      transaction.set(usageRef, {
-        derivedBytes: FieldValue.increment(generated.data.length - previousSize),
-        updatedAt: Timestamp.now(),
-      }, { merge: true })
-    })
+    await retainDocumentTextArtifact(
+      documentRef,
+      usageRef,
+      initialDocument,
+      generated,
+      'completed'
+    )
   } catch (error) {
+    const normalizedError = normalizeOcrError(error)
+    const limitReached = normalizedError.includes('1,000ページ上限')
+    if (limitReached && localArtifact) {
+      await retainDocumentTextArtifact(
+        documentRef,
+        db.doc(`spaces/${spaceId}/usage/documents`),
+        initialDocument,
+        localArtifact,
+        'skipped',
+        normalizedError
+      )
+      return
+    }
     await db.runTransaction(async (transaction) => {
       const latestSnapshot = await transaction.get(documentRef)
       if (!latestSnapshot.exists) return
       const latestDocument = latestSnapshot.data() as FamilyDocument
       if (latestDocument.ocrStatus !== 'processing') return
       transaction.update(documentRef, {
-        ocrStatus: 'failed',
-        ocrError: normalizeOcrError(error),
+        ocrStatus: limitReached ? 'skipped' : 'failed',
+        ocrError: normalizedError,
         updatedAt: Timestamp.now(),
       })
     })
-    throw error
+    if (!limitReached) throw error
   }
 }
 

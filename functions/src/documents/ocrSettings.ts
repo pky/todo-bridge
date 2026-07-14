@@ -1,12 +1,13 @@
 import * as admin from 'firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import * as functions from 'firebase-functions/v1'
+import {
+  DOCUMENT_OCR_MONTHLY_PAGE_LIMIT,
+  DOCUMENT_OCR_MONTHLY_WARNING_PAGES,
+  DOCUMENT_OCR_POLICY_VERSION,
+} from './ocrPolicy'
 
 const db = admin.firestore()
-
-export const DOCUMENT_OCR_POLICY_VERSION = 1
-export const DOCUMENT_OCR_MONTHLY_PAGE_LIMIT = 1000
-export const DOCUMENT_OCR_MONTHLY_WARNING_PAGES = 800
 
 interface UpdateDocumentOcrSettingsInput {
   spaceId?: unknown

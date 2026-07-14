@@ -119,6 +119,7 @@ export interface DocumentUsage {
   derivedBytes: number
   documentCount: number
   processingPageCountThisMonth: number
+  processingPageMonth: string | null
   limitBytes: number
   warningBytes: number
   updatedAt: Timestamp

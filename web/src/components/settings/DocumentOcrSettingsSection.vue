@@ -17,13 +17,21 @@ const saving = ref(false)
 const showConsent = ref(false)
 const consentChecked = ref(false)
 const error = ref<string | null>(null)
-let unsubscribe: Unsubscribe | null = null
+const usageCount = ref(0)
+let unsubscribeSettings: Unsubscribe | null = null
+let unsubscribeUsage: Unsubscribe | null = null
+
+function currentUsageMonth(): string {
+  const japanTime = new Date(Date.now() + 9 * 60 * 60 * 1000)
+  return japanTime.toISOString().slice(0, 7)
+}
 
 function subscribe(): void {
-  unsubscribe?.()
+  unsubscribeSettings?.()
+  unsubscribeUsage?.()
   loading.value = true
   error.value = null
-  unsubscribe = onSnapshot(
+  unsubscribeSettings = onSnapshot(
     doc(db, 'spaces', props.spaceId, 'settings', 'documentIntegrations'),
     (snapshot) => {
       enabled.value = snapshot.exists() && snapshot.data().ocrEnabled === true
@@ -34,10 +42,24 @@ function subscribe(): void {
       loading.value = false
     }
   )
+  unsubscribeUsage = onSnapshot(
+    doc(db, 'spaces', props.spaceId, 'usage', 'documents'),
+    (snapshot) => {
+      const data = snapshot.exists() ? snapshot.data() : null
+      usageCount.value = data
+        && data.processingPageMonth === currentUsageMonth()
+        && Number.isSafeInteger(data.processingPageCountThisMonth)
+        ? data.processingPageCountThisMonth
+        : 0
+    }
+  )
 }
 
 watch(() => props.spaceId, subscribe, { immediate: true })
-onBeforeUnmount(() => unsubscribe?.())
+onBeforeUnmount(() => {
+  unsubscribeSettings?.()
+  unsubscribeUsage?.()
+})
 
 async function enableOcr(): Promise<void> {
   if (!consentChecked.value || saving.value) return
@@ -91,6 +113,23 @@ async function disableOcr(): Promise<void> {
         <p>・文字がないページ画像だけをGoogle Cloud VisionのEU処理環境へ送ります。</p>
         <p>・送信画像はモデル学習に使われず、オンライン処理後に保持されません。</p>
         <p>・外部OCRは家族全体で月1,000ページに達すると停止します。</p>
+      </div>
+
+      <div class="space-y-1">
+        <div class="flex justify-between text-xs text-gray-600">
+          <span>今月の外部OCR</span>
+          <span>{{ usageCount.toLocaleString() }} / 1,000ページ</span>
+        </div>
+        <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
+          <div
+            class="h-full transition-all"
+            :class="usageCount >= 800 ? 'bg-amber-500' : 'bg-blue-500'"
+            :style="{ width: `${Math.min(100, usageCount / 10)}%` }"
+          />
+        </div>
+        <p v-if="usageCount >= 800" class="text-xs text-amber-700">
+          無料枠の上限に近づいています。
+        </p>
       </div>
 
       <p v-if="!canManage" class="text-xs text-gray-500">

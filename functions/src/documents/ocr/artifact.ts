@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { gzip, gunzip } from 'node:zlib'
 import { promisify } from 'node:util'
 import { buildOcrResultObjectKey, isObjectKeyInDocument } from '../objectKeys'
-import { ObjectStorageProvider, OcrPageResult } from '../providers/types'
+import { ObjectStorageProvider, OcrPageResult, OcrResult } from '../providers/types'
 import { FamilyDocument } from '../types'
 import { extractPdfText } from './pdfText'
 
@@ -15,10 +15,45 @@ export interface DocumentTextArtifact {
   schemaVersion: number
   analysisVersion: number
   originalSha256: string
-  provider: 'pdf_text'
+  provider: string
   pageCount: number
   pendingExternalOcrPageNumbers: number[]
   pages: OcrPageResult[]
+}
+
+export async function writeDocumentTextArtifact(
+  provider: ObjectStorageProvider,
+  spaceId: string,
+  documentId: string,
+  analysisVersion: number,
+  original: Buffer,
+  result: OcrResult & { pageCount: number }
+): Promise<GeneratedDocumentTextArtifact> {
+  const originalSha256 = calculateSha256(original)
+  const objectKey = buildOcrResultObjectKey(spaceId, documentId, analysisVersion)
+  const artifact: DocumentTextArtifact = {
+    schemaVersion: OCR_ARTIFACT_SCHEMA_VERSION,
+    analysisVersion,
+    originalSha256,
+    provider: result.provider,
+    pageCount: result.pageCount,
+    pendingExternalOcrPageNumbers: [],
+    pages: result.pages,
+  }
+  const data = await gzipAsync(Buffer.from(JSON.stringify(artifact)), { level: 9 })
+  await provider.writeObject({
+    objectKey,
+    contentType: 'application/gzip',
+    data,
+    metadata: {
+      schemaversion: String(OCR_ARTIFACT_SCHEMA_VERSION),
+      analysisversion: String(analysisVersion),
+      originalsha256: originalSha256,
+      pagecount: String(result.pageCount),
+      externalocrcompleted: 'true',
+    },
+  })
+  return { objectKey, data, artifact, reused: false }
 }
 
 export interface GeneratedDocumentTextArtifact {

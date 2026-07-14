@@ -39,6 +39,7 @@ describe('家族書類ボックス用型定義', () => {
     expectTypeOf<DocumentUsage>().toMatchTypeOf<{
       originalBytes: number
       derivedBytes: number
+      processingPageMonth: string | null
       limitBytes: number
       warningBytes: number
     }>()

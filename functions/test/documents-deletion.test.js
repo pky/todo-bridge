@@ -38,6 +38,7 @@ test('完全削除後の容量と件数を減算する', () => {
     derivedBytes: 300,
     documentCount: 2,
     processingPageCountThisMonth: 10,
+    processingPageMonth: '2026-07',
     limitBytes: 5000,
     warningBytes: 4000,
   }, {
@@ -50,6 +51,7 @@ test('完全削除後の容量と件数を減算する', () => {
     derivedBytes: 200,
     documentCount: 1,
     processingPageCountThisMonth: 10,
+    processingPageMonth: '2026-07',
     limitBytes: 5000,
     warningBytes: 4000,
   })

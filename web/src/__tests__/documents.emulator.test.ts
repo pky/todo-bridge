@@ -9,6 +9,7 @@ import {
   permanentlyDeleteDocumentApi,
   restoreDocumentApi,
   trashDocumentApi,
+  updateDocumentOcrSettingsApi,
   uploadDocument,
 } from '@/services/documentService'
 
@@ -80,6 +81,16 @@ describeWithEmulators('家族書類ボックス Emulator結合', () => {
     throw new Error('サムネイル生成が時間内に完了しませんでした')
   }
 
+  async function waitForOcrSettled(documentId: string) {
+    const documentRef = doc(db, 'spaces', spaceId, 'documents', documentId)
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const snapshot = await getDoc(documentRef)
+      if (['completed', 'skipped', 'failed'].includes(snapshot.data()?.ocrStatus)) return snapshot
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+    throw new Error('文字抽出が時間内に完了しませんでした')
+  }
+
   it('複数ページPDFを追加して原本と一覧サムネイルを取得できる', async () => {
     const originalContent = createTestPdf()
     const file = new File([originalContent], '確認用.pdf', {
@@ -111,6 +122,12 @@ describeWithEmulators('家族書類ボックス Emulator結合', () => {
       previewStatus: 'completed',
       pageCount: 2,
       thumbnailObjectKey: expect.stringContaining('/thumbnail/v1.webp'),
+    }))
+    const ocrSnapshot = await waitForOcrSettled(documentId)
+    expect(ocrSnapshot.data()).toEqual(expect.objectContaining({
+      ocrStatus: 'skipped',
+      ocrObjectKey: expect.stringContaining('/analysis/v1/ocr.json.gz'),
+      ocrSizeBytes: expect.any(Number),
     }))
     const thumbnailAccess = await getDocumentThumbnailAccessUrlApi(spaceId, documentId)
     const thumbnailResponse = await fetch(thumbnailAccess.url)
@@ -166,4 +183,23 @@ describeWithEmulators('家族書類ボックス Emulator結合', () => {
     expect(response.headers.get('content-type')).toContain('image/webp')
     expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0)
   }, 20_000)
+
+  it('ownerがOCR同意設定を有効化できる', async () => {
+    const result = await updateDocumentOcrSettingsApi(spaceId, true, 1)
+
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      enabled: true,
+      policyVersion: 1,
+      monthlyPageLimit: 1000,
+    }))
+    const settingsSnapshot = await getDoc(
+      doc(db, 'spaces', spaceId, 'settings', 'documentIntegrations')
+    )
+    expect(settingsSnapshot.data()).toEqual(expect.objectContaining({
+      ocrEnabled: true,
+      ocrProvider: 'cloud_vision_eu',
+      ocrPolicyVersion: 1,
+    }))
+  })
 })

@@ -84,6 +84,7 @@ test('初回確定時に既定の容量集計を作る', () => {
     derivedBytes: 0,
     documentCount: 1,
     processingPageCountThisMonth: 0,
+    processingPageMonth: null,
     limitBytes: DEFAULT_DOCUMENT_LIMIT_BYTES,
     warningBytes: DEFAULT_DOCUMENT_WARNING_BYTES,
   })
@@ -95,6 +96,7 @@ test('容量上限を超える確定を拒否する', () => {
     derivedBytes: 0,
     documentCount: 1,
     processingPageCountThisMonth: 0,
+    processingPageMonth: null,
     limitBytes: 1000,
     warningBytes: 800,
   }, 101), /容量上限/)
@@ -106,6 +108,7 @@ test('サムネイルを含む合計容量が上限を超える確定を拒否�
     derivedBytes: 200,
     documentCount: 1,
     processingPageCountThisMonth: 0,
+    processingPageMonth: null,
     limitBytes: 1000,
     warningBytes: 800,
   }, 101), /容量上限/)
