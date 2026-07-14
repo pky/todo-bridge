@@ -77,6 +77,10 @@ const canManageCurrentSpace = computed(() =>
   isSharedSpaceSelected.value && currentMembership.value?.role === 'owner'
 )
 
+const canManageDocumentOcr = computed(() =>
+  !spaceStore.useLegacyPath && currentMembership.value?.role === 'owner'
+)
+
 const progressPercent = computed(() => {
   if (!progress.value || progress.value.total === 0) return 0
   return Math.round((progress.value.current / progress.value.total) * 100)
@@ -652,12 +656,17 @@ async function handleRunDataMigration(): Promise<void> {
         </div>
       </section>
 
-      <Suspense v-if="isSharedSpaceSelected && spaceStore.currentSpaceId">
-        <DocumentOcrSettingsSection
-          :space-id="spaceStore.currentSpaceId"
-          :can-manage="canManageCurrentSpace"
-        />
-      </Suspense>
+      <div
+        v-if="!spaceStore.useLegacyPath && spaceStore.currentSpaceId"
+        data-testid="document-ocr-settings"
+      >
+        <Suspense>
+          <DocumentOcrSettingsSection
+            :space-id="spaceStore.currentSpaceId"
+            :can-manage="canManageDocumentOcr"
+          />
+        </Suspense>
+      </div>
 
 
       <Suspense>

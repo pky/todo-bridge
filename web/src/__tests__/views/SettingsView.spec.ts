@@ -173,4 +173,31 @@ describe('SettingsView', () => {
     expect(wrapper.text()).not.toContain('スペース名を変更')
     expect(wrapper.text()).toContain('メンバー 2 人')
   })
+
+  it('移行済みの個人スペースでもOCR設定を表示する', async () => {
+    const authStore = useAuthStore()
+    authStore.$patch({
+      user: { uid: 'owner-1', email: 'owner@example.com', displayName: 'Owner', photoURL: null },
+      loading: false,
+    })
+
+    const spaceStore = useSpaceStore()
+    spaceStore.$patch({
+      currentSpaceId: 'personal_owner-1',
+      useLegacyPath: false,
+      initialized: true,
+      memberships: [{
+        spaceId: 'personal_owner-1',
+        role: 'owner',
+        status: 'active',
+        displayName: '個人スペース',
+        joinedAt: null,
+      }],
+    })
+
+    const wrapper = shallowMount(SettingsView)
+    await flushView()
+
+    expect(wrapper.find('[data-testid="document-ocr-settings"]').exists()).toBe(true)
+  })
 })
