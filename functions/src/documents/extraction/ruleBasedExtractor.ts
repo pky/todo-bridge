@@ -46,6 +46,20 @@ function getContext(text: string, start: number, length: number): string {
   return compactExcerpt(text.slice(lineStart, lineEnd))
 }
 
+function getDateContext(text: string, start: number): string {
+  const lineStart = text.lastIndexOf('\n', start) + 1
+  return compactExcerpt(text.slice(lineStart).split(/\r?\n/).slice(0, 3).join('\n'))
+}
+
+function formatTime(match: RegExpMatchArray | null): string | null {
+  if (!match) return null
+  const period = match[1]
+  let hour = Number(match[2])
+  if (period === '午後' && hour < 12) hour += 12
+  if (period === '午前' && hour === 12) hour = 0
+  return `${String(hour).padStart(2, '0')}:${String(Number(match[3] ?? 0)).padStart(2, '0')}`
+}
+
 function toIsoDate(year: number, month: number, day: number): string | null {
   const date = new Date(Date.UTC(year, month - 1, day))
   if (date.getUTCFullYear() !== year
@@ -62,10 +76,11 @@ function extractDates(page: OcrPageResult): ExtractedDocumentSuggestion[] {
     const day = Number(match[3])
     const date = year ? toIsoDate(year, month, day) : null
     if (year && !date) continue
-    const excerpt = getContext(page.text, match.index ?? 0, match[0].length)
-    const isDeadline = /(まで|締切|期限|提出|必着)/.test(excerpt)
-    const isEvent = /(日時|開催|行事|予定|集合|開始|実施)/.test(excerpt)
-    const timeMatch = excerpt.match(/(?:午前|午後)?\s*(\d{1,2})(?::|時)\s*(\d{1,2})?分?/)
+    const lineExcerpt = getContext(page.text, match.index ?? 0, match[0].length)
+    const excerpt = getDateContext(page.text, match.index ?? 0)
+    const isDeadline = /(まで|締切|期限|提出|必着)/.test(lineExcerpt)
+    const isEvent = /(日にち|日程|日時|開催|行事|予定|集合|開始|実施)/.test(lineExcerpt)
+    const timeMatch = excerpt.match(/(?:(午前|午後)\s*)?(\d{1,2})(?::|時)\s*(\d{1,2})?分?/)
     const role = isDeadline && !isEvent ? 'deadline' : isEvent && !isDeadline ? 'event' : 'ambiguous'
     const suggestion = createSuggestion({
       type: role === 'deadline' ? 'task' : role === 'event' ? 'calendar_event' : 'field',
@@ -79,9 +94,7 @@ function extractDates(page: OcrPageResult): ExtractedDocumentSuggestion[] {
         yearAmbiguous: year === null,
         role,
         roleAmbiguous: role === 'ambiguous',
-        time: timeMatch
-          ? `${String(Number(timeMatch[1])).padStart(2, '0')}:${String(Number(timeMatch[2] ?? 0)).padStart(2, '0')}`
-          : null,
+        time: formatTime(timeMatch),
       },
       pageNumber: page.pageNumber,
       sourceExcerpt: excerpt,

@@ -13,8 +13,24 @@ function page(text, pageNumber = 1) {
 
 test('学校、医療、請求書をルールで分類する', () => {
   assert.equal(classifyDocumentByRules('学校のお知らせ.pdf', [page('保護者のみなさまへ')]).category, 'school_childcare')
+  assert.equal(classifyDocumentByRules('お知らせ.jpeg', [page('園行事のご案内')]).category, 'school_childcare')
   assert.equal(classifyDocumentByRules('健康診断.pdf', [page('病院 診療内容')]).category, 'medical')
   assert.equal(classifyDocumentByRules('請求書.pdf', [page('合計金額 1,000円')]).category, 'billing_receipt')
+})
+
+test('園行事の日付と次行の時刻を予定候補にまとめる', () => {
+  const suggestions = extractDocumentSuggestions([page([
+    '〈茶話会〉',
+    '日にち：5月15日（金）',
+    '時間：13時45分〜14時45分',
+    '場所：中央公民館',
+  ].join('\n'))])
+  const event = suggestions.find((item) => item.type === 'calendar_event')
+
+  assert.equal(event.value.dateText, '5月15日')
+  assert.equal(event.value.yearAmbiguous, true)
+  assert.equal(event.value.time, '13:45')
+  assert.match(event.sourceExcerpt, /時間：13時45分/)
 })
 
 test('期限、予定、持ち物、金額、連絡先を根拠ページつきで抽出する', () => {
