@@ -137,6 +137,6 @@ npm test
 - 要件定義テンプレートは `doc/REQUIREMENTS_TEMPLATE.md` に置いています。
 - retrospective な要件定義の例は `doc/RETROSPECTIVE_REQUIREMENTS_EXAMPLE.md` にまとめています。
 - テーマ選択型の情報機能の要件と設計メモは `doc/THEMED_FEED_REQUIREMENTS.md` と `doc/THEMED_FEED_DESIGN.md` にまとめています。
-- 家族書類ボックスの要件、設計メモ、実装計画は `doc/FAMILY_DOCUMENT_REQUIREMENTS.md`、`doc/FAMILY_DOCUMENT_DESIGN.md`、`doc/FAMILY_DOCUMENT_IMPLEMENTATION_PLAN.md` にまとめています。
+- 家族書類ボックスの要件、設計メモ、実装計画、保存プライバシー方針は `doc/FAMILY_DOCUMENT_REQUIREMENTS.md`、`doc/FAMILY_DOCUMENT_DESIGN.md`、`doc/FAMILY_DOCUMENT_IMPLEMENTATION_PLAN.md`、`doc/FAMILY_DOCUMENT_STORAGE_PRIVACY.md` にまとめています。
 - 機能追加時に使うテンプレートは `doc/FEATURE_IMPLEMENTATION_TEMPLATE.md` に置いています。
 - Firebase や API キーなどの秘密情報はリポジトリに含めない前提です。
