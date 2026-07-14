@@ -1,6 +1,10 @@
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '@/services/firebaseFunctions'
-import type { CreateDocumentUploadInput, FamilyDocumentSource } from '@/types'
+import type {
+  CreateDocumentUploadInput,
+  FamilyDocumentCategory,
+  FamilyDocumentSource,
+} from '@/types'
 
 export interface SignedDocumentUpload {
   url: string
@@ -44,6 +48,35 @@ export interface DocumentTextResult {
   pageCount: number | null
   pendingExternalOcrPageNumbers: number[]
   pages: DocumentTextPage[]
+}
+
+export interface DocumentSearchIndexPage {
+  pageNumber: number
+  text: string
+  normalizedText: string
+}
+
+export interface DocumentSearchIndexEntry {
+  documentId: string
+  name: string
+  normalizedName: string
+  category: FamilyDocumentCategory
+  documentDate: string | null
+  pages: DocumentSearchIndexPage[]
+}
+
+export interface DocumentSearchIndexArtifact {
+  schemaVersion: number
+  spaceId: string
+  version: string
+  generatedAt: string
+  entries: DocumentSearchIndexEntry[]
+}
+
+export interface DocumentSearchIndexAccessResult {
+  version: string
+  url: string
+  expiresAt: string
 }
 
 export interface UpdateDocumentOcrSettingsResult {
@@ -129,6 +162,61 @@ export async function getDocumentTextApi(
     DocumentTextResult
   >(functions, 'getDocumentText')
   return (await callable({ spaceId, documentId })).data
+}
+
+export async function getDocumentSearchIndexApi(
+  spaceId: string
+): Promise<DocumentSearchIndexAccessResult> {
+  const callable = httpsCallable<
+    { spaceId: string },
+    DocumentSearchIndexAccessResult
+  >(functions, 'getDocumentSearchIndex')
+  return (await callable({ spaceId })).data
+}
+
+export async function downloadDocumentSearchIndex(
+  url: string
+): Promise<DocumentSearchIndexArtifact> {
+  const response = await fetch(url, { cache: 'no-store' })
+  if (!response.ok) throw new Error('書類検索データを取得できませんでした')
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('このブラウザは書類検索データの展開に対応していません')
+  }
+  const decompressed = response.body?.pipeThrough(new DecompressionStream('gzip'))
+  if (!decompressed) throw new Error('書類検索データを読み込めませんでした')
+  const parsed = JSON.parse(await new Response(decompressed).text()) as unknown
+  if (!isDocumentSearchIndexArtifact(parsed)) {
+    throw new Error('書類検索データの形式が不正です')
+  }
+  return parsed
+}
+
+function isDocumentSearchIndexArtifact(value: unknown): value is DocumentSearchIndexArtifact {
+  if (typeof value !== 'object' || value === null) return false
+  const artifact = value as Partial<DocumentSearchIndexArtifact>
+  return artifact.schemaVersion === 1
+    && typeof artifact.spaceId === 'string'
+    && typeof artifact.version === 'string'
+    && typeof artifact.generatedAt === 'string'
+    && Array.isArray(artifact.entries)
+    && artifact.entries.every(isDocumentSearchIndexEntry)
+}
+
+function isDocumentSearchIndexEntry(value: unknown): value is DocumentSearchIndexEntry {
+  if (typeof value !== 'object' || value === null) return false
+  const entry = value as Partial<DocumentSearchIndexEntry>
+  return typeof entry.documentId === 'string'
+    && typeof entry.name === 'string'
+    && typeof entry.normalizedName === 'string'
+    && typeof entry.category === 'string'
+    && Array.isArray(entry.pages)
+    && entry.pages.every((value) => {
+      if (typeof value !== 'object' || value === null) return false
+      const page = value as Partial<DocumentSearchIndexPage>
+      return Number.isSafeInteger(page.pageNumber)
+        && typeof page.text === 'string'
+        && typeof page.normalizedText === 'string'
+    })
 }
 
 export async function retryDocumentThumbnailApi(

@@ -203,11 +203,19 @@ export const permanentlyDeleteDocument = deletionRuntime
       ])
 
       const usageRef = db.doc(`spaces/${spaceId}/usage/documents`)
+      const searchSettingsRef = db.doc(`spaces/${spaceId}/settings/documentSearch`)
+      const searchSettingsSnapshot = await searchSettingsRef.get()
+      const searchIndexObjectKey = typeof searchSettingsSnapshot.data()?.objectKey === 'string'
+        && searchSettingsSnapshot.data()!.objectKey.startsWith(`spaces/${spaceId}/search/`)
+        ? searchSettingsSnapshot.data()!.objectKey as string
+        : null
+      if (searchIndexObjectKey) await provider.deleteObjects([searchIndexObjectKey])
       const activityRef = db.collection(`spaces/${spaceId}/documentActivity`).doc()
       await db.runTransaction(async (transaction) => {
-        const [latestSnapshot, usageSnapshot] = await Promise.all([
+        const [latestSnapshot, usageSnapshot, latestSearchSettingsSnapshot] = await Promise.all([
           transaction.get(documentRef),
           transaction.get(usageRef),
+          transaction.get(searchSettingsRef),
         ])
         if (!latestSnapshot.exists) return
         const latestDocument = latestSnapshot.data() as FamilyDocument
@@ -215,15 +223,22 @@ export const permanentlyDeleteDocument = deletionRuntime
           throw new functions.https.HttpsError('failed-precondition', '書類がごみ箱から復元されています')
         }
         const now = Timestamp.now()
+        const searchIndexSizeBytes = searchIndexObjectKey
+          && latestSearchSettingsSnapshot.data()?.objectKey === searchIndexObjectKey
+          && typeof latestSearchSettingsSnapshot.data()?.sizeBytes === 'number'
+          ? latestSearchSettingsSnapshot.data()!.sizeBytes
+          : 0
         const nextUsage = buildDocumentUsageAfterPermanentDelete(
           usageSnapshot.data(),
           {
             originalSizeBytes: latestDocument.sizeBytes,
             derivedSizeBytes: (latestDocument.thumbnailSizeBytes ?? 0)
-              + (latestDocument.ocrSizeBytes ?? 0),
+              + (latestDocument.ocrSizeBytes ?? 0)
+              + searchIndexSizeBytes,
           }
         )
         transaction.delete(documentRef)
+        if (searchIndexSizeBytes > 0) transaction.delete(searchSettingsRef)
         transaction.set(usageRef, { ...nextUsage, updatedAt: now })
         transaction.create(activityRef, {
           type: 'permanently_deleted',

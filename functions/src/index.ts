@@ -55,6 +55,7 @@ export {
   retryDocumentText,
   retryDocumentThumbnail,
 } from './documents/jobs'
+export { getDocumentSearchIndex } from './documents/search'
 export {
   permanentlyDeleteDocument,
   restoreDocument,

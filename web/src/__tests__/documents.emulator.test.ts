@@ -4,7 +4,9 @@ import { doc, getDoc } from 'firebase/firestore'
 import { auth, db } from '@/services/firebase'
 import { validateCurrentUserAccessApi } from '@/services/cloudFunctionsService'
 import {
+  downloadDocumentSearchIndex,
   getDocumentAccessUrlApi,
+  getDocumentSearchIndexApi,
   getDocumentThumbnailAccessUrlApi,
   getDocumentTextApi,
   permanentlyDeleteDocumentApi,
@@ -55,9 +57,10 @@ function createTestPdf(pageCount = 2): Uint8Array {
 describeWithEmulators('家族書類ボックス Emulator結合', () => {
   let userId = ''
   let spaceId = ''
+  let uniqueId = ''
 
   beforeAll(async () => {
-    const uniqueId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    uniqueId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
     const credential = await createUserWithEmailAndPassword(
       auth,
       `documents-${uniqueId}@example.com`,
@@ -137,6 +140,14 @@ describeWithEmulators('家族書類ボックス Emulator結合', () => {
       text: expect.stringContaining('TodoBridge page 1'),
       source: 'pdf_text',
     }))
+    const searchAccess = await getDocumentSearchIndexApi(spaceId)
+    const searchIndex = await downloadDocumentSearchIndex(searchAccess.url)
+    expect(searchIndex.entries).toContainEqual(expect.objectContaining({
+      documentId,
+      pages: expect.arrayContaining([
+        expect.objectContaining({ normalizedText: expect.stringContaining('todobridge page 1') }),
+      ]),
+    }))
     const thumbnailAccess = await getDocumentThumbnailAccessUrlApi(spaceId, documentId)
     const thumbnailResponse = await fetch(thumbnailAccess.url)
     expect(thumbnailResponse.ok).toBe(true)
@@ -209,5 +220,16 @@ describeWithEmulators('家族書類ボックス Emulator結合', () => {
       ocrProvider: 'cloud_vision_eu',
       ocrPolicyVersion: 1,
     }))
+  })
+
+  it('家族スペースの非メンバーは検索インデックスを取得できない', async () => {
+    await signOut(auth)
+    await createUserWithEmailAndPassword(
+      auth,
+      `documents-outsider-${uniqueId}@example.com`,
+      'local-test-password'
+    )
+
+    await expect(getDocumentSearchIndexApi(spaceId)).rejects.toThrow()
   })
 })

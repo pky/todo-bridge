@@ -6,6 +6,7 @@ import { auth, googleProvider } from '@/services/firebaseAuth'
 import type { AppUser } from '@/types'
 import { mapFirebaseUser } from '@/types'
 import { validateCurrentUserAccessApi } from '@/services/cloudFunctionsService'
+import { clearDocumentSearchCache } from '@/services/documentSearchCache'
 
 const isEmulator = import.meta.env.VITE_USE_EMULATOR === 'true'
 
@@ -20,6 +21,14 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => !!user.value)
 
+  async function clearSearchCacheSafely(): Promise<void> {
+    try {
+      await clearDocumentSearchCache()
+    } catch {
+      // IndexedDBを利用できない環境でも認証処理は継続する
+    }
+  }
+
   function formatAccessError(error: unknown): Error {
     const errorCode = typeof error === 'object' && error !== null && 'code' in error
       ? String((error as { code?: string }).code)
@@ -32,6 +41,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function validateAuthorizedUser(firebaseUser: User | null) {
     if (!firebaseUser) {
+      await clearSearchCacheSafely()
       user.value = null
       accessValidatedUid.value = null
       return
@@ -167,6 +177,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
     error.value = null
     try {
+      await clearSearchCacheSafely()
       await signOut(auth)
       user.value = null
       accessValidatedUid.value = null

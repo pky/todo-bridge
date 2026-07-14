@@ -49,6 +49,10 @@ test('書類オブジェクトキーからspaceと用途を判定する', () => 
     parseDocumentObjectKey('spaces/family_1/documents/document_1/analysis/v1/ocr.json.gz'),
     { spaceId: 'family_1', documentId: 'document_1', kind: 'derived' }
   )
+  assert.deepEqual(
+    parseDocumentObjectKey('spaces/family_1/search/index-0123456789abcdef01234567.json.gz'),
+    { spaceId: 'family_1', documentId: null, kind: 'derived' }
+  )
   assert.equal(parseDocumentObjectKey('unrelated/object'), null)
 })
 
@@ -80,6 +84,9 @@ test('保持期間前または参照中のオブジェクトを孤立削除し�
     }),
     createObject(recentOrphanKey, {
       lastModifiedAt: new Date(nowMs - ORPHAN_OBJECT_RETENTION_MS + 1),
+    }),
+    createObject('spaces/family_1/search/index-0123456789abcdef01234567.json.gz', {
+      lastModifiedAt: new Date(nowMs - ORPHAN_OBJECT_RETENTION_MS - 1),
     }),
   ], nowMs)
 
@@ -123,13 +130,14 @@ test('R2実オブジェクトから原本と生成物の容量を再集計する
     createObject(document.originalObjectKey, { sizeBytes: 1000 }),
     createObject(document.thumbnailObjectKey, { sizeBytes: 100 }),
     createObject(document.ocrObjectKey, { sizeBytes: 50 }),
+    createObject('spaces/family_1/search/index-0123456789abcdef01234567.json.gz', { sizeBytes: 25 }),
     createObject('spaces/family_1/documents/orphan_1/original/object_2', { sizeBytes: 500 }),
   ])
 
   assert.deepEqual(usage, {
     family_1: {
       originalBytes: 1500,
-      derivedBytes: 150,
+      derivedBytes: 175,
       documentCount: 1,
     },
   })

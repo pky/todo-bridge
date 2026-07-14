@@ -17,7 +17,7 @@ export interface ConsistencyDocument {
 
 export interface ParsedDocumentObjectKey {
   spaceId: string
-  documentId: string
+  documentId: string | null
   kind: 'original' | 'derived'
 }
 
@@ -56,12 +56,18 @@ export function parseDocumentObjectKey(objectKey: string): ParsedDocumentObjectK
   const match = objectKey.match(
     /^spaces\/([^/]+)\/documents\/([^/]+)\/(original\/[^/]+|thumbnail\/v\d+\.webp|analysis\/v\d+\/ocr\.json\.gz)$/
   )
-  if (!match) return null
-  return {
-    spaceId: match[1],
-    documentId: match[2],
-    kind: match[3].startsWith('original/') ? 'original' : 'derived',
+  if (match) {
+    return {
+      spaceId: match[1],
+      documentId: match[2],
+      kind: match[3].startsWith('original/') ? 'original' : 'derived',
+    }
   }
+  const searchIndexMatch = objectKey.match(
+    /^spaces\/([^/]+)\/search\/index-[a-f0-9]{24}\.json\.gz$/
+  )
+  if (!searchIndexMatch) return null
+  return { spaceId: searchIndexMatch[1], documentId: null, kind: 'derived' }
 }
 
 function getDocumentKey(spaceId: string, documentId: string): string {
@@ -76,7 +82,7 @@ export function buildDocumentCleanupPlan(
   const objectsByDocument = new Map<string, string[]>()
   objects.forEach((object) => {
     const parsed = parseDocumentObjectKey(object.objectKey)
-    if (!parsed) return
+    if (!parsed?.documentId) return
     const key = getDocumentKey(parsed.spaceId, parsed.documentId)
     objectsByDocument.set(key, [...(objectsByDocument.get(key) ?? []), object.objectKey])
   })
@@ -101,7 +107,9 @@ export function buildDocumentCleanupPlan(
   const staleObjectKeys = new Set(staleDocuments.flatMap((document) => document.objectKeys))
   const orphanObjectKeys = objects
     .filter((object) => {
-      if (!parseDocumentObjectKey(object.objectKey)
+      const parsed = parseDocumentObjectKey(object.objectKey)
+      if (!parsed
+        || parsed.documentId === null
         || expectedObjectKeys.has(object.objectKey)
         || staleObjectKeys.has(object.objectKey)
         || !object.lastModifiedAt) {

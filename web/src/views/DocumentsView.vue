@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDocumentsStore } from '@/stores/documents'
 import { useSpaceStore } from '@/stores/space'
 import type { FamilyDocument } from '@/types'
 import type { DocumentTextResult } from '@/services/documentService'
+import DocumentSearch from '@/components/documents/DocumentSearch.vue'
+import type { DocumentSearchResult } from '@/stores/documentSearch'
 
 const documentsStore = useDocumentsStore()
 const spaceStore = useSpaceStore()
@@ -21,6 +23,7 @@ const textRetrying = ref(false)
 const textError = ref<string | null>(null)
 let accessSequence = 0
 let textSequence = 0
+let pendingSearchPage: number | null = null
 
 const currentSpaceName = computed(() => {
   const membership = spaceStore.memberships.find((item) => item.spaceId === spaceStore.currentSpaceId)
@@ -182,6 +185,24 @@ function selectDocument(documentId: string): void {
   documentsStore.selectDocument(documentId)
 }
 
+async function scrollToSearchPage(pageNumber: number): Promise<void> {
+  await nextTick()
+  globalThis.document.getElementById(`document-text-page-${pageNumber}`)?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'center',
+  })
+}
+
+function selectSearchResult(result: DocumentSearchResult): void {
+  pendingSearchPage = result.pageNumber
+  if (selectedDocument.value?.id === result.documentId && textResult.value && result.pageNumber) {
+    pendingSearchPage = null
+    void scrollToSearchPage(result.pageNumber)
+    return
+  }
+  documentsStore.selectDocument(result.documentId)
+}
+
 function closeDetail(): void {
   documentsStore.selectDocument(null)
 }
@@ -254,6 +275,13 @@ watch(selectedDocument, (document) => {
   void loadSelectedAccessUrl(document)
   void loadSelectedText(document)
 }, { immediate: true })
+
+watch(textResult, async () => {
+  if (!pendingSearchPage) return
+  const pageNumber = pendingSearchPage
+  pendingSearchPage = null
+  await scrollToSearchPage(pageNumber)
+})
 </script>
 
 <template>
@@ -317,6 +345,8 @@ watch(selectedDocument, (document) => {
         <div v-if="viewMode === 'documents'" class="border-b border-slate-100 p-3 sm:hidden">
           <button class="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:bg-slate-300" :disabled="isAtCapacity" @click="openInput(documentInput)">書類・写真を追加</button>
         </div>
+
+        <DocumentSearch v-if="viewMode === 'documents'" @select="selectSearchResult" />
 
         <p v-if="isAtCapacity" class="m-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">容量上限に達したため、新しい書類を追加できません。ごみ箱の書類を完全削除すると空き容量が増えます。</p>
 
@@ -450,6 +480,7 @@ watch(selectedDocument, (document) => {
                 </p>
                 <article
                   v-for="page in textResult.pages"
+                  :id="`document-text-page-${page.pageNumber}`"
                   :key="page.pageNumber"
                   class="rounded-lg border border-slate-200 bg-white px-3 py-3"
                 >

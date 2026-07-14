@@ -7,6 +7,7 @@ import type { UserMembership } from '@/types'
 import {
   migrateCurrentUserToPersonalSpaceApi,
 } from '@/services/cloudFunctionsService'
+import { deleteCachedDocumentSearchIndex } from '@/services/documentSearchCache'
 
 const CURRENT_SPACE_KEY = 'rertm-current-space-id'
 const PERSONAL_SPACE_MIGRATION_KEY_PREFIX = 'rertm-personal-space-migrated'
@@ -47,7 +48,9 @@ export const useSpaceStore = defineStore('space', () => {
   }
 
   function applyMembershipSnapshot(snapshot: Awaited<ReturnType<typeof getDocs>>, userId: string) {
+    const previousSpaceIds = new Set(memberships.value.map((membership) => membership.spaceId))
     if (snapshot.empty) {
+      previousSpaceIds.forEach((spaceId) => void deleteCachedDocumentSearchIndex(spaceId))
       memberships.value = []
       currentSpaceId.value = buildPersonalSpaceId(userId)
       useLegacyPath.value = true
@@ -60,6 +63,10 @@ export const useSpaceStore = defineStore('space', () => {
       ...(documentSnapshot.data() as UserMembership),
       spaceId: documentSnapshot.id,
     }))
+    const currentSpaceIds = new Set(memberships.value.map((membership) => membership.spaceId))
+    previousSpaceIds.forEach((spaceId) => {
+      if (!currentSpaceIds.has(spaceId)) void deleteCachedDocumentSearchIndex(spaceId)
+    })
 
     const savedSpaceId = localStorage.getItem(CURRENT_SPACE_KEY)
     const defaultSpaceId =

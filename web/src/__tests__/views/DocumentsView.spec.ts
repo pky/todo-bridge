@@ -16,6 +16,10 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }))
 
+vi.mock('@/components/documents/DocumentSearch.vue', () => ({
+  default: { template: '<div data-testid="document-search" />' },
+}))
+
 vi.mock('@/stores/space', () => ({
   useSpaceStore: () => ({
     currentSpaceId: 'space-1',

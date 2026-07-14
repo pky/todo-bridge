@@ -43,6 +43,17 @@ export function buildOcrResultObjectKey(
   return `spaces/${spaceId}/documents/${documentId}/analysis/v${version}/ocr.json.gz`
 }
 
+export function buildDocumentSearchIndexObjectKey(
+  spaceId: string,
+  version: string
+): string {
+  assertObjectKeySegment(spaceId, 'spaceId')
+  if (!/^[a-f0-9]{24}$/.test(version)) {
+    throw new Error('versionが検索インデックスに使用できない形式です')
+  }
+  return `spaces/${spaceId}/search/index-${version}.json.gz`
+}
+
 export function isObjectKeyInDocument(
   objectKey: string,
   spaceId: string,
