@@ -28,6 +28,10 @@ vi.mock('@/services/firebase', () => ({
   functions: {},
 }))
 
+vi.mock('@/services/firebaseFunctions', () => ({
+  functions: {},
+}))
+
 describe('Calendar Store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())

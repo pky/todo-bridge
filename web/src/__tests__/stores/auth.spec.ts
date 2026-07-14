@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/auth'
 
 // Firebase Auth のモック
 vi.mock('firebase/auth', () => ({
+  signInAnonymously: vi.fn(),
   signInWithPopup: vi.fn(),
   signOut: vi.fn(),
   onAuthStateChanged: vi.fn((_auth, callback) => {
@@ -11,6 +12,11 @@ vi.mock('firebase/auth', () => ({
     callback(null)
     return vi.fn() // unsubscribe関数
   }),
+}))
+
+vi.mock('@/services/firebaseApp', () => ({
+  isEmulator: true,
+  default: {},
 }))
 
 vi.mock('@/services/firebaseAuth', () => ({
@@ -88,6 +94,24 @@ describe('Auth Store', () => {
     await expect(store.loginWithGoogle()).rejects.toThrow('Auth failed')
     expect(store.error).toBe('Auth failed')
     expect(store.user).toBeNull()
+  })
+
+  it('Emulatorでは匿名ユーザーでローカルログインできる', async () => {
+    const { signInAnonymously } = await import('firebase/auth')
+    vi.mocked(signInAnonymously).mockResolvedValueOnce({
+      user: {
+        uid: 'local-uid',
+        email: null,
+        displayName: null,
+        photoURL: null,
+      },
+    } as any)
+
+    const store = useAuthStore()
+    await store.loginForLocalDevelopment()
+
+    expect(validateCurrentUserAccessApiMock).toHaveBeenCalledOnce()
+    expect(store.user?.uid).toBe('local-uid')
   })
 
   it('モバイルでも popup ログインを使う', async () => {

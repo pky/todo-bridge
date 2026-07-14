@@ -2,6 +2,7 @@ export * from './task'
 export * from './list'
 export * from './space'
 export * from './user'
+export * from './document'
 export type {
   NewsArticle,
   PersonalizedFeedItem,

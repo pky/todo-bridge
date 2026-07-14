@@ -41,6 +41,14 @@ export {
   validateCurrentUserAccess,
 } from './spaces'
 
+// 家族書類ボックス
+export {
+  createDocumentUpload,
+  completeDocumentUpload,
+  getDocumentAccessUrl,
+} from './documents/api'
+export { localDocumentObject } from './documents/providers/localObjectHttp'
+
 // TODO: カレンダー自動登録機能を一時無効化
 // export { connectGoogleCalendar, disconnectGoogleCalendar } from './calendar'
 

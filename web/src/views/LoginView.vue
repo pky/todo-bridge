@@ -3,6 +3,8 @@ import { watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 
+const isEmulator = import.meta.env.VITE_USE_EMULATOR === 'true'
+
 const authStore = useAuthStore()
 const router = useRouter()
 
@@ -21,6 +23,15 @@ async function handleGoogleLogin() {
     await router.replace({ name: 'home' })
   } catch (e) {
     console.error('Login failed:', e)
+  }
+}
+
+async function handleLocalLogin() {
+  try {
+    await authStore.loginForLocalDevelopment()
+    await router.replace({ name: 'home' })
+  } catch (e) {
+    console.error('Local login failed:', e)
   }
 }
 </script>
@@ -60,6 +71,16 @@ async function handleGoogleLogin() {
           />
         </svg>
         <span>{{ authStore.loading ? 'ログイン中...' : 'Googleでログイン' }}</span>
+      </button>
+
+      <button
+        v-if="isEmulator"
+        data-testid="local-login"
+        @click="handleLocalLogin"
+        :disabled="authStore.loading"
+        class="mt-3 w-full rounded-lg border border-blue-200 bg-blue-50 px-6 py-3 text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        ローカル確認用にログイン
       </button>
 
       <p v-if="authStore.error" class="mt-4 text-red-500 text-center text-sm">

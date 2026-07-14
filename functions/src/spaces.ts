@@ -1,9 +1,10 @@
 import * as functions from 'firebase-functions/v1'
 import * as admin from 'firebase-admin'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 
 const db = admin.firestore()
 
-type FirestoreTimestamp = admin.firestore.Timestamp
+type FirestoreTimestamp = Timestamp
 type FirestoreData = admin.firestore.DocumentData
 
 export function buildFamilySpaceRecord(
@@ -140,7 +141,7 @@ async function ensureFamilySpaceMemberships(
         db.doc(`spaces/${spaceDoc.id}/members/${userId}`),
         buildSpaceMemberRecord(userId, email, displayName, now, role, 'active')
       )
-      batch.set(spaceDoc.ref, { memberCount: admin.firestore.FieldValue.increment(1) }, { merge: true })
+      batch.set(spaceDoc.ref, { memberCount: FieldValue.increment(1) }, { merge: true })
       joinedFamilySpaceIds.push(spaceDoc.id)
     }
 
@@ -238,7 +239,7 @@ export const createFamilySpace = functions
       throw new functions.https.HttpsError('invalid-argument', 'スペース名が必要です')
     }
 
-    const now = admin.firestore.Timestamp.now()
+    const now = Timestamp.now()
     const userId = context.auth.uid
     const email = context.auth.token.email ?? null
     const displayName = typeof data?.displayName === 'string'
@@ -285,7 +286,7 @@ export const updateFamilySpaceName = functions
       throw new functions.https.HttpsError('permission-denied', 'スペース名を変更する権限がありません')
     }
 
-    const now = admin.firestore.Timestamp.now()
+    const now = Timestamp.now()
     const membersSnapshot = await db.collection(`spaces/${spaceId}/members`)
       .where('status', '==', 'active')
       .get()
@@ -317,7 +318,7 @@ export const ensureCurrentUserSpaceAccess = functions
       throw new functions.https.HttpsError('unauthenticated', '認証が必要です')
     }
 
-    const now = admin.firestore.Timestamp.now()
+    const now = Timestamp.now()
     const userId = context.auth.uid
     const email = context.auth.token.email ?? null
     const displayName = (context.auth.token.name as string | undefined) ?? null
@@ -366,7 +367,7 @@ export const validateCurrentUserAccess = functions
       throw new functions.https.HttpsError('unauthenticated', '認証が必要です')
     }
 
-    const now = admin.firestore.Timestamp.now()
+    const now = Timestamp.now()
     const userId = context.auth.uid
     const email = normalizeEmail(context.auth.token.email ?? null)
     const displayName = (context.auth.token.name as string | undefined) ?? null

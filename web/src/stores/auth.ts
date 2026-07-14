@@ -1,11 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth'
+import { signInAnonymously, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth'
 import type { User } from 'firebase/auth'
 import { auth, googleProvider } from '@/services/firebaseAuth'
 import type { AppUser } from '@/types'
 import { mapFirebaseUser } from '@/types'
 import { validateCurrentUserAccessApi } from '@/services/cloudFunctionsService'
+
+const isEmulator = import.meta.env.VITE_USE_EMULATOR === 'true'
 
 export const useAuthStore = defineStore('auth', () => {
   const ACCESS_VALIDATION_TIMEOUT_MS = 5000
@@ -143,6 +145,24 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function loginForLocalDevelopment() {
+    if (!isEmulator) {
+      throw new Error('ローカル開発ログインはEmulatorでのみ利用できます')
+    }
+    loading.value = true
+    error.value = null
+    try {
+      const result = await signInAnonymously(auth)
+      await validateAuthorizedUser(result.user)
+    } catch (e) {
+      const formattedError = formatAccessError(e)
+      error.value = formattedError.message
+      throw formattedError
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function logout() {
     loading.value = true
     error.value = null
@@ -165,6 +185,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     initAuth,
     loginWithGoogle,
+    loginForLocalDevelopment,
     logout,
   }
 })

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { shallowMount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import SettingsView from '@/views/SettingsView.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -18,8 +18,18 @@ vi.mock('vue-router', () => ({
 vi.mock('@/stores/news', () => ({
   useNewsStore: () => ({
     preferences: { keywords: [] },
+    mobileNotificationPreferences: {
+      discord: {
+        enabled: false,
+        webhookUrl: '',
+        urgentImmediate: true,
+        dailyDigest: true,
+      },
+    },
     loadPreferences: vi.fn().mockResolvedValue(undefined),
     savePreferences: vi.fn().mockResolvedValue(undefined),
+    loadMobileNotificationPreferences: vi.fn().mockResolvedValue(undefined),
+    saveMobileNotificationPreferences: vi.fn().mockResolvedValue(undefined),
   }),
 }))
 
@@ -127,7 +137,7 @@ describe('SettingsView', () => {
 
     getDocsMock.mockResolvedValue(buildMembersDocs())
 
-    const wrapper = mount(SettingsView)
+    const wrapper = shallowMount(SettingsView)
     await flushView()
 
     expect(wrapper.text()).toContain('スペース名を変更')
@@ -157,7 +167,7 @@ describe('SettingsView', () => {
 
     getDocsMock.mockResolvedValue(buildMembersDocs())
 
-    const wrapper = mount(SettingsView)
+    const wrapper = shallowMount(SettingsView)
     await flushView()
 
     expect(wrapper.text()).not.toContain('スペース名を変更')

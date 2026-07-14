@@ -8,6 +8,7 @@
  */
 import * as functions from 'firebase-functions/v1'
 import * as admin from 'firebase-admin'
+import { Timestamp } from 'firebase-admin/firestore'
 
 const db = admin.firestore()
 const MAX_BATCH_WRITES = 400
@@ -182,7 +183,7 @@ async function checkPersonalSpaceMigrationNeeded(
 }
 
 async function seedPersonalSpace(userId: string): Promise<PersonalSpaceSeedData> {
-  const now = admin.firestore.Timestamp.now()
+  const now = Timestamp.now()
   const userSnapshot = await db.doc(`users/${userId}`).get()
   const seedData = createPersonalSpaceSeedData(userId, now, (userSnapshot.data() ?? {}) as FirestoreData)
 

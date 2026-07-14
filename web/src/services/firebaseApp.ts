@@ -11,6 +11,7 @@ const firebaseConfig = {
 }
 
 export const isEmulator = import.meta.env.VITE_USE_EMULATOR === 'true'
+export const emulatorHost = import.meta.env.VITE_EMULATOR_HOST || 'localhost'
 
 const app = initializeApp(firebaseConfig)
 

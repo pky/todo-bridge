@@ -27,6 +27,11 @@ service cloud.firestore {
       return spaceDoc(spaceId).data.type == 'personal';
     }
 
+    function isSpaceOwner(spaceId) {
+      return isActiveSpaceMember(spaceId)
+        && spaceDoc(spaceId).data.ownerUid == request.auth.uid;
+    }
+
     function canReadResource(spaceId, data) {
       return isActiveSpaceMember(spaceId)
         && (isPersonalSpace(spaceId) || request.auth.uid in data.visibleToMemberIds);
@@ -35,6 +40,140 @@ service cloud.firestore {
     function canWriteResource(spaceId, data) {
       return isActiveSpaceMember(spaceId)
         && (isPersonalSpace(spaceId) || request.auth.uid in data.editableByMemberIds);
+    }
+
+    function isValidDocumentCategory(category) {
+      return category in [
+        'school_childcare',
+        'medical',
+        'insurance_tax',
+        'home_warranty',
+        'billing_receipt',
+        'contact',
+        'other'
+      ];
+    }
+
+    function isValidDocumentRelation(relation) {
+      return relation in ['source', 'attachment', 'reference'];
+    }
+
+    function isValidOptionalString(value, maxLength) {
+      return value == null || (value is string && value.size() <= maxLength);
+    }
+
+    function isValidOptionalPageNumber(value) {
+      return value == null || (value is int && value >= 1);
+    }
+
+    function canReadTask(spaceId, taskId) {
+      return exists(/databases/$(database)/documents/spaces/$(spaceId)/tasks/$(taskId))
+        && canReadResource(
+          spaceId,
+          get(/databases/$(database)/documents/spaces/$(spaceId)/tasks/$(taskId)).data
+        );
+    }
+
+    function canWriteTask(spaceId, taskId) {
+      return exists(/databases/$(database)/documents/spaces/$(spaceId)/tasks/$(taskId))
+        && canWriteResource(
+          spaceId,
+          get(/databases/$(database)/documents/spaces/$(spaceId)/tasks/$(taskId)).data
+        );
+    }
+
+    function isValidDocumentEditableUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name',
+          'category',
+          'documentDate',
+          'updatedAt'
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 255
+        && isValidDocumentCategory(request.resource.data.category)
+        && (request.resource.data.documentDate == null
+          || request.resource.data.documentDate is timestamp)
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    function isValidSuggestionEditableUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'title',
+          'value',
+          'acceptedBy',
+          'acceptedAt',
+          'updatedAt'
+        ])
+        && request.resource.data.status in ['pending', 'accepted', 'dismissed']
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 500
+        && request.resource.data.value is map
+        && request.resource.data.updatedAt is timestamp
+        && (
+          (request.resource.data.status == 'accepted'
+            && request.resource.data.acceptedBy == request.auth.uid
+            && request.resource.data.acceptedAt is timestamp)
+          || (request.resource.data.status != 'accepted'
+            && request.resource.data.acceptedBy == null
+            && request.resource.data.acceptedAt == null)
+        );
+    }
+
+    function isValidDocumentTaskLinkCreate(spaceId, linkId) {
+      return request.resource.data.keys().hasOnly([
+          'id',
+          'spaceId',
+          'documentId',
+          'taskId',
+          'relation',
+          'pageNumber',
+          'suggestionId',
+          'sourceExcerpt',
+          'createdBy',
+          'createdAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'id',
+          'spaceId',
+          'documentId',
+          'taskId',
+          'relation',
+          'pageNumber',
+          'suggestionId',
+          'sourceExcerpt',
+          'createdBy',
+          'createdAt'
+        ])
+        && request.resource.data.id == linkId
+        && request.resource.data.spaceId == spaceId
+        && request.resource.data.documentId is string
+        && request.resource.data.taskId is string
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt is timestamp
+        && isValidDocumentRelation(request.resource.data.relation)
+        && isValidOptionalPageNumber(request.resource.data.pageNumber)
+        && isValidOptionalString(request.resource.data.suggestionId, 128)
+        && isValidOptionalString(request.resource.data.sourceExcerpt, 2000)
+        && exists(/databases/$(database)/documents/spaces/$(spaceId)/documents/$(request.resource.data.documentId))
+        && canWriteTask(spaceId, request.resource.data.taskId);
+    }
+
+    function isValidDocumentTaskLinkUpdate(spaceId) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'relation',
+          'pageNumber',
+          'suggestionId',
+          'sourceExcerpt'
+        ])
+        && isValidDocumentRelation(request.resource.data.relation)
+        && isValidOptionalPageNumber(request.resource.data.pageNumber)
+        && isValidOptionalString(request.resource.data.suggestionId, 128)
+        && isValidOptionalString(request.resource.data.sourceExcerpt, 2000)
+        && canWriteTask(spaceId, resource.data.taskId);
     }
 
     // ユーザーは自分のプロフィールと membership のみアクセス可能
@@ -56,9 +195,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    match /spaces/{spaceId}/settings/{document=**} {
+    match /spaces/{spaceId}/settings/{settingId} {
       allow read: if isActiveSpaceMember(spaceId);
-      allow write: if isActiveSpaceMember(spaceId);
+      allow write: if settingId != 'documentIntegrations' && isSpaceOwner(spaceId);
+    }
+
+    match /spaces/{spaceId}/settings/documentIntegrations {
+      allow read: if isActiveSpaceMember(spaceId);
+      allow write: if false;
     }
 
     match /spaces/{spaceId}/members/{memberId} {
@@ -86,6 +230,44 @@ service cloud.firestore {
       allow create: if canWriteResource(spaceId, request.resource.data);
       allow update: if canWriteResource(spaceId, request.resource.data);
       allow delete: if canWriteResource(spaceId, resource.data);
+    }
+
+    match /spaces/{spaceId}/documents/{documentId} {
+      allow read: if isActiveSpaceMember(spaceId);
+      allow create: if false;
+      allow update: if isActiveSpaceMember(spaceId) && isValidDocumentEditableUpdate();
+      allow delete: if false;
+
+      match /suggestions/{suggestionId} {
+        allow read: if isActiveSpaceMember(spaceId);
+        allow create, delete: if false;
+        allow update: if isActiveSpaceMember(spaceId) && isValidSuggestionEditableUpdate();
+      }
+    }
+
+    match /spaces/{spaceId}/documentTaskLinks/{linkId} {
+      allow read: if isActiveSpaceMember(spaceId)
+        && canReadTask(spaceId, resource.data.taskId);
+      allow create: if isActiveSpaceMember(spaceId)
+        && isValidDocumentTaskLinkCreate(spaceId, linkId);
+      allow update: if isActiveSpaceMember(spaceId)
+        && isValidDocumentTaskLinkUpdate(spaceId);
+      allow delete: if isActiveSpaceMember(spaceId)
+        && canWriteTask(spaceId, resource.data.taskId);
+    }
+
+    match /spaces/{spaceId}/usage/documents {
+      allow read: if isActiveSpaceMember(spaceId);
+      allow write: if false;
+    }
+
+    match /spaces/{spaceId}/documentActivity/{activityId} {
+      allow read: if isActiveSpaceMember(spaceId);
+      allow write: if false;
+    }
+
+    match /privateIntegrations/{document=**} {
+      allow read, write: if false;
     }
 
     // 設定コレクション（認証済みユーザーなら読み取り可能）

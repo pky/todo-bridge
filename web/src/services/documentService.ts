@@ -1,0 +1,101 @@
+import { httpsCallable } from 'firebase/functions'
+import { functions } from '@/services/firebaseFunctions'
+import type { CreateDocumentUploadInput, FamilyDocumentSource } from '@/types'
+
+export interface SignedDocumentUpload {
+  url: string
+  method: 'PUT'
+  headers: Record<string, string>
+  expiresAt: string
+}
+
+export interface CreateDocumentUploadResult {
+  documentId: string
+  upload: SignedDocumentUpload
+}
+
+export interface CompleteDocumentUploadResult {
+  documentId: string
+  status: string
+}
+
+export interface DocumentAccessResult {
+  url: string
+  expiresAt: string
+  mimeType: string
+  name: string
+}
+
+export async function calculateFileSha256(file: File): Promise<string | null> {
+  if (!globalThis.crypto?.subtle) return null
+  const hash = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
+  return Array.from(new Uint8Array(hash))
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+export async function createDocumentUploadApi(
+  input: CreateDocumentUploadInput
+): Promise<CreateDocumentUploadResult> {
+  const callable = httpsCallable<CreateDocumentUploadInput, CreateDocumentUploadResult>(
+    functions,
+    'createDocumentUpload'
+  )
+  return (await callable(input)).data
+}
+
+export async function uploadDocumentFile(
+  upload: SignedDocumentUpload,
+  file: File
+): Promise<void> {
+  const response = await fetch(upload.url, {
+    method: upload.method,
+    headers: upload.headers,
+    body: file,
+  })
+  if (!response.ok) {
+    throw new Error(`原本のアップロードに失敗しました（${response.status}）`)
+  }
+}
+
+export async function completeDocumentUploadApi(
+  spaceId: string,
+  documentId: string
+): Promise<CompleteDocumentUploadResult> {
+  const callable = httpsCallable<
+    { spaceId: string; documentId: string },
+    CompleteDocumentUploadResult
+  >(functions, 'completeDocumentUpload')
+  return (await callable({ spaceId, documentId })).data
+}
+
+export async function getDocumentAccessUrlApi(
+  spaceId: string,
+  documentId: string
+): Promise<DocumentAccessResult> {
+  const callable = httpsCallable<
+    { spaceId: string; documentId: string },
+    DocumentAccessResult
+  >(functions, 'getDocumentAccessUrl')
+  return (await callable({ spaceId, documentId })).data
+}
+
+export async function uploadDocument(
+  spaceId: string,
+  file: File,
+  source: FamilyDocumentSource
+): Promise<string> {
+  const mimeType = file.type || 'application/octet-stream'
+  const sha256 = await calculateFileSha256(file)
+  const created = await createDocumentUploadApi({
+    spaceId,
+    name: file.name || '名称未設定',
+    source,
+    mimeType,
+    sizeBytes: file.size,
+    ...(sha256 ? { sha256 } : {}),
+  })
+  await uploadDocumentFile(created.upload, file)
+  await completeDocumentUploadApi(spaceId, created.documentId)
+  return created.documentId
+}

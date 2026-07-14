@@ -237,6 +237,12 @@ function closeDetail() {
             </svg>
           </button>
           <router-link
+            to="/documents"
+            class="hidden md:inline text-gray-600 hover:text-blue-600 text-sm"
+          >
+            書類
+          </router-link>
+          <router-link
             to="/news"
             class="hidden md:inline text-gray-600 hover:text-blue-600 text-sm"
           >
@@ -351,6 +357,13 @@ function closeDetail() {
             <Sidebar @list-selected="closeSidebar" />
           </div>
           <div class="border-t border-gray-200 p-3 flex gap-2">
+            <router-link
+              to="/documents"
+              class="flex-1 text-center text-xs text-gray-600 hover:text-blue-600 py-2 px-1 rounded hover:bg-gray-50"
+              @click="closeSidebar"
+            >
+              書類
+            </router-link>
             <router-link
               to="/news"
               class="flex-1 text-center text-xs text-gray-600 hover:text-blue-600 py-2 px-1 rounded hover:bg-gray-50"

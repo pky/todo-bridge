@@ -91,6 +91,22 @@ npm install
 npm run build
 ```
 
+家族書類ボックスをローカルで確認する場合は、リポジトリ直下で Auth、Firestore、Functions の Emulator と Web をまとめて起動します。
+
+```bash
+PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH" pnpm --dir web dev:documents
+```
+
+`http://localhost:5173` を開き、「ローカル確認用にログイン」からログインした後、ホームの「書類」を選択します。ローカル保存データは Emulator の確認用であり、プロセスを終了するとリセットされます。
+
+同じWi-Fiに接続したスマホから確認する場合は、次のコマンドを使います。MacのLANアドレスを自動検出し、表示された `スマホ確認URL` をスマホで開きます。
+
+```bash
+PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH" pnpm --dir web dev:documents:mobile
+```
+
+LAN内へ開発用ポートを公開するため、信頼できる家庭内ネットワークでのみ使用してください。接続できない場合は、macOSファイアウォールでNode.jsとJavaの受信接続を許可します。
+
 ## 検証コマンド
 
 ```bash
@@ -121,5 +137,6 @@ npm test
 - 要件定義テンプレートは `doc/REQUIREMENTS_TEMPLATE.md` に置いています。
 - retrospective な要件定義の例は `doc/RETROSPECTIVE_REQUIREMENTS_EXAMPLE.md` にまとめています。
 - テーマ選択型の情報機能の要件と設計メモは `doc/THEMED_FEED_REQUIREMENTS.md` と `doc/THEMED_FEED_DESIGN.md` にまとめています。
+- 家族書類ボックスの要件、設計メモ、実装計画は `doc/FAMILY_DOCUMENT_REQUIREMENTS.md`、`doc/FAMILY_DOCUMENT_DESIGN.md`、`doc/FAMILY_DOCUMENT_IMPLEMENTATION_PLAN.md` にまとめています。
 - 機能追加時に使うテンプレートは `doc/FEATURE_IMPLEMENTATION_TEMPLATE.md` に置いています。
 - Firebase や API キーなどの秘密情報はリポジトリに含めない前提です。

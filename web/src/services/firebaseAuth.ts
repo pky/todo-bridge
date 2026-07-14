@@ -1,5 +1,5 @@
 import { getAuth, GoogleAuthProvider, connectAuthEmulator } from 'firebase/auth'
-import app, { isEmulator } from './firebaseApp'
+import app, { emulatorHost, isEmulator } from './firebaseApp'
 
 export const auth = getAuth(app)
 export const googleProvider = new GoogleAuthProvider()
@@ -8,5 +8,5 @@ googleProvider.setCustomParameters({
 })
 
 if (isEmulator) {
-  connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true })
+  connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true })
 }

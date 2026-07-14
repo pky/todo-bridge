@@ -14,6 +14,7 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('firebase/auth', () => ({
+  signInAnonymously: vi.fn(),
   signInWithPopup: vi.fn(),
   signInWithRedirect: vi.fn(),
   getRedirectResult: vi.fn(),
@@ -22,6 +23,11 @@ vi.mock('firebase/auth', () => ({
     callback(null)
     return vi.fn()
   }),
+}))
+
+vi.mock('@/services/firebaseApp', () => ({
+  isEmulator: true,
+  default: {},
 }))
 
 vi.mock('@/services/firebaseAuth', () => ({
@@ -84,5 +90,12 @@ describe('LoginView', () => {
 
     expect(signInWithPopup).toHaveBeenCalledTimes(1)
     expect(replaceMock).toHaveBeenCalledWith({ name: 'home' })
+  })
+
+  it('Emulatorではローカル確認用ログインを表示する', () => {
+    useAuthStore().$patch({ loading: false })
+    const wrapper = mount(LoginView)
+
+    expect(wrapper.get('[data-testid="local-login"]').text()).toContain('ローカル確認用')
   })
 })

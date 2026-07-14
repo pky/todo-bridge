@@ -1,8 +1,8 @@
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions'
-import app, { isEmulator } from './firebaseApp'
+import app, { emulatorHost, isEmulator } from './firebaseApp'
 
 export const functions = getFunctions(app, 'asia-northeast1')
 
 if (isEmulator) {
-  connectFunctionsEmulator(functions, 'localhost', 5001)
+  connectFunctionsEmulator(functions, emulatorHost, 5001)
 }

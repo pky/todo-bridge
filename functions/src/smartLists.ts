@@ -1,5 +1,6 @@
 import * as functions from 'firebase-functions/v1'
 import * as admin from 'firebase-admin'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { buildScopedCollectionPath, type ScopedRequest } from './sharedTypes'
 
 const db = admin.firestore()
@@ -118,7 +119,7 @@ async function recalculateSmartListCounts(
     overdue: 0,
     thisWeek: 0,
     noDate: 0,
-    lastUpdated: admin.firestore.Timestamp.now(),
+    lastUpdated: Timestamp.now(),
   }
 
   snapshot.docs.forEach((doc) => {
@@ -152,12 +153,12 @@ function toSmartListCountResponse(counts: SmartListCounts): SmartListCountRespon
 
 function buildIncrementUpdateData(delta: Record<string, number>): Record<string, admin.firestore.FieldValue | admin.firestore.Timestamp> {
   const updateData: Record<string, admin.firestore.FieldValue | admin.firestore.Timestamp> = {
-    'smartListCounts.lastUpdated': admin.firestore.Timestamp.now(),
+    'smartListCounts.lastUpdated': Timestamp.now(),
   }
 
   Object.entries(delta).forEach(([key, value]) => {
     if (value !== 0) {
-      updateData[`smartListCounts.${key}`] = admin.firestore.FieldValue.increment(value)
+      updateData[`smartListCounts.${key}`] = FieldValue.increment(value)
     }
   })
 
