@@ -32,6 +32,7 @@ const tasksStore = useTasksStore()
 const router = useRouter()
 const NewsPreferencesSection = defineAsyncComponent(() => import('@/components/settings/NewsPreferencesSection.vue'))
 const MobileNotificationSection = defineAsyncComponent(() => import('@/components/settings/MobileNotificationSection.vue'))
+const DocumentOcrSettingsSection = defineAsyncComponent(() => import('@/components/settings/DocumentOcrSettingsSection.vue'))
 const familySpaceName = ref('家族スペース')
 const currentSpaceNameInput = ref('')
 const familySpaceLoading = ref(false)
@@ -650,6 +651,13 @@ async function handleRunDataMigration(): Promise<void> {
 
         </div>
       </section>
+
+      <Suspense v-if="isSharedSpaceSelected && spaceStore.currentSpaceId">
+        <DocumentOcrSettingsSection
+          :space-id="spaceStore.currentSpaceId"
+          :can-manage="canManageCurrentSpace"
+        />
+      </Suspense>
 
 
       <Suspense>

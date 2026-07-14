@@ -31,6 +31,15 @@ export interface DocumentThumbnailAccessResult {
   expiresAt: string
 }
 
+export interface UpdateDocumentOcrSettingsResult {
+  success: boolean
+  enabled: boolean
+  policyVersion: number
+  monthlyPageLimit: number
+  monthlyWarningPages: number
+  queuedDocumentCount: number
+}
+
 export async function calculateFileSha256(file: File): Promise<string | null> {
   if (!globalThis.crypto?.subtle) return null
   const hash = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
@@ -105,6 +114,18 @@ export async function retryDocumentThumbnailApi(
     { success: boolean }
   >(functions, 'retryDocumentThumbnail')
   await callable({ spaceId, documentId })
+}
+
+export async function updateDocumentOcrSettingsApi(
+  spaceId: string,
+  enabled: boolean,
+  acceptedPolicyVersion?: number
+): Promise<UpdateDocumentOcrSettingsResult> {
+  const callable = httpsCallable<
+    { spaceId: string; enabled: boolean; acceptedPolicyVersion?: number },
+    UpdateDocumentOcrSettingsResult
+  >(functions, 'updateDocumentOcrSettings')
+  return (await callable({ spaceId, enabled, acceptedPolicyVersion })).data
 }
 
 async function callDocumentMutation(
