@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import * as functions from 'firebase-functions/v1'
+import { analyzeAndStoreDocumentText } from './documentAnalysis'
 import {
   GeneratedDocumentTextArtifact,
   generatePdfTextArtifact,
@@ -101,13 +102,13 @@ async function retainDocumentTextArtifact(
   ocrStatus: 'completed' | 'skipped',
   ocrError: string | null = null
 ): Promise<void> {
-  await db.runTransaction(async (transaction) => {
+  const retained = await db.runTransaction(async (transaction) => {
     const latestSnapshot = await transaction.get(documentRef)
-    if (!latestSnapshot.exists) return
+    if (!latestSnapshot.exists) return false
     const latestDocument = latestSnapshot.data() as FamilyDocument
     if (!['uploaded', 'processing', 'ready'].includes(latestDocument.status)
       || latestDocument.analysisVersion !== initialDocument.analysisVersion) {
-      return
+      return false
     }
     const previousSize = latestDocument.ocrSizeBytes ?? 0
     transaction.update(documentRef, {
@@ -122,7 +123,18 @@ async function retainDocumentTextArtifact(
       derivedBytes: FieldValue.increment(generated.data.length - previousSize),
       updatedAt: Timestamp.now(),
     }, { merge: true })
+    return true
   })
+  if (!retained) return
+  try {
+    await analyzeAndStoreDocumentText(documentRef, initialDocument, generated.artifact)
+  } catch (error) {
+    console.error('[documentAnalysis] failed', {
+      documentId: initialDocument.id,
+      analysisVersion: initialDocument.analysisVersion,
+      error: error instanceof Error ? error.message.slice(0, 200) : 'unknown',
+    })
+  }
 }
 
 async function processDocumentThumbnail(

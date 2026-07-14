@@ -95,9 +95,19 @@ describeWithEmulators('家族書類ボックス Emulator結合', () => {
     throw new Error('文字抽出が時間内に完了しませんでした')
   }
 
+  async function waitForClassification(documentId: string) {
+    const documentRef = doc(db, 'spaces', spaceId, 'documents', documentId)
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const snapshot = await getDoc(documentRef)
+      if (snapshot.data()?.classificationVersion === 1) return snapshot
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+    throw new Error('書類分類が時間内に完了しませんでした')
+  }
+
   it('複数ページPDFを追加して原本と一覧サムネイルを取得できる', async () => {
     const originalContent = createTestPdf()
-    const file = new File([originalContent], '確認用.pdf', {
+    const file = new File([originalContent], '学校のお知らせ.pdf', {
       type: 'application/pdf',
     })
 
@@ -108,7 +118,7 @@ describeWithEmulators('家族書類ボックス Emulator結合', () => {
     expect(snapshot.data()).toEqual(expect.objectContaining({
       id: documentId,
       spaceId,
-      name: '確認用.pdf',
+      name: '学校のお知らせ.pdf',
       status: 'uploaded',
       mimeType: 'application/pdf',
       sizeBytes: file.size,
@@ -139,6 +149,12 @@ describeWithEmulators('家族書類ボックス Emulator結合', () => {
       pageNumber: 1,
       text: expect.stringContaining('TodoBridge page 1'),
       source: 'pdf_text',
+    }))
+    const classifiedSnapshot = await waitForClassification(documentId)
+    expect(classifiedSnapshot.data()).toEqual(expect.objectContaining({
+      category: 'school_childcare',
+      classificationVersion: 1,
+      classificationConfidence: expect.any(Number),
     }))
     const searchAccess = await getDocumentSearchIndexApi(spaceId)
     const searchIndex = await downloadDocumentSearchIndex(searchAccess.url)

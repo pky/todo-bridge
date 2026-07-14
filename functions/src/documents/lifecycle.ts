@@ -22,6 +22,8 @@ export function buildInitialDocumentRecord(
     spaceId: input.spaceId,
     name: input.name.trim(),
     category: 'other',
+    classificationVersion: null,
+    classificationConfidence: null,
     status: 'uploading',
     source: input.source,
     mimeType: input.mimeType.trim(),

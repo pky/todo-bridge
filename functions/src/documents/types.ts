@@ -41,6 +41,8 @@ export interface FamilyDocument {
   spaceId: string
   name: string
   category: FamilyDocumentCategory
+  classificationVersion: number | null
+  classificationConfidence: number | null
   status: FamilyDocumentStatus
   source: FamilyDocumentSource
   mimeType: string
