@@ -62,6 +62,7 @@ functions/lib/
 # Local-only scripts
 scripts/migrate.html
 scripts/migrate-deleted-field.js
+functions/check-firestore.js
 
 # Internal docs with environment-specific IDs/URLs
 doc/04_DEVELOPMENT_PLAN.md
