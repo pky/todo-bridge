@@ -91,6 +91,8 @@ test('R2アップロードURLはメタデータを署名対象ヘッダーに固
   const url = new URL(signed.url)
 
   assert.equal(url.searchParams.has('x-amz-meta-sha256'), false)
+  assert.equal(url.searchParams.has('x-amz-checksum-crc32'), false)
+  assert.equal(url.searchParams.has('x-amz-sdk-checksum-algorithm'), false)
   assert.match(url.searchParams.get('X-Amz-SignedHeaders'), /x-amz-meta-sha256/)
   assert.equal(signed.headers['x-amz-meta-sha256'], 'a'.repeat(64))
 })

@@ -80,6 +80,7 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
         accessKeyId: config.accessKeyId,
         secretAccessKey: config.secretAccessKey,
       },
+      requestChecksumCalculation: 'WHEN_REQUIRED',
     })
   }
 
