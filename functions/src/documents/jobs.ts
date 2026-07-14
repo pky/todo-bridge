@@ -379,3 +379,58 @@ export const retryDocumentThumbnail = previewRuntime
       throw new functions.https.HttpsError('internal', normalizePreviewError(error))
     }
   })
+
+export const retryDocumentText = previewRuntime
+  .region('asia-northeast1')
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', '認証が必要です')
+    }
+    if (typeof data?.spaceId !== 'string'
+      || !/^[A-Za-z0-9_-]{1,128}$/.test(data.spaceId)
+      || typeof data?.documentId !== 'string'
+      || !/^[A-Za-z0-9_-]{1,128}$/.test(data.documentId)) {
+      throw new functions.https.HttpsError('invalid-argument', 'spaceIdとdocumentIdが不正です')
+    }
+    const memberSnapshot = await db
+      .doc(`spaces/${data.spaceId}/members/${context.auth.uid}`)
+      .get()
+    if (!memberSnapshot.exists || memberSnapshot.data()?.status !== 'active') {
+      throw new functions.https.HttpsError('permission-denied', '家族スペースへのアクセス権がありません')
+    }
+
+    const documentRef = db.doc(`spaces/${data.spaceId}/documents/${data.documentId}`)
+    await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(documentRef)
+      if (!snapshot.exists) {
+        throw new functions.https.HttpsError('not-found', '書類が見つかりません')
+      }
+      const document = snapshot.data() as FamilyDocument
+      if (document.status === 'trashed') {
+        throw new functions.https.HttpsError('failed-precondition', 'ごみ箱内の書類は再読み取りできません')
+      }
+      if (!['uploaded', 'processing', 'ready'].includes(document.status)
+        || (document.mimeType !== 'application/pdf' && !document.mimeType.startsWith('image/'))) {
+        throw new functions.https.HttpsError('failed-precondition', '文字読み取り対象の書類ではありません')
+      }
+      if (document.ocrStatus === 'processing') {
+        throw new functions.https.HttpsError('already-exists', '文字読み取りはすでに処理中です')
+      }
+      transaction.update(documentRef, {
+        ocrStatus: 'pending',
+        ocrError: null,
+        updatedAt: Timestamp.now(),
+      })
+    })
+
+    try {
+      await processDocumentText(data.spaceId, data.documentId)
+      const result = await documentRef.get()
+      return {
+        success: true,
+        status: (result.data() as FamilyDocument | undefined)?.ocrStatus ?? 'failed',
+      }
+    } catch (error) {
+      throw new functions.https.HttpsError('internal', normalizeOcrError(error))
+    }
+  })

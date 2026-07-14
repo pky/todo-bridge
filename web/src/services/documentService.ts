@@ -31,6 +31,21 @@ export interface DocumentThumbnailAccessResult {
   expiresAt: string
 }
 
+export interface DocumentTextPage {
+  pageNumber: number
+  text: string
+  confidence: number | null
+  source: 'pdf_text' | 'cloud_vision'
+}
+
+export interface DocumentTextResult {
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped'
+  provider: string | null
+  pageCount: number | null
+  pendingExternalOcrPageNumbers: number[]
+  pages: DocumentTextPage[]
+}
+
 export interface UpdateDocumentOcrSettingsResult {
   success: boolean
   enabled: boolean
@@ -105,6 +120,17 @@ export async function getDocumentThumbnailAccessUrlApi(
   return (await callable({ spaceId, documentId })).data
 }
 
+export async function getDocumentTextApi(
+  spaceId: string,
+  documentId: string
+): Promise<DocumentTextResult> {
+  const callable = httpsCallable<
+    { spaceId: string; documentId: string },
+    DocumentTextResult
+  >(functions, 'getDocumentText')
+  return (await callable({ spaceId, documentId })).data
+}
+
 export async function retryDocumentThumbnailApi(
   spaceId: string,
   documentId: string
@@ -113,6 +139,17 @@ export async function retryDocumentThumbnailApi(
     { spaceId: string; documentId: string },
     { success: boolean }
   >(functions, 'retryDocumentThumbnail')
+  await callable({ spaceId, documentId })
+}
+
+export async function retryDocumentTextApi(
+  spaceId: string,
+  documentId: string
+): Promise<void> {
+  const callable = httpsCallable<
+    { spaceId: string; documentId: string },
+    { success: boolean; status: string }
+  >(functions, 'retryDocumentText')
   await callable({ spaceId, documentId })
 }
 

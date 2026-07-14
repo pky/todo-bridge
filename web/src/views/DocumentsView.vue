@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useDocumentsStore } from '@/stores/documents'
 import { useSpaceStore } from '@/stores/space'
 import type { FamilyDocument } from '@/types'
+import type { DocumentTextResult } from '@/services/documentService'
 
 const documentsStore = useDocumentsStore()
 const spaceStore = useSpaceStore()
@@ -14,7 +15,12 @@ const mutatingDocumentId = ref<string | null>(null)
 const accessUrl = ref<string | null>(null)
 const accessLoading = ref(false)
 const accessError = ref<string | null>(null)
+const textResult = ref<DocumentTextResult | null>(null)
+const textLoading = ref(false)
+const textRetrying = ref(false)
+const textError = ref<string | null>(null)
 let accessSequence = 0
+let textSequence = 0
 
 const currentSpaceName = computed(() => {
   const membership = spaceStore.memberships.find((item) => item.spaceId === spaceStore.currentSpaceId)
@@ -81,6 +87,14 @@ const statusLabels: Record<FamilyDocument['status'], string> = {
   trashed: 'ごみ箱',
 }
 
+const ocrStatusLabels: Record<FamilyDocument['ocrStatus'], string> = {
+  pending: '読み取り待ち',
+  processing: '読み取り中',
+  completed: '読み取り完了',
+  failed: '読み取り失敗',
+  skipped: '外部OCR未実行',
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -128,6 +142,39 @@ async function loadSelectedAccessUrl(document: FamilyDocument | null): Promise<v
     accessError.value = error instanceof Error ? error.message : '原本を開けませんでした'
   } finally {
     if (sequence === accessSequence) accessLoading.value = false
+  }
+}
+
+async function loadSelectedText(document: FamilyDocument | null): Promise<void> {
+  const sequence = ++textSequence
+  textResult.value = null
+  textError.value = null
+  if (!document?.ocrObjectKey) return
+
+  textLoading.value = true
+  try {
+    const result = await documentsStore.getText(document.id)
+    if (sequence !== textSequence) return
+    textResult.value = result
+  } catch (error) {
+    if (sequence !== textSequence) return
+    textError.value = error instanceof Error ? error.message : '読み取った文字を取得できませんでした'
+  } finally {
+    if (sequence === textSequence) textLoading.value = false
+  }
+}
+
+async function retrySelectedText(): Promise<void> {
+  const document = selectedDocument.value
+  if (!document || textRetrying.value) return
+  textRetrying.value = true
+  textError.value = null
+  try {
+    await documentsStore.retryText(document.id)
+  } catch (error) {
+    textError.value = error instanceof Error ? error.message : '文字を再読み取りできませんでした'
+  } finally {
+    textRetrying.value = false
   }
 }
 
@@ -191,6 +238,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   accessSequence++
+  textSequence++
   documentsStore.unsubscribe()
 })
 
@@ -204,7 +252,8 @@ watch(
 
 watch(selectedDocument, (document) => {
   void loadSelectedAccessUrl(document)
-})
+  void loadSelectedText(document)
+}, { immediate: true })
 </script>
 
 <template>
@@ -372,6 +421,62 @@ watch(selectedDocument, (document) => {
                 <a :href="accessUrl" target="_blank" rel="noopener" class="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">原本を開く</a>
               </div>
             </div>
+
+            <section data-testid="document-text-section" class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
+              <div class="flex items-center justify-between gap-3">
+                <h3 class="text-sm font-medium text-slate-800">読み取った文字</h3>
+                <span
+                  class="rounded-full px-2 py-1 text-[11px]"
+                  :class="selectedDocument.ocrStatus === 'completed'
+                    ? 'bg-green-100 text-green-700'
+                    : selectedDocument.ocrStatus === 'failed'
+                      ? 'bg-red-100 text-red-700'
+                      : 'bg-amber-100 text-amber-700'"
+                >{{ ocrStatusLabels[selectedDocument.ocrStatus] }}</span>
+              </div>
+
+              <p v-if="selectedDocument.ocrStatus === 'pending' || selectedDocument.ocrStatus === 'processing'" class="mt-3 text-sm text-slate-600">
+                書類から文字を読み取っています。
+              </p>
+              <p v-else-if="textLoading" class="mt-3 text-sm text-slate-500">読み取った文字を取得中...</p>
+              <p v-else-if="textError" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ textError }}</p>
+
+              <div v-else-if="textResult?.pages.length" class="mt-3 space-y-3">
+                <p
+                  v-if="textResult.pendingExternalOcrPageNumbers.length"
+                  class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800"
+                >
+                  {{ textResult.pendingExternalOcrPageNumbers.join('、') }}ページ目は外部OCRが未実行です。
+                </p>
+                <article
+                  v-for="page in textResult.pages"
+                  :key="page.pageNumber"
+                  class="rounded-lg border border-slate-200 bg-white px-3 py-3"
+                >
+                  <div class="mb-2 flex items-center justify-between text-xs text-slate-500">
+                    <span>{{ page.pageNumber }}ページ</span>
+                    <span>{{ page.source === 'pdf_text' ? 'PDF内の文字' : '画像OCR' }}</span>
+                  </div>
+                  <p v-if="page.text" class="whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{{ page.text }}</p>
+                  <p v-else class="text-sm text-slate-400">文字を取得できませんでした。</p>
+                </article>
+              </div>
+              <p v-else-if="selectedDocument.ocrStatus === 'skipped'" class="mt-3 text-sm text-slate-600">
+                写真またはスキャン書類の外部OCRは実行されていません。設定で文字読み取りを有効にすると再実行できます。
+              </p>
+              <p v-else-if="selectedDocument.ocrStatus === 'failed'" class="mt-3 text-sm text-red-700">
+                {{ selectedDocument.ocrError || '文字読み取りに失敗しました。' }}
+              </p>
+              <p v-else class="mt-3 text-sm text-slate-500">読み取れる文字はありませんでした。</p>
+
+              <button
+                v-if="selectedDocument.status !== 'trashed' && ['failed', 'skipped'].includes(selectedDocument.ocrStatus)"
+                type="button"
+                :disabled="textRetrying"
+                class="mt-3 w-full rounded-lg border border-blue-300 bg-white px-3 py-2 text-sm font-medium text-blue-700 disabled:opacity-50"
+                @click="retrySelectedText"
+              >{{ textRetrying ? '再読み取り中...' : '文字を再読み取り' }}</button>
+            </section>
           </div>
           <div class="border-t border-slate-100 p-4">
             <button

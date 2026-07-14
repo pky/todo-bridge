@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import * as functions from 'firebase-functions/v1'
 import { buildOriginalObjectKey, isObjectKeyInDocument } from './objectKeys'
+import { decodeDocumentTextArtifact } from './ocr/artifact'
 import { createObjectStorageProvider, isFunctionsEmulator } from './providers/providerFactory'
 import {
   DEFAULT_DOCUMENT_LIMIT_BYTES,
@@ -276,5 +277,48 @@ export const getDocumentThumbnailAccessUrl = documentRuntime
     return {
       url: access.url,
       expiresAt: access.expiresAt.toISOString(),
+    }
+  })
+
+export const getDocumentText = documentRuntime
+  .region('asia-northeast1')
+  .https.onCall(async (data, context) => {
+    const { spaceId, documentId } = parseDocumentRequest(data)
+    await requireActiveMember(context, spaceId)
+    const documentSnapshot = await db.doc(`spaces/${spaceId}/documents/${documentId}`).get()
+    if (!documentSnapshot.exists) {
+      throw new functions.https.HttpsError('not-found', '書類が見つかりません')
+    }
+    const document = documentSnapshot.data() as FamilyDocument
+    if (!document.ocrObjectKey) {
+      return {
+        status: document.ocrStatus,
+        provider: null,
+        pageCount: document.pageCount,
+        pendingExternalOcrPageNumbers: [],
+        pages: [],
+      }
+    }
+    if (!isObjectKeyInDocument(document.ocrObjectKey, spaceId, documentId)) {
+      throw new functions.https.HttpsError('failed-precondition', 'OCR成果物の保存先が不正です')
+    }
+    const stored = await createObjectStorageProvider().readObject(document.ocrObjectKey)
+    if (!stored) {
+      throw new functions.https.HttpsError('failed-precondition', 'OCR成果物が見つかりません')
+    }
+    try {
+      const artifact = await decodeDocumentTextArtifact(stored)
+      if (artifact.analysisVersion !== document.analysisVersion) {
+        throw new Error('解析versionが一致しません')
+      }
+      return {
+        status: document.ocrStatus,
+        provider: artifact.provider,
+        pageCount: artifact.pageCount,
+        pendingExternalOcrPageNumbers: artifact.pendingExternalOcrPageNumbers,
+        pages: artifact.pages,
+      }
+    } catch {
+      throw new functions.https.HttpsError('failed-precondition', 'OCR成果物を読み込めませんでした')
     }
   })

@@ -20,6 +20,7 @@ const {
   CloudVisionOcrProvider,
 } = require('../lib/documents/providers/cloudVisionOcr')
 const {
+  decodeDocumentTextArtifact,
   generatePdfTextArtifact,
 } = require('../lib/documents/ocr/artifact')
 
@@ -336,4 +337,11 @@ test('原本hashと解析versionが同じPDF成果物を再利用する', async 
   assert.equal(first.reused, false)
   assert.equal(second.reused, true)
   assert.equal(memory.getWriteCount(), 1)
+})
+
+test('圧縮されていない不正なOCR成果物を拒否する', async () => {
+  await assert.rejects(
+    () => decodeDocumentTextArtifact(Buffer.from('{"pages":[]}')),
+    /OCR成果物を読み込めませんでした/
+  )
 })

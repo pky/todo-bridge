@@ -8,6 +8,8 @@ const {
   uploadDocumentMock,
   getDocumentAccessUrlApiMock,
   getDocumentThumbnailAccessUrlApiMock,
+  getDocumentTextApiMock,
+  retryDocumentTextApiMock,
   retryDocumentThumbnailApiMock,
   trashDocumentApiMock,
   restoreDocumentApiMock,
@@ -17,6 +19,8 @@ const {
   uploadDocumentMock: vi.fn(),
   getDocumentAccessUrlApiMock: vi.fn(),
   getDocumentThumbnailAccessUrlApiMock: vi.fn(),
+  getDocumentTextApiMock: vi.fn(),
+  retryDocumentTextApiMock: vi.fn(),
   retryDocumentThumbnailApiMock: vi.fn(),
   trashDocumentApiMock: vi.fn(),
   restoreDocumentApiMock: vi.fn(),
@@ -37,6 +41,8 @@ vi.mock('@/services/documentService', () => ({
   uploadDocument: uploadDocumentMock,
   getDocumentAccessUrlApi: getDocumentAccessUrlApiMock,
   getDocumentThumbnailAccessUrlApi: getDocumentThumbnailAccessUrlApiMock,
+  getDocumentTextApi: getDocumentTextApiMock,
+  retryDocumentTextApi: retryDocumentTextApiMock,
   retryDocumentThumbnailApi: retryDocumentThumbnailApiMock,
   trashDocumentApi: trashDocumentApiMock,
   restoreDocumentApi: restoreDocumentApiMock,
@@ -134,5 +140,16 @@ describe('documents store', () => {
     expect(trashDocumentApiMock).toHaveBeenCalledWith('space-1', 'document-1')
     expect(restoreDocumentApiMock).toHaveBeenCalledWith('space-1', 'document-1')
     expect(permanentlyDeleteDocumentApiMock).toHaveBeenCalledWith('space-1', 'document-1')
+  })
+
+  it('OCR本文取得と再読み取りを現在のspaceIdへ要求する', async () => {
+    getDocumentTextApiMock.mockResolvedValue({ pages: [] })
+    const store = useDocumentsStore()
+
+    await store.getText('document-1')
+    await store.retryText('document-1')
+
+    expect(getDocumentTextApiMock).toHaveBeenCalledWith('space-1', 'document-1')
+    expect(retryDocumentTextApiMock).toHaveBeenCalledWith('space-1', 'document-1')
   })
 })

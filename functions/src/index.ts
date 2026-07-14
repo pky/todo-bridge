@@ -46,11 +46,13 @@ export {
   createDocumentUpload,
   completeDocumentUpload,
   getDocumentAccessUrl,
+  getDocumentText,
   getDocumentThumbnailAccessUrl,
 } from './documents/api'
 export {
   extractDocumentTextOnUpload,
   generateDocumentThumbnailOnUpload,
+  retryDocumentText,
   retryDocumentThumbnail,
 } from './documents/jobs'
 export {

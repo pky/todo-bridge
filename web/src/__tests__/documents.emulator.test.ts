@@ -6,6 +6,7 @@ import { validateCurrentUserAccessApi } from '@/services/cloudFunctionsService'
 import {
   getDocumentAccessUrlApi,
   getDocumentThumbnailAccessUrlApi,
+  getDocumentTextApi,
   permanentlyDeleteDocumentApi,
   restoreDocumentApi,
   trashDocumentApi,
@@ -128,6 +129,13 @@ describeWithEmulators('家族書類ボックス Emulator結合', () => {
       ocrStatus: 'skipped',
       ocrObjectKey: expect.stringContaining('/analysis/v1/ocr.json.gz'),
       ocrSizeBytes: expect.any(Number),
+    }))
+    const textResult = await getDocumentTextApi(spaceId, documentId)
+    expect(textResult.pages).toHaveLength(2)
+    expect(textResult.pages[0]).toEqual(expect.objectContaining({
+      pageNumber: 1,
+      text: expect.stringContaining('TodoBridge page 1'),
+      source: 'pdf_text',
     }))
     const thumbnailAccess = await getDocumentThumbnailAccessUrlApi(spaceId, documentId)
     const thumbnailResponse = await fetch(thumbnailAccess.url)

@@ -11,13 +11,16 @@ import {
 import { db } from '@/services/firebase'
 import {
   getDocumentAccessUrlApi,
+  getDocumentTextApi,
   getDocumentThumbnailAccessUrlApi,
+  retryDocumentTextApi,
   retryDocumentThumbnailApi,
   permanentlyDeleteDocumentApi,
   restoreDocumentApi,
   trashDocumentApi,
   uploadDocument,
   type DocumentAccessResult,
+  type DocumentTextResult,
 } from '@/services/documentService'
 import { useSpaceStore } from './space'
 import type { DocumentUsage, FamilyDocument, FamilyDocumentSource } from '@/types'
@@ -164,6 +167,10 @@ export const useDocumentsStore = defineStore('documents', () => {
     return getDocumentAccessUrlApi(requireCurrentSpaceId(), documentId)
   }
 
+  async function getText(documentId: string): Promise<DocumentTextResult> {
+    return getDocumentTextApi(requireCurrentSpaceId(), documentId)
+  }
+
   async function reloadThumbnail(documentId: string): Promise<void> {
     const spaceId = requireCurrentSpaceId()
     const nextUrls = { ...thumbnailUrls.value }
@@ -176,6 +183,18 @@ export const useDocumentsStore = defineStore('documents', () => {
     const spaceId = requireCurrentSpaceId()
     await retryDocumentThumbnailApi(spaceId, documentId)
     await reloadThumbnail(documentId)
+  }
+
+  async function retryText(documentId: string): Promise<void> {
+    error.value = null
+    try {
+      await retryDocumentTextApi(requireCurrentSpaceId(), documentId)
+    } catch (retryError) {
+      error.value = retryError instanceof Error
+        ? retryError.message
+        : '文字を再読み取りできませんでした'
+      throw retryError
+    }
   }
 
   async function moveToTrash(documentId: string): Promise<void> {
@@ -233,8 +252,10 @@ export const useDocumentsStore = defineStore('documents', () => {
     selectDocument,
     addDocument,
     getAccessUrl,
+    getText,
     reloadThumbnail,
     retryThumbnail,
+    retryText,
     moveToTrash,
     restoreFromTrash,
     permanentlyDelete,
