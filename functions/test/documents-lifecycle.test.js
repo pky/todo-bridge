@@ -6,6 +6,7 @@ const {
   DEFAULT_DOCUMENT_WARNING_BYTES,
   buildDocumentUsageAfterFinalize,
   buildInitialDocumentRecord,
+  isDocumentUsageCountedStatus,
   validateStoredObject,
 } = require('../lib/documents/lifecycle')
 
@@ -47,6 +48,14 @@ test('アップロード開始用の安全な初期レコードを生成する',
   assert.equal(record.integrityStatus, 'unchecked')
   assert.equal(record.integrityError, null)
   assert.equal(record.integrityCheckedAt, null)
+})
+
+test('保存確定前の書類を容量集計済みとして扱わない', () => {
+  assert.equal(isDocumentUsageCountedStatus('uploading'), false)
+  assert.equal(isDocumentUsageCountedStatus('failed'), false)
+  assert.equal(isDocumentUsageCountedStatus('uploaded'), true)
+  assert.equal(isDocumentUsageCountedStatus('processing'), true)
+  assert.equal(isDocumentUsageCountedStatus('ready'), true)
 })
 
 test('R2のサイズ、MIME、ハッシュが要求と一致することを検証する', () => {

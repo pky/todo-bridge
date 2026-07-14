@@ -84,6 +84,10 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
   }
 
   async createUploadUrl(input: CreateUploadUrlInput): Promise<SignedUpload> {
+    const metadataHeaders: Record<string, string> = {}
+    Object.entries(input.metadata ?? {}).forEach(([key, value]) => {
+      metadataHeaders[`x-amz-meta-${key.toLowerCase()}`] = value
+    })
     const command = new PutObjectCommand({
       Bucket: this.config.bucket,
       Key: input.objectKey,
@@ -92,13 +96,12 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
     })
     const url = await getSignedUrl(this.client, command, {
       expiresIn: input.expiresInSeconds,
+      unhoistableHeaders: new Set(Object.keys(metadataHeaders)),
     })
     const headers: Record<string, string> = {
       'Content-Type': input.contentType,
+      ...metadataHeaders,
     }
-    Object.entries(input.metadata ?? {}).forEach(([key, value]) => {
-      headers[`x-amz-meta-${key.toLowerCase()}`] = value
-    })
 
     return {
       url,

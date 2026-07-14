@@ -2,11 +2,18 @@ import { Timestamp } from 'firebase-admin/firestore'
 import {
   CreateDocumentUploadInput,
   FamilyDocument,
+  FamilyDocumentStatus,
 } from './types'
 import { StoredObject } from './providers/types'
 
 export const DEFAULT_DOCUMENT_LIMIT_BYTES = 10 * 1024 * 1024 * 1024
 export const DEFAULT_DOCUMENT_WARNING_BYTES = 8 * 1024 * 1024 * 1024
+
+export function isDocumentUsageCountedStatus(
+  status: FamilyDocumentStatus | null | undefined
+): boolean {
+  return status === 'uploaded' || status === 'processing' || status === 'ready'
+}
 
 type FirestoreTimestamp = Timestamp
 

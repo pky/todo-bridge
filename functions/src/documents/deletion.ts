@@ -3,6 +3,7 @@ import { Timestamp } from 'firebase-admin/firestore'
 import * as functions from 'firebase-functions/v1'
 import { createObjectStorageProvider, isFunctionsEmulator } from './providers/providerFactory'
 import { FamilyDocument, FamilyDocumentStatus } from './types'
+import { isDocumentUsageCountedStatus } from './lifecycle'
 import { buildDocumentUsageAfterPermanentDelete } from './usage'
 import { buildDocumentDeletionObjectKeys } from './deletionPlan'
 
@@ -17,6 +18,7 @@ const deletionRuntime = functions.runWith(
   isFunctionsEmulator() ? {} : { secrets: R2_SECRETS }
 )
 const RESTORABLE_STATUSES: FamilyDocumentStatus[] = [
+  'uploading',
   'uploaded',
   'processing',
   'ready',
@@ -191,6 +193,7 @@ export const permanentlyDeleteDocument = deletionRuntime
     if (!document) return { success: true, alreadyDeleted: true }
 
     try {
+      const shouldAdjustUsage = isDocumentUsageCountedStatus(document.statusBeforeTrash)
       const provider = createObjectStorageProvider()
       await provider.deleteObjects(buildDocumentDeletionObjectKeys(
         spaceId,
@@ -204,8 +207,10 @@ export const permanentlyDeleteDocument = deletionRuntime
 
       const usageRef = db.doc(`spaces/${spaceId}/usage/documents`)
       const searchSettingsRef = db.doc(`spaces/${spaceId}/settings/documentSearch`)
-      const searchSettingsSnapshot = await searchSettingsRef.get()
-      const searchIndexObjectKey = typeof searchSettingsSnapshot.data()?.objectKey === 'string'
+      const searchSettingsSnapshot = shouldAdjustUsage
+        ? await searchSettingsRef.get()
+        : null
+      const searchIndexObjectKey = typeof searchSettingsSnapshot?.data()?.objectKey === 'string'
         && searchSettingsSnapshot.data()!.objectKey.startsWith(`spaces/${spaceId}/search/`)
         ? searchSettingsSnapshot.data()!.objectKey as string
         : null
@@ -228,18 +233,20 @@ export const permanentlyDeleteDocument = deletionRuntime
           && typeof latestSearchSettingsSnapshot.data()?.sizeBytes === 'number'
           ? latestSearchSettingsSnapshot.data()!.sizeBytes
           : 0
-        const nextUsage = buildDocumentUsageAfterPermanentDelete(
-          usageSnapshot.data(),
-          {
-            originalSizeBytes: latestDocument.sizeBytes,
-            derivedSizeBytes: (latestDocument.thumbnailSizeBytes ?? 0)
-              + (latestDocument.ocrSizeBytes ?? 0)
-              + searchIndexSizeBytes,
-          }
-        )
+        const nextUsage = shouldAdjustUsage
+          ? buildDocumentUsageAfterPermanentDelete(
+            usageSnapshot.data(),
+            {
+              originalSizeBytes: latestDocument.sizeBytes,
+              derivedSizeBytes: (latestDocument.thumbnailSizeBytes ?? 0)
+                + (latestDocument.ocrSizeBytes ?? 0)
+                + searchIndexSizeBytes,
+            }
+          )
+          : null
         transaction.delete(documentRef)
         if (searchIndexSizeBytes > 0) transaction.delete(searchSettingsRef)
-        transaction.set(usageRef, { ...nextUsage, updatedAt: now })
+        if (nextUsage) transaction.set(usageRef, { ...nextUsage, updatedAt: now })
         transaction.create(activityRef, {
           type: 'permanently_deleted',
           documentId,

@@ -15,6 +15,7 @@ const {
   writeLocalObject,
 } = require('../lib/documents/providers/localProvider')
 const {
+  R2ObjectStorageProvider,
   assertDeleteObjectsSucceeded,
   readR2ProviderConfig,
 } = require('../lib/documents/providers/r2Provider')
@@ -71,6 +72,27 @@ test('R2設定を環境変数から読み込む', () => {
     accessKeyId: 'access',
     secretAccessKey: 'secret',
   })
+})
+
+test('R2アップロードURLはメタデータを署名対象ヘッダーに固定する', async () => {
+  const provider = new R2ObjectStorageProvider({
+    accountId: 'account',
+    bucket: 'bucket',
+    accessKeyId: 'access',
+    secretAccessKey: 'secret',
+  })
+  const signed = await provider.createUploadUrl({
+    objectKey: 'spaces/family_1/documents/document_1/original/object_1',
+    contentType: 'image/jpeg',
+    contentLength: 4,
+    expiresInSeconds: 600,
+    metadata: { sha256: 'a'.repeat(64) },
+  })
+  const url = new URL(signed.url)
+
+  assert.equal(url.searchParams.has('x-amz-meta-sha256'), false)
+  assert.match(url.searchParams.get('X-Amz-SignedHeaders'), /x-amz-meta-sha256/)
+  assert.equal(signed.headers['x-amz-meta-sha256'], 'a'.repeat(64))
 })
 
 test('R2の一括削除で部分失敗を検出する', () => {
