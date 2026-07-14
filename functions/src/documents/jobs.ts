@@ -42,20 +42,24 @@ async function processDocumentThumbnail(
   }, { merge: true })
 
   try {
+    const provider = createObjectStorageProvider()
     const thumbnail = await generateDocumentThumbnail(
-      createObjectStorageProvider(),
+      provider,
       spaceId,
       documentId,
       initialDocument
     )
     const usageRef = db.doc(`spaces/${spaceId}/usage/documents`)
-    await db.runTransaction(async (transaction) => {
+    const retained = await db.runTransaction(async (transaction) => {
       const latestSnapshot = await transaction.get(documentRef)
-      if (!latestSnapshot.exists) return
+      if (!latestSnapshot.exists) return false
       const latestDocument = latestSnapshot.data() as FamilyDocument
+      if (!['uploaded', 'processing', 'ready'].includes(latestDocument.status)) {
+        return false
+      }
       if (latestDocument.previewStatus === 'completed'
         && latestDocument.thumbnailObjectKey === thumbnail.objectKey) {
-        return
+        return true
       }
 
       const previousSize = latestDocument.thumbnailSizeBytes ?? 0
@@ -73,7 +77,9 @@ async function processDocumentThumbnail(
         derivedBytes: FieldValue.increment(sizeDelta),
         updatedAt: Timestamp.now(),
       }, { merge: true })
+      return true
     })
+    if (!retained) await provider.deleteObjects([thumbnail.objectKey])
   } catch (error) {
     await db.runTransaction(async (transaction) => {
       const latestSnapshot = await transaction.get(documentRef)

@@ -38,6 +38,9 @@ test('アップロード開始用の安全な初期レコードを生成する',
   assert.equal(record.uploadedBy, 'alice')
   assert.equal(record.sha256, 'a'.repeat(64))
   assert.equal(record.ocrStatus, 'pending')
+  assert.equal(record.deletionStatus, 'idle')
+  assert.equal(record.deletionError, null)
+  assert.equal(record.statusBeforeTrash, null)
 })
 
 test('R2のサイズ、MIME、ハッシュが要求と一致することを検証する', () => {
@@ -84,6 +87,17 @@ test('容量上限を超える確定を拒否する', () => {
   assert.throws(() => buildDocumentUsageAfterFinalize({
     originalBytes: 900,
     derivedBytes: 0,
+    documentCount: 1,
+    processingPageCountThisMonth: 0,
+    limitBytes: 1000,
+    warningBytes: 800,
+  }, 101), /容量上限/)
+})
+
+test('サムネイルを含む合計容量が上限を超える確定を拒否する', () => {
+  assert.throws(() => buildDocumentUsageAfterFinalize({
+    originalBytes: 700,
+    derivedBytes: 200,
     documentCount: 1,
     processingPageCountThisMonth: 0,
     limitBytes: 1000,

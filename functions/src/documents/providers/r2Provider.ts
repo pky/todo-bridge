@@ -58,6 +58,15 @@ function buildDownloadDisposition(fileName: string): string {
   return `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`
 }
 
+export function assertDeleteObjectsSucceeded(
+  result: { Errors?: Array<{ Code?: string }> }
+): void {
+  if (!result.Errors?.length) return
+  const codes = [...new Set(result.Errors.map((error) => error.Code).filter(Boolean))]
+  const suffix = codes.length > 0 ? `: ${codes.join(', ')}` : ''
+  throw new Error(`R2オブジェクトの一部を削除できませんでした（${result.Errors.length}件）${suffix}`)
+}
+
 export class R2ObjectStorageProvider implements ObjectStorageProvider {
   private readonly client: S3Client
 
@@ -162,13 +171,14 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
     for (let index = 0; index < objectKeys.length; index += 1000) {
       const keys = objectKeys.slice(index, index + 1000)
       if (keys.length === 0) continue
-      await this.client.send(new DeleteObjectsCommand({
+      const result = await this.client.send(new DeleteObjectsCommand({
         Bucket: this.config.bucket,
         Delete: {
           Objects: keys.map((Key) => ({ Key })),
           Quiet: true,
         },
       }))
+      assertDeleteObjectsSucceeded(result)
     }
   }
 }

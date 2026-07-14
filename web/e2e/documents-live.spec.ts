@@ -60,6 +60,24 @@ test('ローカルログインから書類追加とサムネイル表示まで�
   ])
   await originalPage.close()
 
+  await page.getByRole('button', { name: 'ごみ箱へ移動' }).click()
+  await page.getByRole('button', { name: /^ごみ箱(?:（\d+）)?$/ }).click()
+  await expect(page.getByText('画面確認用.pdf').first()).toBeVisible()
+  await page.getByText('画面確認用.pdf').first().click()
+  await page.getByRole('button', { name: '復元する' }).click()
+  await expect(page.getByText('ごみ箱は空です')).toBeVisible()
+
+  await page.getByRole('button', { name: '書類', exact: true }).click()
+  await page.getByText('画面確認用.pdf').first().click()
+  await page.getByRole('button', { name: 'ごみ箱へ移動' }).click()
+  await page.getByRole('button', { name: /^ごみ箱(?:（\d+）)?$/ }).click()
+  await page.getByText('画面確認用.pdf').first().click()
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByRole('button', { name: '完全に削除' }).click()
+  await expect(page.getByText('ごみ箱は空です')).toBeVisible()
+
+  await page.getByRole('button', { name: '書類', exact: true }).click()
+
   await fileInput.setInputFiles({
     name: 'サムネイル確認.png',
     mimeType: 'image/png',

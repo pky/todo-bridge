@@ -52,6 +52,11 @@ export {
   generateDocumentThumbnailOnUpload,
   retryDocumentThumbnail,
 } from './documents/jobs'
+export {
+  permanentlyDeleteDocument,
+  restoreDocument,
+  trashDocument,
+} from './documents/deletion'
 export { localDocumentObject } from './documents/providers/localObjectHttp'
 
 // TODO: カレンダー自動登録機能を一時無効化

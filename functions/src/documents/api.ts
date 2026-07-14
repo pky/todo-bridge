@@ -5,6 +5,7 @@ import * as functions from 'firebase-functions/v1'
 import { buildOriginalObjectKey, isObjectKeyInDocument } from './objectKeys'
 import { createObjectStorageProvider, isFunctionsEmulator } from './providers/providerFactory'
 import {
+  DEFAULT_DOCUMENT_LIMIT_BYTES,
   buildDocumentUsageAfterFinalize,
   buildInitialDocumentRecord,
   validateStoredObject,
@@ -95,11 +96,14 @@ export const createDocumentUpload = documentRuntime
     const currentUsage = usageSnapshot.data()
     const limitBytes = typeof currentUsage?.limitBytes === 'number'
       ? currentUsage.limitBytes
-      : 5 * 1024 * 1024 * 1024
+      : DEFAULT_DOCUMENT_LIMIT_BYTES
     const originalBytes = typeof currentUsage?.originalBytes === 'number'
       ? currentUsage.originalBytes
       : 0
-    if (originalBytes + input.sizeBytes > limitBytes) {
+    const derivedBytes = typeof currentUsage?.derivedBytes === 'number'
+      ? currentUsage.derivedBytes
+      : 0
+    if (originalBytes + derivedBytes + input.sizeBytes > limitBytes) {
       throw new functions.https.HttpsError('resource-exhausted', '家族スペースの書類容量上限を超えています')
     }
 

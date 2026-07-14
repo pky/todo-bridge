@@ -5,8 +5,8 @@ import {
 } from './types'
 import { StoredObject } from './providers/types'
 
-export const DEFAULT_DOCUMENT_LIMIT_BYTES = 5 * 1024 * 1024 * 1024
-export const DEFAULT_DOCUMENT_WARNING_BYTES = 4 * 1024 * 1024 * 1024
+export const DEFAULT_DOCUMENT_LIMIT_BYTES = 10 * 1024 * 1024 * 1024
+export const DEFAULT_DOCUMENT_WARNING_BYTES = 8 * 1024 * 1024 * 1024
 
 type FirestoreTimestamp = Timestamp
 
@@ -46,6 +46,9 @@ export function buildInitialDocumentRecord(
     updatedAt: now,
     trashedAt: null,
     trashedBy: null,
+    statusBeforeTrash: null,
+    deletionStatus: 'idle',
+    deletionError: null,
   }
 }
 
@@ -80,14 +83,15 @@ export function buildDocumentUsageAfterFinalize(
   addedBytes: number
 ): DocumentUsageSnapshot {
   const originalBytes = current?.originalBytes ?? 0
+  const derivedBytes = current?.derivedBytes ?? 0
   const limitBytes = current?.limitBytes ?? DEFAULT_DOCUMENT_LIMIT_BYTES
-  if (originalBytes + addedBytes > limitBytes) {
+  if (originalBytes + derivedBytes + addedBytes > limitBytes) {
     throw new Error('家族スペースの書類容量上限を超えています')
   }
 
   return {
     originalBytes: originalBytes + addedBytes,
-    derivedBytes: current?.derivedBytes ?? 0,
+    derivedBytes,
     documentCount: (current?.documentCount ?? 0) + 1,
     processingPageCountThisMonth: current?.processingPageCountThisMonth ?? 0,
     limitBytes,

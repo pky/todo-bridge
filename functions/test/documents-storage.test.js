@@ -14,6 +14,7 @@ const {
   writeLocalObject,
 } = require('../lib/documents/providers/localProvider')
 const {
+  assertDeleteObjectsSucceeded,
   readR2ProviderConfig,
 } = require('../lib/documents/providers/r2Provider')
 const {
@@ -61,6 +62,14 @@ test('R2設定を環境変数から読み込む', () => {
     accessKeyId: 'access',
     secretAccessKey: 'secret',
   })
+})
+
+test('R2の一括削除で部分失敗を検出する', () => {
+  assert.doesNotThrow(() => assertDeleteObjectsSucceeded({ Deleted: [{ Key: 'key' }] }))
+  assert.throws(
+    () => assertDeleteObjectsSucceeded({ Errors: [{ Code: 'AccessDenied' }] }),
+    /一部を削除できませんでした（1件）: AccessDenied/
+  )
 })
 
 test('Emulatorではローカルproviderへ切り替える', () => {

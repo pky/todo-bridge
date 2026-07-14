@@ -9,6 +9,8 @@ const documentsStore = useDocumentsStore()
 const spaceStore = useSpaceStore()
 const router = useRouter()
 const documentInput = ref<HTMLInputElement | null>(null)
+const viewMode = ref<'documents' | 'trash'>('documents')
+const mutatingDocumentId = ref<string | null>(null)
 const accessUrl = ref<string | null>(null)
 const accessLoading = ref(false)
 const accessError = ref<string | null>(null)
@@ -22,6 +24,32 @@ const currentSpaceName = computed(() => {
 })
 
 const selectedDocument = computed(() => documentsStore.selectedDocument)
+const visibleDocuments = computed(() => documentsStore.documents.filter((document) => (
+  viewMode.value === 'trash' ? document.status === 'trashed' : document.status !== 'trashed'
+)))
+const trashedDocumentCount = computed(() => documentsStore.documents.filter(
+  (document) => document.status === 'trashed'
+).length)
+const currentMembership = computed(() => spaceStore.memberships.find(
+  (membership) => membership.spaceId === spaceStore.currentSpaceId
+))
+const isCurrentSpaceOwner = computed(() => currentMembership.value?.role === 'owner')
+const usageTotalBytes = computed(() => (
+  (documentsStore.usage?.originalBytes ?? 0) + (documentsStore.usage?.derivedBytes ?? 0)
+))
+const usagePercent = computed(() => {
+  const limitBytes = documentsStore.usage?.limitBytes ?? 0
+  if (limitBytes <= 0) return 0
+  return Math.min(100, usageTotalBytes.value / limitBytes * 100)
+})
+const isAtCapacity = computed(() => {
+  const usage = documentsStore.usage
+  return !!usage && usageTotalBytes.value >= usage.limitBytes
+})
+const isAtWarning = computed(() => {
+  const usage = documentsStore.usage
+  return !!usage && usageTotalBytes.value >= usage.warningBytes
+})
 const canPreviewSelectedDocument = computed(() => (
   !!selectedDocument.value
   && ['uploaded', 'processing', 'ready', 'trashed'].includes(selectedDocument.value.status)
@@ -55,7 +83,8 @@ const statusLabels: Record<FamilyDocument['status'], string> = {
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
 }
 
 function formatDate(document: FamilyDocument): string {
@@ -107,6 +136,51 @@ function closeDetail(): void {
   documentsStore.selectDocument(null)
 }
 
+function switchView(nextView: 'documents' | 'trash'): void {
+  viewMode.value = nextView
+  documentsStore.selectDocument(null)
+}
+
+async function moveSelectedToTrash(): Promise<void> {
+  const document = selectedDocument.value
+  if (!document) return
+  mutatingDocumentId.value = document.id
+  try {
+    await documentsStore.moveToTrash(document.id)
+  } catch {
+    // Storeのエラーを画面に表示する
+  } finally {
+    mutatingDocumentId.value = null
+  }
+}
+
+async function restoreSelectedDocument(): Promise<void> {
+  const document = selectedDocument.value
+  if (!document) return
+  mutatingDocumentId.value = document.id
+  try {
+    await documentsStore.restoreFromTrash(document.id)
+  } catch {
+    // Storeのエラーを画面に表示する
+  } finally {
+    mutatingDocumentId.value = null
+  }
+}
+
+async function permanentlyDeleteSelectedDocument(): Promise<void> {
+  const document = selectedDocument.value
+  if (!document || !isCurrentSpaceOwner.value) return
+  if (!window.confirm(`「${document.name}」を完全に削除します。元に戻せません。`)) return
+  mutatingDocumentId.value = document.id
+  try {
+    await documentsStore.permanentlyDelete(document.id)
+  } catch {
+    // Storeのエラーを画面に表示する
+  } finally {
+    mutatingDocumentId.value = null
+  }
+}
+
 onMounted(async () => {
   await spaceStore.initSpace()
   documentsStore.subscribe()
@@ -147,7 +221,11 @@ watch(selectedDocument, (document) => {
           </div>
         </div>
         <div class="hidden items-center gap-2 sm:flex">
-          <button class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700" @click="openInput(documentInput)">書類・写真を追加</button>
+          <button
+            class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            :disabled="isAtCapacity || viewMode === 'trash'"
+            @click="openInput(documentInput)"
+          >書類・写真を追加</button>
         </div>
       </div>
     </header>
@@ -158,8 +236,8 @@ watch(selectedDocument, (document) => {
       <section class="min-h-[60vh] rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3">
           <div>
-            <h2 class="font-medium">書類</h2>
-            <p class="text-xs text-slate-500">{{ documentsStore.documents.length }}件</p>
+            <h2 class="font-medium">{{ viewMode === 'trash' ? 'ごみ箱' : '書類' }}</h2>
+            <p class="text-xs text-slate-500">{{ visibleDocuments.length }}件</p>
           </div>
           <div v-if="documentsStore.uploading" class="text-right text-xs text-blue-600">
             <div>保存中...</div>
@@ -167,21 +245,40 @@ watch(selectedDocument, (document) => {
           </div>
         </div>
 
-        <div class="border-b border-slate-100 p-3 sm:hidden">
-          <button class="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white" @click="openInput(documentInput)">書類・写真を追加</button>
+        <div class="border-b border-slate-100 px-3 pt-3">
+          <div class="grid grid-cols-2 rounded-lg bg-slate-100 p-1 text-sm">
+            <button class="rounded-md px-3 py-2" :class="viewMode === 'documents' ? 'bg-white font-medium shadow-sm' : 'text-slate-500'" @click="switchView('documents')">書類</button>
+            <button class="rounded-md px-3 py-2" :class="viewMode === 'trash' ? 'bg-white font-medium shadow-sm' : 'text-slate-500'" @click="switchView('trash')">ごみ箱<span v-if="trashedDocumentCount">（{{ trashedDocumentCount }}）</span></button>
+          </div>
+          <div v-if="documentsStore.usage" class="py-3">
+            <div class="flex justify-between text-xs text-slate-500">
+              <span>使用量 {{ formatBytes(usageTotalBytes) }}</span>
+              <span>上限 {{ formatBytes(documentsStore.usage.limitBytes) }}</span>
+            </div>
+            <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+              <div class="h-full rounded-full" :class="isAtWarning ? 'bg-amber-500' : 'bg-blue-500'" :style="{ width: `${usagePercent}%` }" />
+            </div>
+            <p v-if="isAtWarning && !isAtCapacity" class="mt-2 text-xs text-amber-700">容量が警告値に達しています。不要な書類はごみ箱から完全削除してください。</p>
+          </div>
         </div>
+
+        <div v-if="viewMode === 'documents'" class="border-b border-slate-100 p-3 sm:hidden">
+          <button class="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:bg-slate-300" :disabled="isAtCapacity" @click="openInput(documentInput)">書類・写真を追加</button>
+        </div>
+
+        <p v-if="isAtCapacity" class="m-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">容量上限に達したため、新しい書類を追加できません。ごみ箱の書類を完全削除すると空き容量が増えます。</p>
 
         <p v-if="documentsStore.error" class="m-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {{ documentsStore.error }}
         </p>
         <div v-if="documentsStore.loading" class="p-8 text-center text-sm text-slate-500">読み込み中...</div>
-        <div v-else-if="documentsStore.documents.length === 0" class="flex flex-col items-center px-6 py-16 text-center">
+        <div v-else-if="visibleDocuments.length === 0" class="flex flex-col items-center px-6 py-16 text-center">
           <div class="mb-3 text-4xl">📄</div>
-          <h3 class="font-medium">まだ書類がありません</h3>
-          <p class="mt-1 text-sm text-slate-500">撮影、フォトライブラリ、ファイル、Google Driveから追加できます。</p>
+          <h3 class="font-medium">{{ viewMode === 'trash' ? 'ごみ箱は空です' : 'まだ書類がありません' }}</h3>
+          <p v-if="viewMode === 'documents'" class="mt-1 text-sm text-slate-500">撮影、フォトライブラリ、ファイル、Google Driveから追加できます。</p>
         </div>
         <ul v-else class="divide-y divide-slate-100">
-          <li v-for="document in documentsStore.documents" :key="document.id">
+          <li v-for="document in visibleDocuments" :key="document.id">
             <div
               role="button"
               tabindex="0"
@@ -268,6 +365,29 @@ watch(selectedDocument, (document) => {
                 <p class="mt-3 text-sm text-slate-600">この形式はブラウザ内プレビューに対応していません。</p>
                 <a :href="accessUrl" target="_blank" rel="noopener" class="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">原本を開く</a>
               </div>
+            </div>
+          </div>
+          <div class="border-t border-slate-100 p-4">
+            <button
+              v-if="selectedDocument.status !== 'trashed'"
+              class="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+              :disabled="mutatingDocumentId === selectedDocument.id"
+              @click="moveSelectedToTrash"
+            >ごみ箱へ移動</button>
+            <div v-else class="space-y-2">
+              <button
+                class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                :disabled="mutatingDocumentId === selectedDocument.id || selectedDocument.deletionStatus === 'processing'"
+                @click="restoreSelectedDocument"
+              >復元する</button>
+              <button
+                v-if="isCurrentSpaceOwner"
+                class="w-full rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 disabled:opacity-50"
+                :disabled="mutatingDocumentId === selectedDocument.id || selectedDocument.deletionStatus === 'processing'"
+                @click="permanentlyDeleteSelectedDocument"
+              >完全に削除</button>
+              <p v-if="selectedDocument.deletionStatus === 'failed'" class="text-xs text-red-600">{{ selectedDocument.deletionError || '完全削除に失敗しました。もう一度実行できます。' }}</p>
+              <p v-else-if="!isCurrentSpaceOwner" class="text-center text-xs text-slate-500">完全削除は家族スペースの所有者だけが実行できます。</p>
             </div>
           </div>
         </div>

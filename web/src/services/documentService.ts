@@ -107,6 +107,33 @@ export async function retryDocumentThumbnailApi(
   await callable({ spaceId, documentId })
 }
 
+async function callDocumentMutation(
+  functionName: 'trashDocument' | 'restoreDocument' | 'permanentlyDeleteDocument',
+  spaceId: string,
+  documentId: string
+): Promise<void> {
+  const callable = httpsCallable<
+    { spaceId: string; documentId: string },
+    { success: boolean }
+  >(functions, functionName)
+  await callable({ spaceId, documentId })
+}
+
+export async function trashDocumentApi(spaceId: string, documentId: string): Promise<void> {
+  await callDocumentMutation('trashDocument', spaceId, documentId)
+}
+
+export async function restoreDocumentApi(spaceId: string, documentId: string): Promise<void> {
+  await callDocumentMutation('restoreDocument', spaceId, documentId)
+}
+
+export async function permanentlyDeleteDocumentApi(
+  spaceId: string,
+  documentId: string
+): Promise<void> {
+  await callDocumentMutation('permanentlyDeleteDocument', spaceId, documentId)
+}
+
 export async function uploadDocument(
   spaceId: string,
   file: File,

@@ -9,16 +9,23 @@ const {
   getDocumentAccessUrlApiMock,
   getDocumentThumbnailAccessUrlApiMock,
   retryDocumentThumbnailApiMock,
+  trashDocumentApiMock,
+  restoreDocumentApiMock,
+  permanentlyDeleteDocumentApiMock,
 } = vi.hoisted(() => ({
   onSnapshotMock: vi.fn(),
   uploadDocumentMock: vi.fn(),
   getDocumentAccessUrlApiMock: vi.fn(),
   getDocumentThumbnailAccessUrlApiMock: vi.fn(),
   retryDocumentThumbnailApiMock: vi.fn(),
+  trashDocumentApiMock: vi.fn(),
+  restoreDocumentApiMock: vi.fn(),
+  permanentlyDeleteDocumentApiMock: vi.fn(),
 }))
 
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn((...segments: unknown[]) => segments),
+  doc: vi.fn((...segments: unknown[]) => segments),
   query: vi.fn((value: unknown) => value),
   orderBy: vi.fn(() => 'createdAt-desc'),
   onSnapshot: onSnapshotMock,
@@ -31,6 +38,9 @@ vi.mock('@/services/documentService', () => ({
   getDocumentAccessUrlApi: getDocumentAccessUrlApiMock,
   getDocumentThumbnailAccessUrlApi: getDocumentThumbnailAccessUrlApiMock,
   retryDocumentThumbnailApi: retryDocumentThumbnailApiMock,
+  trashDocumentApi: trashDocumentApiMock,
+  restoreDocumentApi: restoreDocumentApiMock,
+  permanentlyDeleteDocumentApi: permanentlyDeleteDocumentApiMock,
 }))
 
 describe('documents store', () => {
@@ -78,7 +88,7 @@ describe('documents store', () => {
     store.subscribe()
 
     expect(firstUnsubscribe).toHaveBeenCalledOnce()
-    expect(onSnapshotMock).toHaveBeenLastCalledWith(
+    expect(onSnapshotMock).toHaveBeenCalledWith(
       [{}, 'spaces', 'space-2', 'documents'],
       expect.any(Function),
       expect.any(Function)
@@ -87,8 +97,8 @@ describe('documents store', () => {
 
   it('生成済みサムネイルだけの署名URLを取得する', async () => {
     let snapshotHandler: ((snapshot: { docs: unknown[] }) => void) | undefined
-    onSnapshotMock.mockImplementation((_query, next) => {
-      snapshotHandler = next
+    onSnapshotMock.mockImplementation((target, next) => {
+      if (Array.isArray(target) && !target.includes('usage')) snapshotHandler = next
       return vi.fn()
     })
     getDocumentThumbnailAccessUrlApiMock.mockResolvedValue({
@@ -112,5 +122,17 @@ describe('documents store', () => {
 
     expect(getDocumentThumbnailAccessUrlApiMock).toHaveBeenCalledWith('space-1', 'document-1')
     expect(store.thumbnailUrls['document-1']).toBe('https://storage.example/thumbnail')
+  })
+
+  it('書類のごみ箱移動、復元、完全削除を現在のspaceIdへ要求する', async () => {
+    const store = useDocumentsStore()
+
+    await store.moveToTrash('document-1')
+    await store.restoreFromTrash('document-1')
+    await store.permanentlyDelete('document-1')
+
+    expect(trashDocumentApiMock).toHaveBeenCalledWith('space-1', 'document-1')
+    expect(restoreDocumentApiMock).toHaveBeenCalledWith('space-1', 'document-1')
+    expect(permanentlyDeleteDocumentApiMock).toHaveBeenCalledWith('space-1', 'document-1')
   })
 })

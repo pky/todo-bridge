@@ -33,6 +33,8 @@ export type FamilyDocumentPreviewStatus =
   | 'failed'
   | 'skipped'
 
+export type FamilyDocumentDeletionStatus = 'idle' | 'processing' | 'failed'
+
 export interface FamilyDocument {
   id: string
   spaceId: string
@@ -60,6 +62,9 @@ export interface FamilyDocument {
   updatedAt: admin.firestore.Timestamp
   trashedAt: admin.firestore.Timestamp | null
   trashedBy: string | null
+  statusBeforeTrash: Exclude<FamilyDocumentStatus, 'trashed'> | null
+  deletionStatus: FamilyDocumentDeletionStatus
+  deletionError: string | null
 }
 
 export type DocumentSuggestionType =

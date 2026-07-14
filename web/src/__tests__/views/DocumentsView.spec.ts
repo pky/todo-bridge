@@ -17,7 +17,7 @@ vi.mock('vue-router', () => ({
 vi.mock('@/stores/space', () => ({
   useSpaceStore: () => ({
     currentSpaceId: 'space-1',
-    memberships: [{ spaceId: 'space-1', displayName: '家族' }],
+    memberships: [{ spaceId: 'space-1', displayName: '家族', role: 'owner' }],
     initSpace: vi.fn().mockResolvedValue(undefined),
   }),
 }))
@@ -33,6 +33,7 @@ vi.mock('@/stores/documents', () => ({
     thumbnailUrls: {},
     thumbnailLoadingIds: [],
     error: null,
+    usage: null,
     subscribe: subscribeMock,
     unsubscribe: unsubscribeMock,
     addDocument: addDocumentMock,
@@ -40,6 +41,9 @@ vi.mock('@/stores/documents', () => ({
     getAccessUrl: getAccessUrlMock,
     reloadThumbnail: vi.fn(),
     retryThumbnail: vi.fn(),
+    moveToTrash: vi.fn(),
+    restoreFromTrash: vi.fn(),
+    permanentlyDelete: vi.fn(),
   }),
 }))
 

@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import {
   collection,
+  doc,
   onSnapshot,
   orderBy,
   query,
@@ -12,11 +13,14 @@ import {
   getDocumentAccessUrlApi,
   getDocumentThumbnailAccessUrlApi,
   retryDocumentThumbnailApi,
+  permanentlyDeleteDocumentApi,
+  restoreDocumentApi,
+  trashDocumentApi,
   uploadDocument,
   type DocumentAccessResult,
 } from '@/services/documentService'
 import { useSpaceStore } from './space'
-import type { FamilyDocument, FamilyDocumentSource } from '@/types'
+import type { DocumentUsage, FamilyDocument, FamilyDocumentSource } from '@/types'
 
 export const useDocumentsStore = defineStore('documents', () => {
   const documents = ref<FamilyDocument[]>([])
@@ -27,7 +31,9 @@ export const useDocumentsStore = defineStore('documents', () => {
   const thumbnailUrls = ref<Record<string, string>>({})
   const thumbnailLoadingIds = ref<string[]>([])
   const error = ref<string | null>(null)
+  const usage = ref<DocumentUsage | null>(null)
   let unsubscribeSnapshot: Unsubscribe | null = null
+  let unsubscribeUsage: Unsubscribe | null = null
   let subscribedSpaceId: string | null = null
 
   async function loadThumbnailUrl(
@@ -106,16 +112,29 @@ export const useDocumentsStore = defineStore('documents', () => {
         loading.value = false
       }
     )
+    unsubscribeUsage = onSnapshot(
+      doc(db, 'spaces', spaceId, 'usage', 'documents'),
+      (snapshot) => {
+        if (subscribedSpaceId !== spaceId) return
+        usage.value = snapshot.exists() ? snapshot.data() as DocumentUsage : null
+      },
+      () => {
+        // 容量表示の失敗は書類一覧全体のエラーにしない
+      }
+    )
   }
 
   function unsubscribe(): void {
     unsubscribeSnapshot?.()
+    unsubscribeUsage?.()
     unsubscribeSnapshot = null
+    unsubscribeUsage = null
     subscribedSpaceId = null
     documents.value = []
     selectedDocumentId.value = null
     thumbnailUrls.value = {}
     thumbnailLoadingIds.value = []
+    usage.value = null
     loading.value = false
   }
 
@@ -159,6 +178,45 @@ export const useDocumentsStore = defineStore('documents', () => {
     await reloadThumbnail(documentId)
   }
 
+  async function moveToTrash(documentId: string): Promise<void> {
+    error.value = null
+    try {
+      await trashDocumentApi(requireCurrentSpaceId(), documentId)
+      if (selectedDocumentId.value === documentId) selectedDocumentId.value = null
+    } catch (mutationError) {
+      error.value = mutationError instanceof Error
+        ? mutationError.message
+        : '書類をごみ箱へ移動できませんでした'
+      throw mutationError
+    }
+  }
+
+  async function restoreFromTrash(documentId: string): Promise<void> {
+    error.value = null
+    try {
+      await restoreDocumentApi(requireCurrentSpaceId(), documentId)
+      if (selectedDocumentId.value === documentId) selectedDocumentId.value = null
+    } catch (mutationError) {
+      error.value = mutationError instanceof Error
+        ? mutationError.message
+        : '書類を復元できませんでした'
+      throw mutationError
+    }
+  }
+
+  async function permanentlyDelete(documentId: string): Promise<void> {
+    error.value = null
+    try {
+      await permanentlyDeleteDocumentApi(requireCurrentSpaceId(), documentId)
+      if (selectedDocumentId.value === documentId) selectedDocumentId.value = null
+    } catch (mutationError) {
+      error.value = mutationError instanceof Error
+        ? mutationError.message
+        : '書類を完全削除できませんでした'
+      throw mutationError
+    }
+  }
+
   return {
     documents,
     selectedDocumentId,
@@ -169,6 +227,7 @@ export const useDocumentsStore = defineStore('documents', () => {
     thumbnailUrls,
     thumbnailLoadingIds,
     error,
+    usage,
     subscribe,
     unsubscribe,
     selectDocument,
@@ -176,5 +235,8 @@ export const useDocumentsStore = defineStore('documents', () => {
     getAccessUrl,
     reloadThumbnail,
     retryThumbnail,
+    moveToTrash,
+    restoreFromTrash,
+    permanentlyDelete,
   }
 })

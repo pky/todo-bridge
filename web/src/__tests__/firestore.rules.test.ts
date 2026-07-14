@@ -213,8 +213,8 @@ describeWithEmulator('firestore rules', () => {
       derivedBytes: 256,
       documentCount: 1,
       processingPageCountThisMonth: 1,
-      limitBytes: 5 * 1024 * 1024 * 1024,
-      warningBytes: 4 * 1024 * 1024 * 1024,
+      limitBytes: 10 * 1024 * 1024 * 1024,
+      warningBytes: 8 * 1024 * 1024 * 1024,
       updatedAt: Timestamp.fromMillis(1),
     })
 
@@ -271,8 +271,8 @@ describeWithEmulator('firestore rules', () => {
       derivedBytes: 256,
       documentCount: 1,
       processingPageCountThisMonth: 1,
-      limitBytes: 5 * 1024 * 1024 * 1024,
-      warningBytes: 4 * 1024 * 1024 * 1024,
+      limitBytes: 10 * 1024 * 1024 * 1024,
+      warningBytes: 8 * 1024 * 1024 * 1024,
       updatedAt: Timestamp.fromMillis(1),
     })
 

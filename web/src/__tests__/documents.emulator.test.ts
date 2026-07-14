@@ -6,6 +6,9 @@ import { validateCurrentUserAccessApi } from '@/services/cloudFunctionsService'
 import {
   getDocumentAccessUrlApi,
   getDocumentThumbnailAccessUrlApi,
+  permanentlyDeleteDocumentApi,
+  restoreDocumentApi,
+  trashDocumentApi,
   uploadDocument,
 } from '@/services/documentService'
 
@@ -113,6 +116,33 @@ describeWithEmulators('家族書類ボックス Emulator結合', () => {
     const thumbnailResponse = await fetch(thumbnailAccess.url)
     expect(thumbnailResponse.ok).toBe(true)
     expect(thumbnailResponse.headers.get('content-type')).toContain('image/webp')
+
+    await trashDocumentApi(spaceId, documentId)
+    const trashedSnapshot = await getDoc(doc(db, 'spaces', spaceId, 'documents', documentId))
+    expect(trashedSnapshot.data()).toEqual(expect.objectContaining({
+      status: 'trashed',
+      statusBeforeTrash: 'uploaded',
+      trashedBy: userId,
+    }))
+
+    await restoreDocumentApi(spaceId, documentId)
+    const restoredSnapshot = await getDoc(doc(db, 'spaces', spaceId, 'documents', documentId))
+    expect(restoredSnapshot.data()).toEqual(expect.objectContaining({
+      status: 'uploaded',
+      statusBeforeTrash: null,
+      trashedAt: null,
+    }))
+
+    await trashDocumentApi(spaceId, documentId)
+    await permanentlyDeleteDocumentApi(spaceId, documentId)
+    expect((await getDoc(doc(db, 'spaces', spaceId, 'documents', documentId))).exists()).toBe(false)
+    await expect(getDocumentAccessUrlApi(spaceId, documentId)).rejects.toThrow()
+    const usageSnapshot = await getDoc(doc(db, 'spaces', spaceId, 'usage', 'documents'))
+    expect(usageSnapshot.data()).toEqual(expect.objectContaining({
+      originalBytes: 0,
+      derivedBytes: 0,
+      documentCount: 0,
+    }))
   }, 20_000)
 
   it('画像を追加するとWebPサムネイルを取得できる', async () => {
