@@ -49,6 +49,7 @@ export {
   getDocumentThumbnailAccessUrl,
 } from './documents/api'
 export {
+  extractDocumentTextOnUpload,
   generateDocumentThumbnailOnUpload,
   retryDocumentThumbnail,
 } from './documents/jobs'

@@ -1,6 +1,8 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const sharp = require('sharp')
+const { gunzip } = require('node:zlib')
+const { promisify } = require('node:util')
 
 const {
   MAX_INVALID_CHARACTER_RATIO,
@@ -17,6 +19,44 @@ const {
   CLOUD_VISION_EU_ENDPOINT,
   CloudVisionOcrProvider,
 } = require('../lib/documents/providers/cloudVisionOcr')
+const {
+  generatePdfTextArtifact,
+} = require('../lib/documents/ocr/artifact')
+
+const gunzipAsync = promisify(gunzip)
+
+function createMemoryObjectProvider(initialObjects) {
+  const objects = new Map(initialObjects.map(([objectKey, data, metadata = {}]) => [
+    objectKey,
+    { data, metadata },
+  ]))
+  let writeCount = 0
+  return {
+    provider: {
+      createUploadUrl: async () => { throw new Error('未使用') },
+      createDownloadUrl: async () => { throw new Error('未使用') },
+      stat: async (objectKey) => {
+        const object = objects.get(objectKey)
+        return object ? {
+          objectKey,
+          sizeBytes: object.data.length,
+          contentType: null,
+          etag: null,
+          lastModifiedAt: null,
+          metadata: object.metadata,
+        } : null
+      },
+      listObjects: async () => [],
+      readObject: async (objectKey) => objects.get(objectKey)?.data ?? null,
+      writeObject: async ({ objectKey, data, metadata = {} }) => {
+        writeCount += 1
+        objects.set(objectKey, { data, metadata })
+      },
+      deleteObjects: async () => {},
+    },
+    getWriteCount: () => writeCount,
+  }
+}
 
 function createSourcePdf(pageTexts) {
   const pageCount = pageTexts.length
@@ -248,4 +288,52 @@ test('Cloud Visionのエラー本文を上位へ露出しない', async () => {
     }),
     /Cloud Visionの処理に失敗しました（7）/
   )
+})
+
+test('PDF文字層を圧縮成果物として保存する', async () => {
+  const originalObjectKey = 'spaces/family_1/documents/document_1/original/object_1'
+  const memory = createMemoryObjectProvider([[
+    originalObjectKey,
+    createSourcePdf(['This page contains enough searchable text', null]),
+  ]])
+  const result = await generatePdfTextArtifact(
+    memory.provider,
+    'family_1',
+    'document_1',
+    { mimeType: 'application/pdf', originalObjectKey, analysisVersion: 1 }
+  )
+  const storedJson = JSON.parse((await gunzipAsync(result.data)).toString('utf8'))
+
+  assert.equal(result.objectKey, 'spaces/family_1/documents/document_1/analysis/v1/ocr.json.gz')
+  assert.equal(result.reused, false)
+  assert.equal(storedJson.pageCount, 2)
+  assert.deepEqual(storedJson.pendingExternalOcrPageNumbers, [2])
+  assert.equal(storedJson.pages[0].text.includes('searchable text'), true)
+  assert.equal(memory.getWriteCount(), 1)
+})
+
+test('原本hashと解析versionが同じPDF成果物を再利用する', async () => {
+  const originalObjectKey = 'spaces/family_1/documents/document_1/original/object_1'
+  const memory = createMemoryObjectProvider([[
+    originalObjectKey,
+    createSourcePdf(['This page contains enough searchable text']),
+  ]])
+  const document = { mimeType: 'application/pdf', originalObjectKey, analysisVersion: 1 }
+
+  const first = await generatePdfTextArtifact(
+    memory.provider,
+    'family_1',
+    'document_1',
+    document
+  )
+  const second = await generatePdfTextArtifact(
+    memory.provider,
+    'family_1',
+    'document_1',
+    document
+  )
+
+  assert.equal(first.reused, false)
+  assert.equal(second.reused, true)
+  assert.equal(memory.getWriteCount(), 1)
 })

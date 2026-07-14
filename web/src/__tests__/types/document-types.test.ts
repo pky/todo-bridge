@@ -15,6 +15,8 @@ describe('家族書類ボックス用型定義', () => {
       status: 'uploading' | 'uploaded' | 'processing' | 'ready' | 'failed' | 'trashed'
       originalObjectKey: string
       uploadedBy: string
+      ocrObjectKey: string | null
+      ocrSizeBytes: number
       analysisVersion: number
     }>()
   })

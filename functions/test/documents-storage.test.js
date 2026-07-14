@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 
 const {
   buildOriginalObjectKey,
+  buildOcrResultObjectKey,
   buildThumbnailObjectKey,
   isObjectKeyInDocument,
 } = require('../lib/documents/objectKeys')
@@ -41,6 +42,14 @@ test('version固定のサムネイルキーを生成する', () => {
     'spaces/family_1/documents/document_1/thumbnail/v1.webp'
   )
   assert.throws(() => buildThumbnailObjectKey('family_1', 'document_1', 0), /version/)
+})
+
+test('解析version固定のOCR成果物キーを生成する', () => {
+  assert.equal(
+    buildOcrResultObjectKey('family_1', 'document_1', 2),
+    'spaces/family_1/documents/document_1/analysis/v2/ocr.json.gz'
+  )
+  assert.throws(() => buildOcrResultObjectKey('family_1', 'document_1', 0), /version/)
 })
 
 test('R2設定の不足項目を秘密値なしで報告する', () => {

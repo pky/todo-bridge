@@ -10,11 +10,14 @@ test('完全削除対象に原本とversion固定サムネイルを含める', (
     thumbnailObjectKey: null,
     previewVersion: 1,
     mimeType: 'application/pdf',
+    ocrObjectKey: null,
+    analysisVersion: 1,
   })
 
   assert.deepEqual(keys, [
     'spaces/family_1/documents/document_1/original/object_1',
     'spaces/family_1/documents/document_1/thumbnail/v1.webp',
+    'spaces/family_1/documents/document_1/analysis/v1/ocr.json.gz',
   ])
 })
 
@@ -24,6 +27,8 @@ test('別書類のオブジェクトキーを完全削除対象にしない', ()
     thumbnailObjectKey: null,
     previewVersion: 1,
     mimeType: 'application/pdf',
+    ocrObjectKey: null,
+    analysisVersion: 1,
   }), /原本のオブジェクトキー/)
 })
 

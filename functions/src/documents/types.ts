@@ -56,6 +56,9 @@ export interface FamilyDocument {
   uploadedBy: string
   documentDate: admin.firestore.Timestamp | null
   ocrStatus: FamilyDocumentOcrStatus
+  ocrObjectKey: string | null
+  ocrSizeBytes: number
+  ocrError: string | null
   analysisVersion: number
   searchIndexVersion: number | null
   calendarEventIds: string[]

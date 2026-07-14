@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import * as functions from 'firebase-functions/v1'
+import { generatePdfTextArtifact } from './ocr/artifact'
 import { createObjectStorageProvider, isFunctionsEmulator } from './providers/providerFactory'
 import { generateDocumentThumbnail, supportsDocumentThumbnail } from './preview'
 import { FamilyDocument } from './types'
@@ -18,6 +19,11 @@ const previewRuntime = functions.runWith(
 
 function normalizePreviewError(error: unknown): string {
   const message = error instanceof Error ? error.message : 'サムネイル生成に失敗しました'
+  return message.slice(0, 200)
+}
+
+function normalizeOcrError(error: unknown): string {
+  const message = error instanceof Error ? error.message : 'PDF文字抽出に失敗しました'
   return message.slice(0, 200)
 }
 
@@ -96,6 +102,83 @@ async function processDocumentThumbnail(
   }
 }
 
+async function processDocumentText(
+  spaceId: string,
+  documentId: string
+): Promise<void> {
+  const documentRef = db.doc(`spaces/${spaceId}/documents/${documentId}`)
+  const initialSnapshot = await documentRef.get()
+  if (!initialSnapshot.exists) return
+  const initialDocument = initialSnapshot.data() as FamilyDocument
+  if (!['uploaded', 'processing', 'ready'].includes(initialDocument.status)
+    || initialDocument.ocrStatus !== 'pending') {
+    return
+  }
+
+  if (initialDocument.mimeType !== 'application/pdf') {
+    await documentRef.set({
+      ocrStatus: 'skipped',
+      ocrError: null,
+      updatedAt: Timestamp.now(),
+    }, { merge: true })
+    return
+  }
+
+  await documentRef.set({
+    ocrStatus: 'processing',
+    ocrError: null,
+    updatedAt: Timestamp.now(),
+  }, { merge: true })
+
+  try {
+    const provider = createObjectStorageProvider()
+    const generated = await generatePdfTextArtifact(
+      provider,
+      spaceId,
+      documentId,
+      initialDocument
+    )
+    const usageRef = db.doc(`spaces/${spaceId}/usage/documents`)
+    await db.runTransaction(async (transaction) => {
+      const latestSnapshot = await transaction.get(documentRef)
+      if (!latestSnapshot.exists) return
+      const latestDocument = latestSnapshot.data() as FamilyDocument
+      if (!['uploaded', 'processing', 'ready'].includes(latestDocument.status)
+        || latestDocument.analysisVersion !== initialDocument.analysisVersion) {
+        return
+      }
+      const previousSize = latestDocument.ocrSizeBytes ?? 0
+      transaction.update(documentRef, {
+        ocrStatus: generated.artifact.pendingExternalOcrPageNumbers.length === 0
+          ? 'completed'
+          : 'skipped',
+        ocrObjectKey: generated.objectKey,
+        ocrSizeBytes: generated.data.length,
+        ocrError: null,
+        pageCount: generated.artifact.pageCount,
+        updatedAt: Timestamp.now(),
+      })
+      transaction.set(usageRef, {
+        derivedBytes: FieldValue.increment(generated.data.length - previousSize),
+        updatedAt: Timestamp.now(),
+      }, { merge: true })
+    })
+  } catch (error) {
+    await db.runTransaction(async (transaction) => {
+      const latestSnapshot = await transaction.get(documentRef)
+      if (!latestSnapshot.exists) return
+      const latestDocument = latestSnapshot.data() as FamilyDocument
+      if (latestDocument.ocrStatus !== 'processing') return
+      transaction.update(documentRef, {
+        ocrStatus: 'failed',
+        ocrError: normalizeOcrError(error),
+        updatedAt: Timestamp.now(),
+      })
+    })
+    throw error
+  }
+}
+
 export const generateDocumentThumbnailOnUpload = previewRuntime
   .region('asia-northeast1')
   .firestore.document('spaces/{spaceId}/documents/{documentId}')
@@ -104,6 +187,18 @@ export const generateDocumentThumbnailOnUpload = previewRuntime
     const after = change.after.data() as FamilyDocument
     if (before.status === 'uploaded' || after.status !== 'uploaded') return
     await processDocumentThumbnail(context.params.spaceId, context.params.documentId)
+  })
+
+export const extractDocumentTextOnUpload = previewRuntime
+  .region('asia-northeast1')
+  .firestore.document('spaces/{spaceId}/documents/{documentId}')
+  .onUpdate(async (change, context) => {
+    const before = change.before.data() as FamilyDocument
+    const after = change.after.data() as FamilyDocument
+    const becameUploaded = before.status !== 'uploaded' && after.status === 'uploaded'
+    const queuedAgain = before.ocrStatus !== 'pending' && after.ocrStatus === 'pending'
+    if (!becameUploaded && !queuedAgain) return
+    await processDocumentText(context.params.spaceId, context.params.documentId)
   })
 
 export const retryDocumentThumbnail = previewRuntime

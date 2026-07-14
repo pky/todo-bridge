@@ -21,6 +21,7 @@ function createDocument(overrides = {}) {
     updatedAtMs: nowMs,
     originalObjectKey: 'spaces/family_1/documents/document_1/original/object_1',
     thumbnailObjectKey: 'spaces/family_1/documents/document_1/thumbnail/v1.webp',
+    ocrObjectKey: 'spaces/family_1/documents/document_1/analysis/v1/ocr.json.gz',
     integrityStatus: 'unchecked',
     ...overrides,
   }
@@ -42,6 +43,10 @@ test('書類オブジェクトキーからspaceと用途を判定する', () => 
   )
   assert.deepEqual(
     parseDocumentObjectKey('spaces/family_1/documents/document_1/thumbnail/v1.webp'),
+    { spaceId: 'family_1', documentId: 'document_1', kind: 'derived' }
+  )
+  assert.deepEqual(
+    parseDocumentObjectKey('spaces/family_1/documents/document_1/analysis/v1/ocr.json.gz'),
     { spaceId: 'family_1', documentId: 'document_1', kind: 'derived' }
   )
   assert.equal(parseDocumentObjectKey('unrelated/object'), null)
@@ -98,6 +103,7 @@ test('原本欠損と復旧を整合性更新として検出する', () => {
     documentId: 'document_2',
     originalObjectKey: 'spaces/family_1/documents/document_2/original/object_2',
     thumbnailObjectKey: null,
+    ocrObjectKey: null,
     integrityStatus: 'missing_original',
   })
   const updates = buildDocumentIntegrityUpdates(
@@ -116,13 +122,14 @@ test('R2実オブジェクトから原本と生成物の容量を再集計する
   const usage = buildReconciledDocumentUsage([document], [
     createObject(document.originalObjectKey, { sizeBytes: 1000 }),
     createObject(document.thumbnailObjectKey, { sizeBytes: 100 }),
+    createObject(document.ocrObjectKey, { sizeBytes: 50 }),
     createObject('spaces/family_1/documents/orphan_1/original/object_2', { sizeBytes: 500 }),
   ])
 
   assert.deepEqual(usage, {
     family_1: {
       originalBytes: 1500,
-      derivedBytes: 100,
+      derivedBytes: 150,
       documentCount: 1,
     },
   })

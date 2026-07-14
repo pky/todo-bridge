@@ -37,6 +37,7 @@ function toConsistencyDocument(
     updatedAtMs,
     originalObjectKey: data.originalObjectKey,
     thumbnailObjectKey: data.thumbnailObjectKey ?? null,
+    ocrObjectKey: data.ocrObjectKey ?? null,
     integrityStatus: data.integrityStatus ?? 'unchecked',
   }
 }

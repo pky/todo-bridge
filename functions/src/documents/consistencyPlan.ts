@@ -11,6 +11,7 @@ export interface ConsistencyDocument {
   updatedAtMs: number
   originalObjectKey: string
   thumbnailObjectKey: string | null
+  ocrObjectKey: string | null
   integrityStatus?: 'unchecked' | 'ok' | 'missing_original'
 }
 
@@ -53,7 +54,7 @@ export function shouldApplyReconciledUsage(
 
 export function parseDocumentObjectKey(objectKey: string): ParsedDocumentObjectKey | null {
   const match = objectKey.match(
-    /^spaces\/([^/]+)\/documents\/([^/]+)\/(original\/[^/]+|thumbnail\/v\d+\.webp)$/
+    /^spaces\/([^/]+)\/documents\/([^/]+)\/(original\/[^/]+|thumbnail\/v\d+\.webp|analysis\/v\d+\/ocr\.json\.gz)$/
   )
   if (!match) return null
   return {
@@ -95,6 +96,7 @@ export function buildDocumentCleanupPlan(
   documents.forEach((document) => {
     expectedObjectKeys.add(document.originalObjectKey)
     if (document.thumbnailObjectKey) expectedObjectKeys.add(document.thumbnailObjectKey)
+    if (document.ocrObjectKey) expectedObjectKeys.add(document.ocrObjectKey)
   })
   const staleObjectKeys = new Set(staleDocuments.flatMap((document) => document.objectKeys))
   const orphanObjectKeys = objects

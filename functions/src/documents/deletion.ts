@@ -219,7 +219,8 @@ export const permanentlyDeleteDocument = deletionRuntime
           usageSnapshot.data(),
           {
             originalSizeBytes: latestDocument.sizeBytes,
-            derivedSizeBytes: latestDocument.thumbnailSizeBytes ?? 0,
+            derivedSizeBytes: (latestDocument.thumbnailSizeBytes ?? 0)
+              + (latestDocument.ocrSizeBytes ?? 0),
           }
         )
         transaction.delete(documentRef)
