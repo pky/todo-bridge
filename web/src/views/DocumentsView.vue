@@ -235,17 +235,39 @@ watch(selectedDocument, (document) => {
           </div>
 
           <div class="flex-1 p-3 sm:p-4">
-            <div v-if="accessLoading" class="flex min-h-80 items-center justify-center text-sm text-slate-500">原本を読み込み中...</div>
-            <div v-else-if="accessError" class="rounded-lg bg-red-50 p-4 text-sm text-red-700">{{ accessError }}</div>
-            <div v-else-if="!canPreviewSelectedDocument" class="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
+            <div v-if="!canPreviewSelectedDocument" class="rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
               {{ statusLabels[selectedDocument.status] }}です。保存完了後に原本を表示できます。
             </div>
-            <img v-else-if="accessUrl && selectedPreviewType === 'image'" :src="accessUrl" :alt="selectedDocument.name" class="mx-auto max-h-[72vh] max-w-full rounded-lg object-contain" />
-            <iframe v-else-if="accessUrl && selectedPreviewType === 'pdf'" :src="accessUrl" :title="selectedDocument.name" class="h-[72vh] w-full rounded-lg border border-slate-200" />
-            <div v-else-if="accessUrl" class="flex min-h-80 flex-col items-center justify-center text-center">
-              <div class="text-5xl">📎</div>
-              <p class="mt-3 text-sm text-slate-600">この形式はブラウザ内プレビューに対応していません。</p>
-              <a :href="accessUrl" target="_blank" rel="noopener" class="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">原本を開く</a>
+            <div v-else-if="selectedPreviewType === 'pdf'">
+              <div v-if="accessLoading" class="flex min-h-80 items-center justify-center text-sm text-slate-500">PDFを開く準備中...</div>
+              <div v-else-if="accessError" class="rounded-lg bg-red-50 p-4 text-sm text-red-700">{{ accessError }}</div>
+              <div v-else-if="accessUrl" class="flex min-h-80 flex-col items-center justify-center text-center">
+                <img
+                  v-if="documentsStore.thumbnailUrls[selectedDocument.id]"
+                  :src="documentsStore.thumbnailUrls[selectedDocument.id]"
+                  :alt="`${selectedDocument.name}の表紙`"
+                  class="max-h-64 max-w-full rounded-lg border border-slate-200 object-contain"
+                />
+                <div v-else class="text-6xl">📕</div>
+                <p class="mt-4 text-sm text-slate-600">端末のPDFビューアで全ページを表示します。</p>
+                <p v-if="selectedDocument.pageCount" class="mt-1 text-xs text-slate-500">{{ selectedDocument.pageCount }}ページ</p>
+                <a
+                  :href="accessUrl"
+                  target="_blank"
+                  rel="noopener"
+                  class="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white"
+                >PDFを開く</a>
+              </div>
+            </div>
+            <div v-else>
+              <div v-if="accessLoading" class="flex min-h-80 items-center justify-center text-sm text-slate-500">原本を読み込み中...</div>
+              <div v-else-if="accessError" class="rounded-lg bg-red-50 p-4 text-sm text-red-700">{{ accessError }}</div>
+              <img v-else-if="accessUrl && selectedPreviewType === 'image'" :src="accessUrl" :alt="selectedDocument.name" class="mx-auto max-h-[72vh] max-w-full rounded-lg object-contain" />
+              <div v-else-if="accessUrl" class="flex min-h-80 flex-col items-center justify-center text-center">
+                <div class="text-5xl">📎</div>
+                <p class="mt-3 text-sm text-slate-600">この形式はブラウザ内プレビューに対応していません。</p>
+                <a :href="accessUrl" target="_blank" rel="noopener" class="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">原本を開く</a>
+              </div>
             </div>
           </div>
         </div>

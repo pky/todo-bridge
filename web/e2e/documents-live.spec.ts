@@ -1,14 +1,21 @@
 import { expect, test } from '@playwright/test'
 
-function createTestPdf(): Buffer {
-  const content = 'BT /F1 20 Tf 48 110 Td (TodoBridge document) Tj ET'
+function createTestPdf(pageCount = 2): Buffer {
+  const pageObjectIds = Array.from({ length: pageCount }, (_, index) => index + 3)
+  const contentObjectIds = Array.from({ length: pageCount }, (_, index) => index + 3 + pageCount)
+  const fontObjectId = 3 + pageCount * 2
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
-    `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageCount} >>`,
   ]
+  pageObjectIds.forEach((_, index) => {
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << /Font << /F1 ${fontObjectId} 0 R >> >> /Contents ${contentObjectIds[index]} 0 R >>`)
+  })
+  contentObjectIds.forEach((_, index) => {
+    const content = `BT /F1 20 Tf 48 110 Td (TodoBridge page ${index + 1}) Tj ET`
+    objects.push(`<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`)
+  })
+  objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
   let pdf = '%PDF-1.4\n'
   const offsets = [0]
   objects.forEach((object, index) => {
@@ -44,7 +51,14 @@ test('ローカルログインから書類追加とサムネイル表示まで�
   await expect(page.getByText('画面確認用.pdf').first()).toBeVisible()
   await expect(page.getByAltText('画面確認用.pdfのサムネイル')).toBeVisible({ timeout: 15_000 })
   await page.getByText('画面確認用.pdf').first().click()
-  await expect(page.locator('iframe[title="画面確認用.pdf"]')).toBeVisible()
+  const originalLink = page.getByRole('link', { name: 'PDFを開く' })
+  await expect(originalLink).toHaveAttribute('target', '_blank')
+  await expect(originalLink).toHaveAttribute('href', /localDocumentObject/)
+  const [originalPage] = await Promise.all([
+    page.waitForEvent('popup'),
+    originalLink.click(),
+  ])
+  await originalPage.close()
 
   await fileInput.setInputFiles({
     name: 'サムネイル確認.png',
