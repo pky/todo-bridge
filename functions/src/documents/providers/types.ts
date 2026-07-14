@@ -58,17 +58,20 @@ export interface ObjectStorageProvider {
   deleteObjects(objectKeys: string[]): Promise<void>
 }
 
-export interface OcrInput {
-  objectKey: string
-  mimeType: string
-  analysisVersion: number
-  pageCount: number | null
+export type DocumentTextSource = 'pdf_text' | 'cloud_vision'
+
+export interface OcrPageInput {
+  pageNumber: number
+  mimeType: 'image/png' | 'image/jpeg'
+  image: Buffer
+  languageHints: string[]
 }
 
 export interface OcrPageResult {
   pageNumber: number
   text: string
   confidence: number | null
+  source: DocumentTextSource
 }
 
 export interface OcrResult {
@@ -77,7 +80,7 @@ export interface OcrResult {
 }
 
 export interface DocumentOcrProvider {
-  extract(input: OcrInput): Promise<OcrResult>
+  extractPage(input: OcrPageInput): Promise<OcrPageResult>
 }
 
 export interface ClassificationInput {
