@@ -46,13 +46,6 @@ When debugging, inspect in this order when relevant:
 - Do not add dependencies unless clearly necessary.
 - Do not modify generated files unless required.
 
-## Documentation privacy
-- Product-specific requirements, designs, implementation plans, ideas, decision records, setup procedures, and operational notes are private by default.
-- Store private documents under `doc/` or `internal_docs/`; both locations are excluded from Git except for explicitly allowlisted generic templates.
-- Do not add a private document to Git unless the user explicitly approves publishing that specific document.
-- Before every commit or push, inspect changed documentation for credentials, account or project identifiers, personal information, internal architecture, and unreleased plans.
-- Public documentation should be limited to user-facing README content and generic templates unless the user explicitly requests otherwise.
-
 ## Verification strategy
 Use the narrowest relevant verification first:
 1. narrow test file or test pattern
