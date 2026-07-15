@@ -64,6 +64,8 @@ export {
 } from './documents/deletion'
 export { updateDocumentOcrSettings } from './documents/ocrSettings'
 export { createDocumentCalendarEvent } from './documents/calendarRegistration'
+export { linkDocumentToTask, unlinkDocumentFromTask } from './documents/taskLinks'
+export { createTaskCalendarEvent } from './taskCalendarRegistration'
 export { localDocumentObject } from './documents/providers/localObjectHttp'
 
 export {
@@ -190,6 +192,11 @@ export const searchTask = functions
 // } from './calendar'
 
 const db = admin.firestore()
+
+async function removeTaskDocumentLinks(spaceId: string, taskId: string): Promise<void> {
+  const { removeDocumentTaskLinksForTask } = await import('./documents/taskLinks')
+  await removeDocumentTaskLinksForTask(spaceId, taskId)
+}
 
 interface Task {
   spaceId?: string
@@ -337,6 +344,8 @@ async function handleTaskDeleted(
     deviceId: lastModifiedBy || 'unknown',
   })
 
+  if (spaceId) await removeTaskDocumentLinks(spaceId, taskId)
+
   if (parentId || !listId || completed) return
   await updateIncompleteTaskCount(userId, listId, -1, spaceId, useLegacyPath)
 }
@@ -355,6 +364,10 @@ async function handleTaskUpdated(
     deviceId: after.lastModifiedBy || 'unknown',
     data: after,
   })
+
+  if (spaceId && before.deleted !== true && after.deleted === true) {
+    await removeTaskDocumentLinks(spaceId, taskId)
+  }
 
   const countedBefore = isCountedIncompleteTask(before)
   const countedAfter = isCountedIncompleteTask(after)

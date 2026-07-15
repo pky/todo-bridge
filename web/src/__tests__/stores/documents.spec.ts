@@ -100,6 +100,31 @@ describe('documents store', () => {
     expect(store.uploading).toBe(false)
   })
 
+  it('同じファイルのアップロードが重複発火しても1件だけ作成する', async () => {
+    let resolveUpload!: (documentId: string) => void
+    uploadDocumentMock.mockReturnValueOnce(new Promise<string>((resolve) => {
+      resolveUpload = resolve
+    }))
+    const store = useDocumentsStore()
+    const file = new File(['jpeg-data'], 'scan.jpeg', {
+      type: 'image/jpeg',
+      lastModified: 1234,
+    })
+
+    const firstUpload = store.addDocument(file, 'file')
+    const duplicateUpload = store.addDocument(file, 'file')
+
+    expect(uploadDocumentMock).toHaveBeenCalledOnce()
+
+    resolveUpload('document-1')
+    await expect(Promise.all([firstUpload, duplicateUpload])).resolves.toEqual([
+      'document-1',
+      'document-1',
+    ])
+    expect(store.selectedDocumentId).toBe('document-1')
+    expect(store.uploading).toBe(false)
+  })
+
   it('space切り替え時に以前の購読を解除する', () => {
     const firstUnsubscribe = vi.fn()
     onSnapshotMock

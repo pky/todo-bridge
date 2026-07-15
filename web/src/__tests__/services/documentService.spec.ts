@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   calculateFileSha256,
   createDocumentCalendarEventApi,
+  linkDocumentToTaskApi,
   reanalyzeDocumentSuggestionsApi,
+  unlinkDocumentFromTaskApi,
   uploadDocument,
   uploadDocumentFile,
 } from '@/services/documentService'
@@ -17,6 +19,10 @@ vi.mock('firebase/functions', () => ({
 
 vi.mock('@/services/firebaseFunctions', () => ({
   functions: {},
+}))
+
+vi.mock('@/services/firebase', () => ({
+  db: {},
 }))
 
 describe('documentService', () => {
@@ -109,6 +115,23 @@ describe('documentService', () => {
     })
     expect(callableMocks.httpsCallable).toHaveBeenCalledWith({}, 'reanalyzeDocumentSuggestions')
     expect(reanalyze).toHaveBeenCalledWith({ spaceId: 'space-1', documentId: 'document-1' })
+  })
+
+  it('タスクと書類の紐づけ作成・解除をFunctionへ渡す', async () => {
+    const callable = vi.fn().mockResolvedValue({ data: { success: true } })
+    callableMocks.httpsCallable.mockReturnValue(callable)
+
+    await linkDocumentToTaskApi('space-1', 'task-1', 'document-1')
+    expect(callableMocks.httpsCallable).toHaveBeenLastCalledWith({}, 'linkDocumentToTask')
+    expect(callable).toHaveBeenLastCalledWith({
+      spaceId: 'space-1', taskId: 'task-1', documentId: 'document-1',
+    })
+
+    await unlinkDocumentFromTaskApi('space-1', 'task-1', 'document-1')
+    expect(callableMocks.httpsCallable).toHaveBeenLastCalledWith({}, 'unlinkDocumentFromTask')
+    expect(callable).toHaveBeenLastCalledWith({
+      spaceId: 'space-1', taskId: 'task-1', documentId: 'document-1',
+    })
   })
 
   it('選択ファイルを一度だけ読み込み同じデータをハッシュ計算と送信に使う', async () => {

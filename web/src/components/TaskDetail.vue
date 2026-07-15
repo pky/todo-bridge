@@ -2,7 +2,12 @@
 import { ref, watch, computed, nextTick } from 'vue'
 import { useTasksStore } from '@/stores/tasks'
 import { useListsStore } from '@/stores/lists'
+import { useDocumentsStore } from '@/stores/documents'
+import { useDocumentTaskLinksStore } from '@/stores/documentTaskLinks'
+import { useCalendarStore } from '@/stores/calendar'
+import { useSpaceStore } from '@/stores/space'
 import TaskItem from '@/components/TaskItem.vue'
+import DocumentAttachmentPicker from '@/components/documents/DocumentAttachmentPicker.vue'
 // import { useCalendarStore } from '@/stores/calendar' // TODO: カレンダー自動登録機能を一時無効化
 import { Timestamp } from 'firebase/firestore'
 import { parseTaskInput } from '@/utils/parseTaskInput'
@@ -16,6 +21,10 @@ const props = withDefaults(defineProps<{
 
 const tasksStore = useTasksStore()
 const listsStore = useListsStore()
+const documentsStore = useDocumentsStore()
+const documentTaskLinksStore = useDocumentTaskLinksStore()
+const calendarStore = useCalendarStore()
+const spaceStore = useSpaceStore()
 const { showError, showInfo } = useToast()
 // const calendarStore = useCalendarStore() // TODO: カレンダー自動登録機能を一時無効化
 
@@ -35,8 +44,17 @@ const editingUrl = ref(false)
 const editUrl = ref('')
 const noteFormRef = ref<HTMLElement | null>(null)
 const editDueTime = ref('')
+const calendarSaving = ref(false)
 
 const task = computed(() => tasksStore.selectedTask)
+const isFamilyTask = computed(() => {
+  const spaceId = task.value?.spaceId ?? spaceStore.currentSpaceId
+  return !!spaceId && !spaceId.startsWith('personal_')
+})
+const relatedDocuments = computed(() => {
+  const linkedIds = new Set(documentTaskLinksStore.documentIds)
+  return documentsStore.documents.filter((document) => linkedIds.has(document.id))
+})
 
 const incompleteChildTasks = computed(() => {
   if (!task.value) return []
@@ -142,6 +160,22 @@ async function handleClearDueDate() {
   await tasksStore.updateTask(task.value.id, { dueDate: null, addToCalendar: false, calendarEventId: null })
 }
 
+async function handleRegisterCalendar() {
+  if (!task.value || !task.value.dueDate || calendarSaving.value) return
+  const wasRegistered = !!task.value.calendarEventId
+  calendarSaving.value = true
+  try {
+    await calendarStore.registerTask(task.value.id)
+    showInfo(wasRegistered
+      ? 'Google Calendarの予定を更新しました'
+      : 'Google Calendarに登録しました')
+  } catch (error) {
+    showError(error instanceof Error ? error.message : 'Google Calendarへ登録できませんでした')
+  } finally {
+    calendarSaving.value = false
+  }
+}
+
 // 日付文字列と時刻文字列から Timestamp を生成する
 function buildDueTimestamp(dateStr: string, timeStr: string, isAllDay: boolean): Timestamp {
   if (isAllDay || !timeStr) {
@@ -180,6 +214,40 @@ async function handleCopyUrl() {
   } catch (error) {
     console.error('URL copy error:', error)
     showError('URLのコピーに失敗しました')
+  }
+}
+
+async function handleDocumentSelection(documentIds: string[]) {
+  if (!task.value) return
+  const taskId = task.value.id
+  const currentIds = [...documentTaskLinksStore.documentIds]
+  const addedIds = documentIds.filter((documentId) => !currentIds.includes(documentId))
+  const removedIds = currentIds.filter((documentId) => !documentIds.includes(documentId))
+  try {
+    await documentTaskLinksStore.linkDocuments(taskId, addedIds)
+    await Promise.all(removedIds.map((documentId) => (
+      documentTaskLinksStore.unlinkDocument(taskId, documentId)
+    )))
+  } catch {
+    showError(documentTaskLinksStore.error || '関連書類を更新できませんでした')
+  }
+}
+
+async function handleUnlinkDocument(documentId: string) {
+  if (!task.value) return
+  try {
+    await documentTaskLinksStore.unlinkDocument(task.value.id, documentId)
+  } catch {
+    showError(documentTaskLinksStore.error || '書類の紐づけを解除できませんでした')
+  }
+}
+
+async function handleOpenDocument(documentId: string) {
+  try {
+    const result = await documentsStore.getAccessUrl(documentId)
+    window.open(result.url, '_blank', 'noopener')
+  } catch (error) {
+    showError(error instanceof Error ? error.message : '書類を開けませんでした')
   }
 }
 
@@ -456,6 +524,17 @@ const priorityOptions = [
             />
             <span class="text-xs text-gray-600">終日</span>
           </label>
+          <button
+            v-if="isFamilyTask && task.dueDate && calendarStore.configured"
+            type="button"
+            :disabled="calendarSaving"
+            class="mt-2 rounded border border-blue-300 px-2.5 py-1.5 text-xs font-medium text-blue-700 disabled:opacity-50"
+            @click="handleRegisterCalendar"
+          >{{ calendarSaving
+            ? '登録中...'
+            : task.calendarEventId
+              ? 'Google Calendarに再登録'
+              : 'Google Calendarに登録' }}</button>
           <!-- TODO: カレンダー自動登録機能を一時無効化
           <label v-if="calendarStore.connected && task.dueDate" class="flex items-center gap-1.5 mt-1.5 cursor-pointer">
             <input
@@ -599,6 +678,51 @@ const priorityOptions = [
             {{ task.url }}
           </a>
           <span v-else class="text-gray-400 text-xs">なし</span>
+        </div>
+
+        <!-- 関連書類 -->
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <label class="block text-xs text-gray-500">関連書類</label>
+            <DocumentAttachmentPicker
+              :selected-ids="documentTaskLinksStore.documentIds"
+              button-label="+ 追加"
+              @confirm="handleDocumentSelection"
+            />
+          </div>
+          <p v-if="documentTaskLinksStore.loading" class="text-xs text-gray-400">読み込み中...</p>
+          <p v-else-if="documentTaskLinksStore.error" class="text-xs text-red-600">{{ documentTaskLinksStore.error }}</p>
+          <p v-else-if="relatedDocuments.length === 0" class="text-xs text-gray-400">関連書類なし</p>
+          <div v-else class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <article
+              v-for="document in relatedDocuments"
+              :key="document.id"
+              class="min-w-0 rounded-lg border border-gray-200 p-2"
+            >
+              <button
+                type="button"
+                class="block w-full text-left"
+                @click="handleOpenDocument(document.id)"
+              >
+                <div class="flex h-20 items-center justify-center overflow-hidden rounded bg-gray-100">
+                  <img
+                    v-if="documentsStore.thumbnailUrls[document.id]"
+                    :src="documentsStore.thumbnailUrls[document.id]"
+                    :alt="`${document.name}のサムネイル`"
+                    class="h-full w-full object-cover"
+                  />
+                  <span v-else class="text-2xl">{{ document.mimeType.startsWith('image/') ? '🖼️' : '📄' }}</span>
+                </div>
+                <p class="mt-1 truncate text-xs text-gray-700">{{ document.name }}</p>
+              </button>
+              <button
+                type="button"
+                :disabled="documentTaskLinksStore.mutatingDocumentIds.includes(document.id)"
+                class="mt-1 text-[11px] text-red-600 disabled:text-gray-400"
+                @click="handleUnlinkDocument(document.id)"
+              >紐づけを解除</button>
+            </article>
+          </div>
         </div>
 
         <!-- 子タスク（未完了のみ表示） -->

@@ -61,6 +61,7 @@ export const useDocumentsStore = defineStore('documents', () => {
   let unsubscribeSuggestionSnapshot: Unsubscribe | null = null
   let subscribedSpaceId: string | null = null
   let subscribedSuggestionDocumentId: string | null = null
+  let activeUpload: { key: string; promise: Promise<string> } | null = null
 
   async function loadThumbnailUrl(
     spaceId: string,
@@ -293,22 +294,41 @@ export const useDocumentsStore = defineStore('documents', () => {
     selectedDocumentId.value = documentId
   }
 
-  async function addDocument(file: File, source: FamilyDocumentSource): Promise<string> {
+  function addDocument(file: File, source: FamilyDocumentSource): Promise<string> {
     const spaceId = requireCurrentSpaceId()
+    const uploadKey = [
+      spaceId,
+      source,
+      file.name,
+      file.type,
+      file.size,
+      file.lastModified,
+    ].join(':')
+    if (activeUpload?.key === uploadKey) return activeUpload.promise
+    if (activeUpload) {
+      return Promise.reject(new Error('別の書類を保存中です。完了してから追加してください'))
+    }
+
     uploading.value = true
     uploadFileName.value = file.name
     error.value = null
-    try {
-      const documentId = await uploadDocument(spaceId, file, source)
-      selectedDocumentId.value = documentId
-      return documentId
-    } catch (uploadError) {
-      error.value = uploadError instanceof Error ? uploadError.message : '書類の追加に失敗しました'
-      throw uploadError
-    } finally {
-      uploading.value = false
-      uploadFileName.value = null
-    }
+    const promise = uploadDocument(spaceId, file, source)
+      .then((documentId) => {
+        selectedDocumentId.value = documentId
+        return documentId
+      })
+      .catch((uploadError: unknown) => {
+        error.value = uploadError instanceof Error ? uploadError.message : '書類の追加に失敗しました'
+        throw uploadError
+      })
+      .finally(() => {
+        if (activeUpload?.promise !== promise) return
+        activeUpload = null
+        uploading.value = false
+        uploadFileName.value = null
+      })
+    activeUpload = { key: uploadKey, promise }
+    return promise
   }
 
   async function getAccessUrl(documentId: string): Promise<DocumentAccessResult> {

@@ -4,6 +4,9 @@ import { useAuthStore } from '@/stores/auth'
 import { useListsStore } from '@/stores/lists'
 import { buildPersonalSpaceId, useSpaceStore } from '@/stores/space'
 import { useTasksStore } from '@/stores/tasks'
+import { useDocumentsStore } from '@/stores/documents'
+import { useDocumentTaskLinksStore } from '@/stores/documentTaskLinks'
+import { useCalendarStore } from '@/stores/calendar'
 import { useRoute, useRouter } from 'vue-router'
 import Sidebar from '@/components/Sidebar.vue'
 import TaskList from '@/components/TaskList.vue'
@@ -13,6 +16,9 @@ const authStore = useAuthStore()
 const listsStore = useListsStore()
 const spaceStore = useSpaceStore()
 const tasksStore = useTasksStore()
+const documentsStore = useDocumentsStore()
+const documentTaskLinksStore = useDocumentTaskLinksStore()
+const calendarStore = useCalendarStore()
 const router = useRouter()
 const route = useRoute()
 let reloadSequence = 0
@@ -122,6 +128,8 @@ onMounted(async () => {
   window.addEventListener('resize', checkMobile)
   document.addEventListener('visibilitychange', handleVisibilityChange)
   await reloadHomeData()
+  documentsStore.subscribe()
+  calendarStore.subscribe()
   await applyRequestedNavigationTarget()
 })
 
@@ -131,7 +139,16 @@ onUnmounted(() => {
   reloadSequence++
   listsStore.unsubscribe()
   tasksStore.unsubscribe()
+  documentsStore.unsubscribe()
+  documentTaskLinksStore.unsubscribe()
+  calendarStore.unsubscribe()
 })
+
+watch(
+  () => tasksStore.selectedTaskId,
+  (taskId) => documentTaskLinksStore.subscribe(taskId),
+  { immediate: true }
+)
 
 watch(
   () => [
@@ -145,11 +162,17 @@ watch(
       reloadSequence++
       listsStore.unsubscribe()
       tasksStore.unsubscribe()
+      documentsStore.unsubscribe()
+      documentTaskLinksStore.unsubscribe()
+      calendarStore.unsubscribe()
       return
     }
 
     if (!initialized) return
     await reloadHomeData()
+    documentsStore.subscribe()
+    calendarStore.subscribe()
+    documentTaskLinksStore.subscribe(tasksStore.selectedTaskId)
   }
 )
 

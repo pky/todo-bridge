@@ -120,4 +120,33 @@ describe('Calendar Store', () => {
     expect(httpsCallableMock).toHaveBeenCalledWith({}, 'clearGoogleCalendarConfig')
     expect(callable).toHaveBeenCalledWith({ spaceId: 'space-1', useLegacyPath: false })
   })
+
+  it('作成済みタスクを家族スペースのCalendarへ登録する', async () => {
+    const spaceStore = useSpaceStore()
+    spaceStore.$patch({ useLegacyPath: false, currentSpaceId: 'space-1' })
+    const callable = vi.fn().mockResolvedValue({
+      data: { success: true, eventId: 'event-1', alreadyRegistered: false },
+    })
+    httpsCallableMock.mockReturnValue(callable)
+    const store = useCalendarStore()
+
+    await expect(store.registerTask('task-1')).resolves.toEqual({
+      eventId: 'event-1',
+      alreadyRegistered: false,
+    })
+
+    expect(httpsCallableMock).toHaveBeenCalledWith({}, 'createTaskCalendarEvent')
+    expect(callable).toHaveBeenCalledWith({ spaceId: 'space-1', taskId: 'task-1' })
+  })
+
+  it('個人タスクは家族スペースのCalendarへ登録しない', async () => {
+    const spaceStore = useSpaceStore()
+    spaceStore.$patch({ useLegacyPath: false, currentSpaceId: 'personal_user-1' })
+    const store = useCalendarStore()
+
+    await expect(store.registerTask('task-1')).rejects.toThrow(
+      '個人タスクは家族のGoogle Calendarへ登録できません'
+    )
+    expect(httpsCallableMock).not.toHaveBeenCalledWith({}, 'createTaskCalendarEvent')
+  })
 })

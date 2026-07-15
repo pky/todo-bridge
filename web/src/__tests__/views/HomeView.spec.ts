@@ -11,6 +11,12 @@ const tasksSubscribeMock = vi.hoisted(() => vi.fn())
 const tasksUnsubscribeMock = vi.hoisted(() => vi.fn())
 const subscribeToListMock = vi.hoisted(() => vi.fn())
 const replaceMock = vi.hoisted(() => vi.fn())
+const documentsSubscribeMock = vi.hoisted(() => vi.fn())
+const documentsUnsubscribeMock = vi.hoisted(() => vi.fn())
+const linksSubscribeMock = vi.hoisted(() => vi.fn())
+const linksUnsubscribeMock = vi.hoisted(() => vi.fn())
+const calendarSubscribeMock = vi.hoisted(() => vi.fn())
+const calendarUnsubscribeMock = vi.hoisted(() => vi.fn())
 
 const routeState = reactive({
   query: {
@@ -72,6 +78,27 @@ vi.mock('@/stores/tasks', () => ({
     setSearchQuery: vi.fn(),
     clearSearch: vi.fn(),
     selectTask: vi.fn(),
+  }),
+}))
+
+vi.mock('@/stores/documents', () => ({
+  useDocumentsStore: () => ({
+    subscribe: documentsSubscribeMock,
+    unsubscribe: documentsUnsubscribeMock,
+  }),
+}))
+
+vi.mock('@/stores/documentTaskLinks', () => ({
+  useDocumentTaskLinksStore: () => ({
+    subscribe: linksSubscribeMock,
+    unsubscribe: linksUnsubscribeMock,
+  }),
+}))
+
+vi.mock('@/stores/calendar', () => ({
+  useCalendarStore: () => ({
+    subscribe: calendarSubscribeMock,
+    unsubscribe: calendarUnsubscribeMock,
   }),
 }))
 

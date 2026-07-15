@@ -10,6 +10,7 @@ const selectDocumentMock = vi.fn()
 const getAccessUrlMock = vi.fn()
 const getTextMock = vi.fn()
 const retryTextMock = vi.fn()
+const routerPushMock = vi.fn()
 const selectedDocument = ref<Record<string, unknown> | null>(null)
 const spaceStoreMock = {
   currentSpaceId: 'space-1',
@@ -19,7 +20,7 @@ const spaceStoreMock = {
 }
 
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: routerPushMock }),
 }))
 
 vi.mock('@/components/documents/DocumentSearch.vue', () => ({
@@ -84,6 +85,9 @@ describe('DocumentsView', () => {
     expect(wrapper.get('[data-testid="document-input"]').attributes('capture')).toBeUndefined()
     expect(subscribeMock).toHaveBeenCalledOnce()
 
+    await wrapper.findAll('button').find((button) => button.text() === '書類・写真を追加')?.trigger('click')
+    expect(wrapper.get('[data-testid="upload-destination-dialog"]').text()).toContain('書類の保存先')
+
     wrapper.unmount()
     expect(unsubscribeMock).toHaveBeenCalledOnce()
   })
@@ -112,7 +116,7 @@ describe('DocumentsView', () => {
     wrapper.unmount()
   })
 
-  it('家族書類ボックスは個人スペースから家族スペースへ切り替える', async () => {
+  it('個人スペースの書類を維持し、表示先を利用者が選べる', async () => {
     spaceStoreMock.currentSpaceId = 'personal_user-1'
     spaceStoreMock.memberships = [
       { spaceId: 'personal_user-1', displayName: '個人', role: 'owner' },
@@ -122,8 +126,32 @@ describe('DocumentsView', () => {
     const wrapper = mount(DocumentsView)
     await flushPromises()
 
-    expect(spaceStoreMock.selectSpace).toHaveBeenCalledWith('family-space')
+    expect(spaceStoreMock.selectSpace).not.toHaveBeenCalled()
     expect(subscribeMock).toHaveBeenCalled()
+
+    await wrapper.get('select[aria-label="書類を表示するスペース"]').setValue('family-space')
+    expect(spaceStoreMock.selectSpace).toHaveBeenCalledWith('family-space')
+    wrapper.unmount()
+  })
+
+  it('直接追加する書類の保存先を個人または家族から選べる', async () => {
+    spaceStoreMock.currentSpaceId = 'personal_user-1'
+    spaceStoreMock.memberships = [
+      { spaceId: 'personal_user-1', displayName: '個人', role: 'owner' },
+      { spaceId: 'family-space', displayName: '家族共有', role: 'owner' },
+    ]
+
+    const wrapper = mount(DocumentsView)
+    await flushPromises()
+    const input = wrapper.get('[data-testid="document-input"]').element as HTMLInputElement
+    const inputClick = vi.spyOn(input, 'click').mockImplementation(() => undefined)
+
+    await wrapper.findAll('button').find((button) => button.text() === '書類・写真を追加')?.trigger('click')
+    await wrapper.get('[data-testid="upload-destination-select"]').setValue('family-space')
+    await wrapper.get('[data-testid="choose-upload-file"]').trigger('click')
+
+    expect(spaceStoreMock.selectSpace).toHaveBeenCalledWith('family-space')
+    expect(inputClick).toHaveBeenCalledOnce()
     wrapper.unmount()
   })
 
@@ -163,5 +191,35 @@ describe('DocumentsView', () => {
     expect(getTextMock).toHaveBeenCalledWith('document-1')
     expect(wrapper.get('[data-testid="document-text-section"]').text()).toContain('提出期限は7月20日です')
     expect(wrapper.get('[data-testid="document-text-section"]').text()).toContain('PDF内の文字')
+  })
+
+  it('書類詳細から添付済みのタスク追加画面へ移動する', async () => {
+    getAccessUrlMock.mockResolvedValue({ url: 'https://example.com/document.pdf' })
+    selectedDocument.value = {
+      id: 'document-1',
+      name: '学校のお知らせ.pdf',
+      category: 'school_childcare',
+      sizeBytes: 1024,
+      mimeType: 'application/pdf',
+      status: 'ready',
+      integrityStatus: 'ok',
+      previewStatus: 'completed',
+      ocrStatus: 'completed',
+      ocrObjectKey: null,
+      pageCount: 1,
+      createdAt: { toDate: () => new Date() },
+    }
+    const wrapper = mount(DocumentsView)
+    await flushPromises()
+
+    const createTaskButton = wrapper.findAll('button').find(
+      (button) => button.text() === 'この書類からタスクを作成'
+    )
+    await createTaskButton?.trigger('click')
+
+    expect(routerPushMock).toHaveBeenCalledWith({
+      name: 'home',
+      query: { attachDocument: 'document-1', createFromDocument: '1' },
+    })
   })
 })

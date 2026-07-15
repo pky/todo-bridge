@@ -14,6 +14,8 @@ const documentsStore = useDocumentsStore()
 const spaceStore = useSpaceStore()
 const router = useRouter()
 const documentInput = ref<HTMLInputElement | null>(null)
+const uploadDestinationOpen = ref(false)
+const uploadTargetSpaceId = ref('')
 const viewMode = ref<'documents' | 'trash'>('documents')
 const mutatingDocumentId = ref<string | null>(null)
 const accessUrl = ref<string | null>(null)
@@ -28,13 +30,6 @@ let accessSequence = 0
 let textSequence = 0
 let pendingSearchPage: number | null = null
 
-const currentSpaceName = computed(() => {
-  const membership = spaceStore.memberships.find((item) => item.spaceId === spaceStore.currentSpaceId)
-  if (membership?.displayName) return membership.displayName
-  if (spaceStore.currentSpaceId?.startsWith('personal_')) return '個人スペース'
-  return '家族スペース'
-})
-
 const selectedDocument = computed(() => documentsStore.selectedDocument)
 const visibleDocuments = computed(() => documentsStore.documents.filter((document) => (
   viewMode.value === 'trash' ? document.status === 'trashed' : document.status !== 'trashed'
@@ -46,6 +41,7 @@ const currentMembership = computed(() => spaceStore.memberships.find(
   (membership) => membership.spaceId === spaceStore.currentSpaceId
 ))
 const isCurrentSpaceOwner = computed(() => currentMembership.value?.role === 'owner')
+const currentSpaceLabel = computed(() => formatSpaceLabel(spaceStore.currentSpaceId))
 const usageTotalBytes = computed(() => (
   (documentsStore.usage?.originalBytes ?? 0) + (documentsStore.usage?.derivedBytes ?? 0)
 ))
@@ -117,12 +113,33 @@ function openInput(input: HTMLInputElement | null): void {
   input?.click()
 }
 
-function selectFamilyDocumentSpace(): void {
-  if (!spaceStore.currentSpaceId?.startsWith('personal_')) return
-  const familyMembership = spaceStore.memberships.find(
-    (membership) => !membership.spaceId.startsWith('personal_')
-  )
-  if (familyMembership) spaceStore.selectSpace(familyMembership.spaceId)
+function formatSpaceLabel(spaceId: string | null): string {
+  if (!spaceId) return '未選択'
+  if (spaceId.startsWith('personal_')) return '個人'
+  const membership = spaceStore.memberships.find((item) => item.spaceId === spaceId)
+  return membership?.displayName ? `${membership.displayName}（家族）` : '家族'
+}
+
+function openUploadDestination(): void {
+  uploadTargetSpaceId.value = spaceStore.currentSpaceId ?? spaceStore.memberships[0]?.spaceId ?? ''
+  uploadDestinationOpen.value = true
+}
+
+function openUploadFilePicker(): void {
+  const spaceId = uploadTargetSpaceId.value
+  if (!spaceId) return
+  if (spaceId !== spaceStore.currentSpaceId) {
+    spaceStore.selectSpace(spaceId)
+  }
+  uploadDestinationOpen.value = false
+  openInput(documentInput.value)
+}
+
+function handleSpaceSelection(event: Event): void {
+  const spaceId = (event.target as HTMLSelectElement).value
+  if (spaceId && spaceId !== spaceStore.currentSpaceId) {
+    spaceStore.selectSpace(spaceId)
+  }
 }
 
 async function handleFileSelection(event: Event): Promise<void> {
@@ -272,6 +289,18 @@ function closeDetail(): void {
   documentsStore.selectDocument(null)
 }
 
+async function createTaskFromSelectedDocument(): Promise<void> {
+  const document = selectedDocument.value
+  if (!document || document.status === 'trashed') return
+  await router.push({
+    name: 'home',
+    query: {
+      attachDocument: document.id,
+      createFromDocument: '1',
+    },
+  })
+}
+
 function switchView(nextView: 'documents' | 'trash'): void {
   viewMode.value = nextView
   documentsStore.selectDocument(null)
@@ -319,7 +348,6 @@ async function permanentlyDeleteSelectedDocument(): Promise<void> {
 
 onMounted(async () => {
   await spaceStore.initSpace()
-  selectFamilyDocumentSpace()
   documentsStore.subscribe()
 })
 
@@ -365,21 +393,74 @@ watch(textResult, async () => {
             ← Todo
           </button>
           <div class="min-w-0">
-            <h1 class="truncate text-lg font-semibold">家族書類ボックス</h1>
-            <p class="truncate text-xs text-slate-500">{{ currentSpaceName }}</p>
+            <h1 class="truncate text-lg font-semibold">書類ボックス</h1>
+            <label class="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
+              表示中
+              <select
+                :value="spaceStore.currentSpaceId ?? ''"
+                aria-label="書類を表示するスペース"
+                class="max-w-52 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs text-slate-600"
+                @change="handleSpaceSelection"
+              >
+                <option
+                  v-for="membership in spaceStore.memberships"
+                  :key="membership.spaceId"
+                  :value="membership.spaceId"
+                >{{ formatSpaceLabel(membership.spaceId) }}</option>
+              </select>
+            </label>
           </div>
         </div>
         <div class="hidden items-center gap-2 sm:flex">
           <button
             class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             :disabled="isAtCapacity || viewMode === 'trash'"
-            @click="openInput(documentInput)"
+            @click="openUploadDestination"
           >書類・写真を追加</button>
         </div>
       </div>
     </header>
 
     <input ref="documentInput" data-testid="document-input" class="hidden" type="file" accept="image/*,application/pdf,.pdf" @change="handleFileSelection" />
+
+    <div
+      v-if="uploadDestinationOpen"
+      data-testid="upload-destination-dialog"
+      class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4"
+      @click.self="uploadDestinationOpen = false"
+    >
+      <div class="w-full max-w-sm rounded-2xl bg-white p-4 shadow-xl">
+        <h2 class="font-semibold text-slate-800">書類の保存先</h2>
+        <p class="mt-1 text-sm text-slate-500">個人と家族では別の書類として保存されます。</p>
+        <label class="mt-4 block text-sm font-medium text-slate-700">
+          保存先
+          <select
+            v-model="uploadTargetSpaceId"
+            data-testid="upload-destination-select"
+            class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+          >
+            <option
+              v-for="membership in spaceStore.memberships"
+              :key="membership.spaceId"
+              :value="membership.spaceId"
+            >{{ formatSpaceLabel(membership.spaceId) }}</option>
+          </select>
+        </label>
+        <p class="mt-2 text-xs text-slate-500">
+          個人は自分だけ、家族は家族スペースのメンバーが利用できます。
+        </p>
+        <div class="mt-4 flex justify-end gap-2">
+          <button type="button" class="px-3 py-2 text-sm text-slate-600" @click="uploadDestinationOpen = false">キャンセル</button>
+          <button
+            type="button"
+            data-testid="choose-upload-file"
+            :disabled="!uploadTargetSpaceId"
+            class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:bg-slate-300"
+            @click="openUploadFilePicker"
+          >ファイルを選ぶ</button>
+        </div>
+      </div>
+    </div>
 
     <main class="mx-auto grid max-w-7xl gap-4 p-3 sm:p-4 md:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.6fr)]">
       <section class="min-h-[60vh] rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -412,7 +493,8 @@ watch(textResult, async () => {
         </div>
 
         <div v-if="viewMode === 'documents'" class="border-b border-slate-100 p-3 sm:hidden">
-          <button class="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:bg-slate-300" :disabled="isAtCapacity" @click="openInput(documentInput)">書類・写真を追加</button>
+          <button class="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:bg-slate-300" :disabled="isAtCapacity" @click="openUploadDestination">書類・写真を追加</button>
+          <p class="mt-1 text-center text-xs text-slate-500">追加時に個人／家族を選べます</p>
         </div>
 
         <DocumentSearch v-if="viewMode === 'documents'" @select="selectSearchResult" />
@@ -451,6 +533,7 @@ watch(textResult, async () => {
               <div class="min-w-0 flex-1">
                 <div class="truncate text-sm font-medium">{{ document.name }}</div>
                 <div class="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-slate-500">
+                  <span>{{ currentSpaceLabel }}</span>
                   <span>{{ categoryLabels[document.category] }}</span>
                   <span>{{ formatBytes(document.sizeBytes) }}</span>
                   <span :class="document.status === 'failed' || document.integrityStatus === 'missing_original' ? 'text-red-600' : ''">{{ document.integrityStatus === 'missing_original' ? '原本を確認できません' : statusLabels[document.status] }}</span>
@@ -592,12 +675,18 @@ watch(textResult, async () => {
             />
           </div>
           <div class="border-t border-slate-100 p-4">
-            <button
-              v-if="selectedDocument.status !== 'trashed'"
-              class="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
-              :disabled="mutatingDocumentId === selectedDocument.id"
-              @click="moveSelectedToTrash"
-            >ごみ箱へ移動</button>
+            <div v-if="selectedDocument.status !== 'trashed'" class="space-y-2">
+              <button
+                class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                :disabled="mutatingDocumentId === selectedDocument.id"
+                @click="createTaskFromSelectedDocument"
+              >この書類からタスクを作成</button>
+              <button
+                class="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+                :disabled="mutatingDocumentId === selectedDocument.id"
+                @click="moveSelectedToTrash"
+              >ごみ箱へ移動</button>
+            </div>
             <div v-else class="space-y-2">
               <button
                 class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"

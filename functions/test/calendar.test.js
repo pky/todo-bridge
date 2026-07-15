@@ -15,6 +15,14 @@ const {
 const {
   buildDocumentCalendarEventId,
 } = require('../lib/documents/calendarRegistration')
+const {
+  buildTaskCalendarEventInput,
+  buildTaskCalendarEventId,
+  isFamilyCalendarSpace,
+} = require('../lib/taskCalendarRegistration')
+const {
+  buildDocumentTaskLinkId,
+} = require('../lib/documents/taskLinks')
 
 test('書類予定候補を日時・終了時刻・場所つきイベントへ変換する', () => {
   assert.deepEqual(buildDocumentEventResource('event-id', {
@@ -86,4 +94,47 @@ test('削除後の再登録では元の予定と異なる決定的なIDを生成
     buildDocumentCalendarEventId('space-1', 'document-1', 'suggestion-1', 1),
     retryId
   )
+})
+
+test('タスクのCalendar予定IDも再登録回数ごとに決定的に生成する', () => {
+  const originalId = buildTaskCalendarEventId('space-1', 'task-1', 0)
+  const retryId = buildTaskCalendarEventId('space-1', 'task-1', 1)
+
+  assert.equal(originalId.length, 64)
+  assert.notEqual(retryId, originalId)
+  assert.equal(buildTaskCalendarEventId('space-1', 'task-1', 1), retryId)
+})
+
+test('家族スペースのタスクだけを家族Calendar登録対象にする', () => {
+  assert.equal(isFamilyCalendarSpace({ type: 'family' }), true)
+  assert.equal(isFamilyCalendarSpace({ type: 'personal' }), false)
+  assert.equal(isFamilyCalendarSpace(undefined), false)
+})
+
+test('タスクの開始・終了日時を日本時間のCalendar予定へ変換する', () => {
+  const startDate = admin.firestore.Timestamp.fromDate(new Date('2026-07-20T13:45:00+09:00'))
+  const dueDate = admin.firestore.Timestamp.fromDate(new Date('2026-07-20T14:45:00+09:00'))
+
+  assert.deepEqual(buildTaskCalendarEventInput({
+    name: '茶話会',
+    startDate,
+    dueDate,
+    allDay: false,
+    notes: ['書類から作成'],
+  }), {
+    title: '茶話会',
+    date: '2026-07-20',
+    time: '13:45',
+    endTime: '14:45',
+    location: null,
+    description: 'Todoから登録\n書類から作成',
+  })
+})
+
+test('同じタスクと書類から同じリンクIDを生成する', () => {
+  const linkId = buildDocumentTaskLinkId('task-1', 'document-1')
+
+  assert.equal(linkId.length, 64)
+  assert.equal(buildDocumentTaskLinkId('task-1', 'document-1'), linkId)
+  assert.notEqual(buildDocumentTaskLinkId('task-1', 'document-2'), linkId)
 })

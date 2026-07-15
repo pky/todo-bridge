@@ -27,6 +27,7 @@ export interface Task {
   allDay: boolean                 // 終日フラグ（true: 終日, false: 時刻指定）
   addToCalendar: boolean          // Googleカレンダーに登録するか
   calendarEventId: string | null  // 登録済みカレンダーイベントID
+  calendarRegistrationVersion?: number
   visibleToMemberIds?: string[]
   editableByMemberIds?: string[]
 }

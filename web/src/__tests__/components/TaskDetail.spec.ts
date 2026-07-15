@@ -21,12 +21,51 @@ const listsStoreState = reactive({
   ],
 })
 
+const documentsStoreState = reactive({
+  documents: [] as Array<Record<string, unknown>>,
+  thumbnailUrls: {} as Record<string, string>,
+  getAccessUrl: vi.fn(),
+})
+
+const documentTaskLinksStoreState = reactive({
+  documentIds: [] as string[],
+  loading: false,
+  error: null as string | null,
+  mutatingDocumentIds: [] as string[],
+  linkDocuments: vi.fn(),
+  unlinkDocument: vi.fn(),
+})
+
+const calendarStoreState = reactive({
+  configured: false,
+  registerTask: vi.fn(),
+})
+const spaceStoreState = reactive({
+  currentSpaceId: 'space-1',
+})
+
 vi.mock('@/stores/tasks', () => ({
   useTasksStore: () => tasksStoreState,
 }))
 
 vi.mock('@/stores/lists', () => ({
   useListsStore: () => listsStoreState,
+}))
+
+vi.mock('@/stores/documents', () => ({
+  useDocumentsStore: () => documentsStoreState,
+}))
+
+vi.mock('@/stores/documentTaskLinks', () => ({
+  useDocumentTaskLinksStore: () => documentTaskLinksStoreState,
+}))
+
+vi.mock('@/stores/calendar', () => ({
+  useCalendarStore: () => calendarStoreState,
+}))
+
+vi.mock('@/stores/space', () => ({
+  useSpaceStore: () => spaceStoreState,
 }))
 
 vi.mock('@/composables/useToast', () => ({
@@ -39,6 +78,7 @@ vi.mock('@/composables/useToast', () => ({
 describe('TaskDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    spaceStoreState.currentSpaceId = 'space-1'
 
     tasksStoreState.tasks = [
       {
@@ -92,6 +132,7 @@ describe('TaskDetail', () => {
     const wrapper = mount(TaskDetail, {
       global: {
         stubs: {
+          DocumentAttachmentPicker: true,
           TaskItem: {
             props: ['task'],
             template: '<div class="task-item-stub">{{ task.name }}</div>',
@@ -113,6 +154,7 @@ describe('TaskDetail', () => {
     const wrapper = mount(TaskDetail, {
       global: {
         stubs: {
+          DocumentAttachmentPicker: true,
           TaskItem: {
             props: ['task'],
             template: '<div class="task-item-stub">{{ task.name }}</div>',

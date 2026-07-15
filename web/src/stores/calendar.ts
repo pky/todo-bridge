@@ -112,6 +112,32 @@ export const useCalendarStore = defineStore('calendar', () => {
     }
   }
 
+  async function registerTask(taskId: string): Promise<{ eventId: string; alreadyRegistered: boolean }> {
+    const spaceId = useSpaceStore().currentSpaceId
+    if (!spaceId) throw new Error('家族スペースが選択されていません')
+    if (spaceId.startsWith('personal_')) {
+      throw new Error('個人タスクは家族のGoogle Calendarへ登録できません')
+    }
+    loading.value = true
+    error.value = null
+    try {
+      const registerTaskFn = httpsCallable<
+        { spaceId: string; taskId: string },
+        { success: boolean; eventId: string; alreadyRegistered: boolean }
+      >(functions, 'createTaskCalendarEvent')
+      const result = await registerTaskFn({ spaceId, taskId })
+      return {
+        eventId: result.data.eventId,
+        alreadyRegistered: result.data.alreadyRegistered,
+      }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Google Calendarへ登録できませんでした'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   function unsubscribe(): void {
     _unsubscribe?.()
     _unsubscribe = null
@@ -131,5 +157,6 @@ export const useCalendarStore = defineStore('calendar', () => {
     loadServiceConfig,
     saveConfig,
     clearConfig,
+    registerTask,
   }
 })

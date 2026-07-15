@@ -919,7 +919,10 @@ export const useTasksStore = defineStore('tasks', () => {
     lastFetchTime.value = 0
   }
 
-  async function createTask(input: Partial<CreateTaskInput> & { name: string }) {
+  async function createTask(
+    input: Partial<CreateTaskInput> & { name: string },
+    options: { waitForCommit?: boolean } = {}
+  ) {
     const listsStore = useListsStore()
     const { showError } = useToast()
     const authStore = useAuthStore()
@@ -1021,16 +1024,16 @@ export const useTasksStore = defineStore('tasks', () => {
       visibilityState: document.visibilityState,
     })
 
-    // バックグラウンドでFirestoreに書き込み（リトライあり）
-    retryWithBackoff(() => setDoc(docRef, taskData))
-      .then(() => {
+    // 通常追加はバックグラウンド保存し、関連データ作成時だけ保存完了を待つ
+    const commitTask = async (): Promise<void> => {
+      try {
+        await retryWithBackoff(() => setDoc(docRef, taskData))
         console.log('[tasks] createTask: write committed', {
           taskId: docRef.id,
           listId,
           targetSpaceId,
         })
-      })
-      .catch((error) => {
+      } catch (error) {
         // 全リトライ失敗: ロールバック
         tasks.value = tasks.value.filter((t) => t.id !== docRef.id)
         if (isCurrentScopeTarget) {
@@ -1049,7 +1052,17 @@ export const useTasksStore = defineStore('tasks', () => {
           error,
         })
         showError('タスクの追加に失敗しました')
+        throw error
+      }
+    }
+
+    if (options.waitForCommit) {
+      await commitTask()
+    } else {
+      void commitTask().catch(() => {
+        // エラー表示とロールバックはcommitTask内で完了済み
       })
+    }
 
     return docRef.id
   }

@@ -1,7 +1,19 @@
 import { httpsCallable } from 'firebase/functions'
+import {
+  collection,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  where,
+  type Unsubscribe,
+} from 'firebase/firestore'
 import { functions } from '@/services/firebaseFunctions'
+import { db } from '@/services/firebase'
 import type {
   CreateDocumentUploadInput,
+  DocumentSuggestion,
+  DocumentTaskLink,
   FamilyDocumentCategory,
   FamilyDocumentSource,
 } from '@/types'
@@ -97,6 +109,60 @@ export interface UpdateDocumentOcrSettingsResult {
   monthlyPageLimit: number
   monthlyWarningPages: number
   queuedDocumentCount: number
+}
+
+export function subscribeTaskDocumentLinks(
+  spaceId: string,
+  taskId: string,
+  onLinks: (links: DocumentTaskLink[]) => void,
+  onError: (error: Error) => void
+): Unsubscribe {
+  const linksQuery = query(
+    collection(db, 'spaces', spaceId, 'documentTaskLinks'),
+    where('taskId', '==', taskId)
+  )
+  return onSnapshot(linksQuery, (snapshot) => {
+    onLinks(snapshot.docs.map((snapshot) => snapshot.data() as DocumentTaskLink))
+  }, (error) => onError(error))
+}
+
+export async function linkDocumentToTaskApi(
+  spaceId: string,
+  taskId: string,
+  documentId: string
+): Promise<void> {
+  const callable = httpsCallable<
+    { spaceId: string; taskId: string; documentId: string },
+    { success: boolean; linkId: string; created: boolean }
+  >(functions, 'linkDocumentToTask')
+  await callable({ spaceId, taskId, documentId })
+}
+
+export async function unlinkDocumentFromTaskApi(
+  spaceId: string,
+  taskId: string,
+  documentId: string
+): Promise<void> {
+  const callable = httpsCallable<
+    { spaceId: string; taskId: string; documentId: string },
+    { success: boolean }
+  >(functions, 'unlinkDocumentFromTask')
+  await callable({ spaceId, taskId, documentId })
+}
+
+export async function getDocumentSuggestionsApi(
+  spaceId: string,
+  documentId: string
+): Promise<DocumentSuggestion[]> {
+  const suggestionsQuery = query(
+    collection(db, 'spaces', spaceId, 'documents', documentId, 'suggestions'),
+    orderBy('createdAt', 'asc')
+  )
+  const snapshot = await getDocs(suggestionsQuery)
+  return snapshot.docs.map((suggestionSnapshot) => ({
+    ...(suggestionSnapshot.data() as Omit<DocumentSuggestion, 'id'>),
+    id: suggestionSnapshot.id,
+  }))
 }
 
 export async function calculateFileSha256(file: File): Promise<string | null> {

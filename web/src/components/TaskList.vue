@@ -1,14 +1,27 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useTasksStore } from '@/stores/tasks'
 import { useListsStore } from '@/stores/lists'
+import { useDocumentsStore } from '@/stores/documents'
+import { useDocumentTaskLinksStore } from '@/stores/documentTaskLinks'
+import { useCalendarStore } from '@/stores/calendar'
 import TaskItem from './TaskItem.vue'
+import DocumentAttachmentPicker from '@/components/documents/DocumentAttachmentPicker.vue'
 import { parseTaskInput } from '@/utils/parseTaskInput'
 import { Timestamp } from 'firebase/firestore'
 import { useToast } from '@/composables/useToast'
+import { getDocumentSuggestionsApi } from '@/services/documentService'
+import { useSpaceStore } from '@/stores/space'
+import { useRoute, useRouter } from 'vue-router'
 
 const tasksStore = useTasksStore()
 const listsStore = useListsStore()
+const documentsStore = useDocumentsStore()
+const documentTaskLinksStore = useDocumentTaskLinksStore()
+const calendarStore = useCalendarStore()
+const spaceStore = useSpaceStore()
+const route = useRoute()
+const router = useRouter()
 const { showInfo, showError } = useToast()
 
 // スマートリスト名のマッピング
@@ -25,7 +38,16 @@ const localSearchResults = computed(() => tasksStore.searchResults)
 
 const newTaskName = ref('')
 const newTaskDueDate = ref('')
+const newTaskStartTime = ref('')
+const newTaskEndTime = ref('')
 const newTaskPriority = ref<1 | 2 | 3 | 4>(4)
+const selectedDocumentIds = ref<string[]>([])
+const sourceDocumentId = ref('')
+const useDocumentContent = ref(false)
+const generatedNotes = ref<string[]>([])
+const suggestionLoading = ref(false)
+const suggestionError = ref<string | null>(null)
+const addToGoogleCalendar = ref(false)
 const isAdding = ref(false)
 const isSubmitting = ref(false)
 const isDeletingCompletedTasks = ref(false)
@@ -56,16 +78,153 @@ const canDeleteCompletedTasks = computed(() =>
   !listsStore.selectedSmartList &&
   tasksStore.completedTasks.length > 0
 )
+const selectedDocuments = computed(() => documentsStore.documents.filter(
+  (document) => selectedDocumentIds.value.includes(document.id)
+))
+const sourceDocument = computed(() => documentsStore.documents.find(
+  (document) => document.id === sourceDocumentId.value
+) ?? null)
+const sourceDocumentReading = computed(() => {
+  const document = sourceDocument.value
+  if (!document) return !!sourceDocumentId.value
+  return document.ocrStatus === 'pending'
+    || document.ocrStatus === 'processing'
+})
+const isFamilySpace = computed(() => (
+  !!spaceStore.currentSpaceId && !spaceStore.currentSpaceId.startsWith('personal_')
+))
+const waitingForDocumentContent = computed(() => (
+  useDocumentContent.value
+  && !!sourceDocumentId.value
+  && (sourceDocumentReading.value || suggestionLoading.value)
+))
+const blockingForDocumentContent = computed(() => (
+  waitingForDocumentContent.value && !newTaskName.value.trim()
+))
+
+function buildTaskDates(): {
+  startDate: Timestamp | null
+  dueDate: Timestamp | null
+  allDay: boolean
+} {
+  if (!newTaskDueDate.value) return { startDate: null, dueDate: null, allDay: true }
+  const [year, month, day] = newTaskDueDate.value.split('-').map(Number)
+  if (!newTaskStartTime.value) {
+    return {
+      startDate: null,
+      dueDate: Timestamp.fromDate(new Date(year!, month! - 1, day!)),
+      allDay: true,
+    }
+  }
+  const start = new Date(`${newTaskDueDate.value}T${newTaskStartTime.value}`)
+  const end = newTaskEndTime.value
+    ? new Date(`${newTaskDueDate.value}T${newTaskEndTime.value}`)
+    : new Date(start.getTime() + 60 * 60 * 1000)
+  if (end <= start) end.setDate(end.getDate() + 1)
+  return {
+    startDate: Timestamp.fromDate(start),
+    dueDate: Timestamp.fromDate(end),
+    allDay: false,
+  }
+}
+
+async function applyDocumentSuggestion(): Promise<void> {
+  const documentId = sourceDocumentId.value
+  const spaceId = sourceDocument.value?.spaceId ?? spaceStore.currentSpaceId
+  if (!documentId || !spaceId || suggestionLoading.value) return
+  if (sourceDocumentReading.value) {
+    suggestionError.value = null
+    return
+  }
+  suggestionLoading.value = true
+  suggestionError.value = null
+  try {
+    const suggestions = await getDocumentSuggestionsApi(spaceId, documentId)
+    const activeSuggestions = suggestions.filter((item) => item.status !== 'dismissed')
+    const suggestion = activeSuggestions.find((item) => item.type === 'task')
+      ?? activeSuggestions.find((item) => item.type === 'calendar_event')
+      ?? activeSuggestions.find((item) => typeof item.value.date === 'string')
+    if (!suggestion) {
+      const dismissedDateCandidate = suggestions.some(
+        (item) => item.status === 'dismissed' && typeof item.value.date === 'string'
+      )
+      suggestionError.value = dismissedDateCandidate
+        ? '日時候補が「候補から外す」状態です。書類画面で確認待ちに戻してください。'
+        : 'タスクに反映できる日時またはTodo候補がありません。書類画面で候補を確認してください。'
+      return
+    }
+    newTaskName.value = suggestion.title
+    newTaskDueDate.value = typeof suggestion.value.date === 'string' ? suggestion.value.date : ''
+    newTaskStartTime.value = typeof suggestion.value.time === 'string' ? suggestion.value.time : ''
+    newTaskEndTime.value = typeof suggestion.value.endTime === 'string' ? suggestion.value.endTime : ''
+    const location = typeof suggestion.value.location === 'string'
+      ? `場所: ${suggestion.value.location}`
+      : null
+    generatedNotes.value = [location, suggestion.sourceExcerpt].filter(
+      (value): value is string => !!value
+    )
+  } catch (error) {
+    suggestionError.value = error instanceof Error ? error.message : '読み取り候補を取得できませんでした'
+  } finally {
+    suggestionLoading.value = false
+  }
+}
+
+async function handleDocumentSelection(documentIds: string[]): Promise<void> {
+  selectedDocumentIds.value = documentIds
+  if (!documentIds.includes(sourceDocumentId.value)) {
+    sourceDocumentId.value = documentIds[0] ?? ''
+  }
+  if (documentIds.length === 0) {
+    useDocumentContent.value = false
+    suggestionError.value = null
+    return
+  }
+  if (useDocumentContent.value) await applyDocumentSuggestion()
+}
+
+async function handleUseDocumentContent(event: Event): Promise<void> {
+  useDocumentContent.value = (event.target as HTMLInputElement).checked
+  if (useDocumentContent.value) await applyDocumentSuggestion()
+}
 
 async function handleAddTask() {
-  if (!newTaskName.value.trim() || isSubmitting.value) return
+  if (!newTaskName.value.trim() || isSubmitting.value || blockingForDocumentContent.value) return
 
   isSubmitting.value = true
   try {
     const { name, url } = parseTaskInput(newTaskName.value)
-    const dueDate = newTaskDueDate.value ? Timestamp.fromDate(new Date(newTaskDueDate.value)) : null
-    await tasksStore.createTask({ name, url, dueDate, priority: newTaskPriority.value })
+    const dates = buildTaskDates()
+    const needsCommittedTask = selectedDocumentIds.value.length > 0 || addToGoogleCalendar.value
+    const taskId = await tasksStore.createTask({
+      name,
+      url,
+      ...dates,
+      notes: generatedNotes.value,
+      priority: newTaskPriority.value,
+      addToCalendar: addToGoogleCalendar.value,
+    }, { waitForCommit: needsCommittedTask })
+    const followUpErrors: string[] = []
+    if (selectedDocumentIds.value.length > 0) {
+      try {
+        await documentTaskLinksStore.linkDocuments(taskId, selectedDocumentIds.value)
+      } catch {
+        followUpErrors.push('書類の紐づけ')
+      }
+    }
+    if (addToGoogleCalendar.value) {
+      try {
+        await calendarStore.registerTask(taskId)
+      } catch {
+        followUpErrors.push('Google Calendarへの登録')
+      }
+    }
     resetAddForm()
+    if (followUpErrors.length > 0) {
+      showError(`タスクは追加しましたが、${followUpErrors.join('と')}に失敗しました`)
+    }
+  } catch {
+    // タスク保存エラーはStore側のトーストで通知する
   } finally {
     isSubmitting.value = false
   }
@@ -74,9 +233,55 @@ async function handleAddTask() {
 function resetAddForm() {
   newTaskName.value = ''
   newTaskDueDate.value = ''
+  newTaskStartTime.value = ''
+  newTaskEndTime.value = ''
   newTaskPriority.value = 4
+  selectedDocumentIds.value = []
+  sourceDocumentId.value = ''
+  useDocumentContent.value = false
+  generatedNotes.value = []
+  suggestionError.value = null
+  addToGoogleCalendar.value = false
   isAdding.value = false
 }
+
+watch(sourceDocumentId, () => {
+  if (useDocumentContent.value) void applyDocumentSuggestion()
+})
+
+watch(isFamilySpace, (familySpace) => {
+  if (!familySpace) addToGoogleCalendar.value = false
+})
+
+watch(
+  () => {
+    const document = documentsStore.documents.find((item) => item.id === sourceDocumentId.value)
+    return document
+      ? `${document.id}:${document.ocrStatus}:${document.classificationVersion}:${document.analysisVersion}`
+      : ''
+  },
+  (version, previousVersion) => {
+    if (!version || version === previousVersion || !useDocumentContent.value) return
+    void applyDocumentSuggestion()
+  }
+)
+
+watch(
+  () => route.query.attachDocument,
+  async (documentId) => {
+    if (typeof documentId !== 'string' || !documentId) return
+    isAdding.value = true
+    selectedDocumentIds.value = [documentId]
+    sourceDocumentId.value = documentId
+    useDocumentContent.value = route.query.createFromDocument === '1'
+    if (useDocumentContent.value) await applyDocumentSuggestion()
+    const nextQuery = { ...route.query }
+    delete nextQuery.attachDocument
+    delete nextQuery.createFromDocument
+    await router.replace({ query: nextQuery })
+  },
+  { immediate: true }
+)
 
 function handleSelectTask(id: string) {
   tasksStore.selectTask(id)
@@ -231,6 +436,7 @@ async function handleDeleteCompletedTasks() {
       <div v-else class="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
         <input
           v-model="newTaskName"
+          data-testid="new-task-name"
           @keyup.escape="resetAddForm"
           type="text"
           placeholder="タスク名を入力"
@@ -243,8 +449,24 @@ async function handleDeleteCompletedTasks() {
             <label class="text-xs text-gray-500">期限</label>
             <input
               v-model="newTaskDueDate"
+              data-testid="new-task-due-date"
               type="date"
               class="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div v-if="newTaskDueDate" class="flex items-center gap-2">
+            <label class="text-xs text-gray-500">開始</label>
+            <input
+              v-model="newTaskStartTime"
+              type="time"
+              class="w-24 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <label class="text-xs text-gray-500">終了</label>
+            <input
+              v-model="newTaskEndTime"
+              type="time"
+              :disabled="!newTaskStartTime"
+              class="w-24 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
             />
           </div>
           <div class="flex items-center gap-1">
@@ -264,15 +486,92 @@ async function handleDeleteCompletedTasks() {
             </button>
           </div>
         </div>
+        <div class="mt-3 rounded-lg border border-gray-200 p-2.5">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-xs font-medium text-gray-600">関連書類</span>
+            <DocumentAttachmentPicker
+              :selected-ids="selectedDocumentIds"
+              :disabled="isSubmitting"
+              @confirm="handleDocumentSelection"
+            />
+          </div>
+          <p v-if="selectedDocuments.length === 0" class="mt-1 text-xs text-gray-400">添付なし</p>
+          <div v-else class="mt-2 flex flex-wrap gap-1.5">
+            <span
+              v-for="document in selectedDocuments"
+              :key="document.id"
+              class="max-w-full truncate rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700"
+            >{{ document.name }}</span>
+          </div>
+          <div v-if="selectedDocumentIds.length > 0" class="mt-2 space-y-2">
+            <select
+              v-if="selectedDocumentIds.length > 1"
+              v-model="sourceDocumentId"
+              class="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+            >
+              <option v-for="document in selectedDocuments" :key="document.id" :value="document.id">
+                内容の元にする書類: {{ document.name }}
+              </option>
+            </select>
+            <label class="flex cursor-pointer items-center gap-2 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                data-testid="use-document-content"
+                :checked="useDocumentContent"
+                class="rounded text-blue-600 focus:ring-blue-500"
+                @change="handleUseDocumentContent"
+              />
+              書類の読み取り候補をタスク内容に反映
+            </label>
+            <p
+              v-if="useDocumentContent && sourceDocumentReading"
+              data-testid="document-reading-status"
+              class="rounded bg-blue-50 px-2 py-1.5 text-xs text-blue-700"
+            >書類を読み取り中です。完了後にタスク内容へ自動で反映します。</p>
+            <p
+              v-if="useDocumentContent && sourceDocumentReading && newTaskName.trim()"
+              class="text-[11px] text-gray-500"
+            >現在入力している内容なら、読み取り完了を待たずに追加できます。</p>
+            <p
+              v-else-if="useDocumentContent && suggestionLoading"
+              class="rounded bg-blue-50 px-2 py-1.5 text-xs text-blue-700"
+            >読み取り候補をタスク内容へ反映しています。</p>
+            <p v-if="suggestionError" class="rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-800">{{ suggestionError }}</p>
+          </div>
+        </div>
+        <label v-if="isFamilySpace && newTaskDueDate" class="mt-3 flex cursor-pointer items-center gap-2 text-xs text-gray-600">
+          <input
+            v-model="addToGoogleCalendar"
+            data-testid="add-task-calendar"
+            type="checkbox"
+            :disabled="!calendarStore.configured || isSubmitting"
+            class="rounded text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+          />
+          Google Calendarにも登録
+          <span v-if="!calendarStore.configured" class="text-amber-700">（設定が必要です）</span>
+        </label>
+        <p v-if="isFamilySpace && newTaskDueDate && calendarStore.configured" class="mt-1 text-[11px] text-gray-400">
+          読み取り結果または手入力した日付を使って登録します。
+        </p>
+        <p v-else-if="!isFamilySpace && newTaskDueDate" class="mt-1 text-[11px] text-gray-400">
+          個人タスクは家族のGoogle Calendarへ登録されません。
+        </p>
         <div class="flex gap-2 mt-3">
           <button
             @click="handleAddTask"
-            class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+            data-testid="submit-task"
+            :disabled="isSubmitting || blockingForDocumentContent"
+            class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:bg-gray-300"
           >
-            追加
+            {{ isSubmitting
+              ? '追加中...'
+              : blockingForDocumentContent
+                ? '書類を読み取り中...'
+                : '追加' }}
           </button>
           <button
             @click="resetAddForm"
+            :disabled="isSubmitting"
             class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm"
           >
             キャンセル
