@@ -64,13 +64,10 @@ scripts/migrate.html
 scripts/migrate-deleted-field.js
 functions/check-firestore.js
 
-# Internal docs with environment-specific IDs/URLs
-doc/04_DEVELOPMENT_PLAN.md
-doc/05_BACKUP_SYSTEM.md
-doc/06_SYSTEM_ARCHITECTURE.md
-doc/07_CHROME_EXTENSION.md
-doc/08_GOOGLE_CALENDAR_SETUP.md
-doc/FIRESTORE_ONSNAPSHOT.md
+# Product-specific docs are private by default
+doc/**
+!doc/FEATURE_IMPLEMENTATION_TEMPLATE.md
+!doc/REQUIREMENTS_TEMPLATE.md
 internal_docs/
 
 .codexignore
