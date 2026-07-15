@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref, onMounted, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, onMounted, onUnmounted, watch } from 'vue'
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore'
 import type { SpaceMember, SpaceMeta } from '@/types'
-// import { useCalendarStore } from '@/stores/calendar' // TODO: カレンダー機能を一時無効化
+import { useCalendarStore } from '@/stores/calendar'
 import { useAuthStore } from '@/stores/auth'
 import { useSpaceStore } from '@/stores/space'
 import { useListsStore } from '@/stores/lists'
@@ -24,7 +24,7 @@ import {
   type ImportResult,
 } from '@/services/importService'
 
-// const calendarStore = useCalendarStore() // TODO: カレンダー機能を一時無効化
+const calendarStore = useCalendarStore()
 const authStore = useAuthStore()
 const spaceStore = useSpaceStore()
 const listsStore = useListsStore()
@@ -51,6 +51,7 @@ const importResult = ref<ImportResult | null>(null)
 const clearResult = ref<ClearResult | null>(null)
 const maintenanceError = ref<string | null>(null)
 const migrationMessage = ref('')
+const calendarIdInput = ref('')
 
 const currentSpaceName = computed(() => {
   if (!spaceStore.currentSpaceId) return '未設定'
@@ -81,6 +82,10 @@ const canManageDocumentOcr = computed(() =>
   !spaceStore.useLegacyPath && currentMembership.value?.role === 'owner'
 )
 
+const canManageCalendar = computed(() =>
+  !spaceStore.useLegacyPath && currentMembership.value?.role === 'owner'
+)
+
 const progressPercent = computed(() => {
   if (!progress.value || progress.value.total === 0) return 0
   return Math.round((progress.value.current / progress.value.total) * 100)
@@ -94,37 +99,35 @@ const goBack = () => {
   }
 }
 
-/* TODO: カレンダー機能を一時無効化
-// APIキー入力フォーム
-const inputClientId = ref(calendarStore.clientId)
-const inputClientSecret = ref('')
-
-async function handleSaveApiConfig() {
-  await calendarStore.saveApiConfig(inputClientId.value, inputClientSecret.value)
-  inputClientSecret.value = '' // 保存後はシークレット欄をクリア
+async function handleSaveCalendarConfig() {
+  await calendarStore.saveConfig(calendarIdInput.value.trim())
 }
 
-async function handleConnect() {
-  await calendarStore.connect()
+async function handleClearCalendarConfig() {
+  if (!confirm('Google Calendarの登録先設定を解除しますか？')) return
+  await calendarStore.clearConfig()
+  calendarIdInput.value = ''
 }
-
-async function handleDisconnect() {
-  if (!confirm('Googleカレンダーとの連携を解除しますか？')) return
-  await calendarStore.disconnect()
-}
-*/
 
 onMounted(async () => {
   await spaceStore.initSpace()
   await loadCurrentSpaceDetails()
+  calendarStore.subscribe()
 })
+
+onUnmounted(() => calendarStore.unsubscribe())
 
 watch(
   () => spaceStore.currentSpaceId,
   () => {
     loadCurrentSpaceDetails()
+    calendarStore.subscribe()
   }
 )
+
+watch(() => calendarStore.calendarId, (calendarId) => {
+  calendarIdInput.value = calendarId
+})
 
 async function handleCreateFamilySpace(): Promise<void> {
   const name = familySpaceName.value.trim()
@@ -667,6 +670,83 @@ async function handleRunDataMigration(): Promise<void> {
           />
         </Suspense>
       </div>
+
+      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100">
+          <h2 class="text-sm font-semibold text-gray-700">Google Calendar連携</h2>
+          <p class="text-xs text-gray-500 mt-0.5">書類から確認した予定を家族のカレンダーへ登録します</p>
+        </div>
+        <div class="px-4 py-4 space-y-4">
+          <div v-if="canManageCalendar" class="space-y-4">
+            <ol class="list-decimal space-y-2 pl-5 text-xs leading-5 text-slate-600">
+              <li>
+                <a
+                  href="https://calendar.google.com/calendar/u/0/r/settings"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-blue-600 underline"
+                >Google Calendarの設定を開き</a>、左側の「マイカレンダーの設定」から家族カレンダーを選びます。
+              </li>
+              <li>
+                左側の「共有する相手」を開き、「ユーザーやグループを追加」に次のサービスアカウントを入力します。
+                権限は「予定の変更」を選び、「送信」を押します。
+              </li>
+              <li>左側の「カレンダーの統合」を開き、カレンダーIDをコピーして下へ貼り付けます。</li>
+            </ol>
+
+            <label class="block text-xs font-medium text-slate-600">
+              共有するサービスアカウント
+              <input
+                :value="calendarStore.serviceAccountEmail"
+                type="text"
+                readonly
+                class="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
+                @focus="($event.target as HTMLInputElement).select()"
+              />
+            </label>
+            <p v-if="!calendarStore.serviceAccountEmail" class="text-xs text-amber-700">
+              サービスアカウントを確認中です。表示されない場合はGoogle Calendar APIの有効化を確認してください。
+            </p>
+
+            <label class="block text-xs font-medium text-slate-600">
+              カレンダーID
+              <input
+                v-model="calendarIdInput"
+                type="text"
+                inputmode="text"
+                autocomplete="off"
+                placeholder="xxxxx@group.calendar.google.com"
+                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <div class="flex items-center gap-3">
+              <button
+                type="button"
+                :disabled="calendarStore.loading || !calendarStore.serviceAccountEmail || !calendarIdInput.trim()"
+                class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                @click="handleSaveCalendarConfig"
+              >{{ calendarStore.loading ? '確認中...' : '共有先を確認して保存' }}</button>
+              <button
+                v-if="calendarStore.configured"
+                type="button"
+                :disabled="calendarStore.loading"
+                class="text-sm text-red-600 disabled:opacity-50"
+                @click="handleClearCalendarConfig"
+              >設定を解除</button>
+            </div>
+            <p v-if="calendarStore.configured" class="text-sm text-green-700">
+              登録先: {{ calendarStore.calendarName || calendarStore.calendarId }}
+            </p>
+          </div>
+          <div v-else>
+            <p v-if="calendarStore.configured" class="text-sm text-gray-600">
+              登録先: {{ calendarStore.calendarName || calendarStore.calendarId }}
+            </p>
+            <p v-else class="text-sm text-slate-500">Google Calendar連携は家族スペースのownerが設定します。</p>
+          </div>
+          <p v-if="calendarStore.error" class="mt-2 text-xs text-red-600">{{ calendarStore.error }}</p>
+        </div>
+      </section>
 
 
       <Suspense>

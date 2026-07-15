@@ -9,15 +9,15 @@ export async function analyzeAndStoreDocumentText(
   documentRef: admin.firestore.DocumentReference,
   document: FamilyDocument,
   artifact: DocumentTextArtifact
-): Promise<void> {
-  if (artifact.analysisVersion !== document.analysisVersion) return
+): Promise<number> {
+  if (artifact.analysisVersion !== document.analysisVersion) return 0
   const currentSnapshot = await documentRef.get()
-  if (!currentSnapshot.exists) return
+  if (!currentSnapshot.exists) return 0
   const current = currentSnapshot.data() as FamilyDocument
   if (current.analysisVersion !== document.analysisVersion
-    || !['uploaded', 'processing', 'ready'].includes(current.status)) return
+    || !['uploaded', 'processing', 'ready'].includes(current.status)) return 0
   const classification = classifyDocumentByRules(document.name, artifact.pages)
-  const suggestions = extractDocumentSuggestions(artifact.pages)
+  const suggestions = extractDocumentSuggestions(artifact.pages, document.createdAt.toDate())
   const suggestionsRef = documentRef.collection('suggestions')
   const existingSnapshot = await suggestionsRef.get()
   const existingById = new Map(existingSnapshot.docs.map((snapshot) => [snapshot.id, snapshot]))
@@ -60,4 +60,5 @@ export async function analyzeAndStoreDocumentText(
     }
     transaction.update(documentRef, update)
   })
+  return suggestions.length
 }

@@ -4,6 +4,7 @@ import { Timestamp } from 'firebase-admin/firestore'
 import * as functions from 'firebase-functions/v1'
 import { buildOriginalObjectKey, isObjectKeyInDocument } from './objectKeys'
 import { decodeDocumentTextArtifact } from './ocr/artifact'
+import { analyzeAndStoreDocumentText } from './documentAnalysis'
 import { createObjectStorageProvider, isFunctionsEmulator } from './providers/providerFactory'
 import {
   DEFAULT_DOCUMENT_LIMIT_BYTES,
@@ -320,5 +321,39 @@ export const getDocumentText = documentRuntime
       }
     } catch {
       throw new functions.https.HttpsError('failed-precondition', 'OCR成果物を読み込めませんでした')
+    }
+  })
+
+export const reanalyzeDocumentSuggestions = documentRuntime
+  .region('asia-northeast1')
+  .https.onCall(async (data, context) => {
+    const { spaceId, documentId } = parseDocumentRequest(data)
+    await requireActiveMember(context, spaceId)
+    const documentRef = db.doc(`spaces/${spaceId}/documents/${documentId}`)
+    const documentSnapshot = await documentRef.get()
+    if (!documentSnapshot.exists) {
+      throw new functions.https.HttpsError('not-found', '書類が見つかりません')
+    }
+    const document = documentSnapshot.data() as FamilyDocument
+    if (document.status === 'trashed') {
+      throw new functions.https.HttpsError('failed-precondition', 'ごみ箱内の書類は候補を再抽出できません')
+    }
+    if (!document.ocrObjectKey
+      || !isObjectKeyInDocument(document.ocrObjectKey, spaceId, documentId)) {
+      throw new functions.https.HttpsError('failed-precondition', '再利用できるOCR成果物がありません')
+    }
+    const stored = await createObjectStorageProvider().readObject(document.ocrObjectKey)
+    if (!stored) {
+      throw new functions.https.HttpsError('failed-precondition', 'OCR成果物が見つかりません')
+    }
+    try {
+      const artifact = await decodeDocumentTextArtifact(stored)
+      if (artifact.analysisVersion !== document.analysisVersion) {
+        throw new Error('解析versionが一致しません')
+      }
+      const suggestionCount = await analyzeAndStoreDocumentText(documentRef, document, artifact)
+      return { success: true, suggestionCount }
+    } catch {
+      throw new functions.https.HttpsError('failed-precondition', '保存済みOCRから候補を再抽出できませんでした')
     }
   })

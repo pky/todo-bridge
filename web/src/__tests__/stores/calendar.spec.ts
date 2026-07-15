@@ -12,11 +12,6 @@ const { onSnapshotMock, httpsCallableMock } = vi.hoisted(() => ({
 vi.mock('firebase/firestore', () => ({
   doc: vi.fn((...segments: string[]) => segments),
   onSnapshot: onSnapshotMock,
-  setDoc: vi.fn(),
-  getDoc: vi.fn().mockResolvedValue({
-    exists: () => false,
-    data: () => ({}),
-  }),
 }))
 
 vi.mock('firebase/functions', () => ({
@@ -76,23 +71,53 @@ describe('Calendar Store', () => {
     )
   })
 
-  it('disconnect が current space を callable に渡す', async () => {
-    const spaceStore = useSpaceStore()
-    spaceStore.$patch({
-      useLegacyPath: false,
-      currentSpaceId: 'space-1',
+  it('Functionsのサービスアカウントを取得する', async () => {
+    const callable = vi.fn().mockResolvedValue({
+      data: { serviceAccountEmail: 'app@example.iam.gserviceaccount.com' },
     })
-
-    const callable = vi.fn().mockResolvedValue({ data: undefined })
     httpsCallableMock.mockReturnValue(callable)
-
     const store = useCalendarStore()
-    await store.disconnect()
 
-    expect(httpsCallableMock).toHaveBeenCalledWith({}, 'disconnectGoogleCalendar')
+    await store.loadServiceConfig()
+
+    expect(httpsCallableMock).toHaveBeenCalledWith({}, 'getGoogleCalendarServiceConfig')
+    expect(store.serviceAccountEmail).toBe('app@example.iam.gserviceaccount.com')
+  })
+
+  it('カレンダーIDを家族スペース単位で保存する', async () => {
+    const spaceStore = useSpaceStore()
+    spaceStore.$patch({ useLegacyPath: false, currentSpaceId: 'space-1' })
+    const callable = vi.fn().mockResolvedValue({
+      data: {
+        success: true,
+        calendarId: 'family@group.calendar.google.com',
+        calendarName: '家族',
+      },
+    })
+    httpsCallableMock.mockReturnValue(callable)
+    const store = useCalendarStore()
+
+    await store.saveConfig('family@group.calendar.google.com')
+
+    expect(httpsCallableMock).toHaveBeenCalledWith({}, 'saveGoogleCalendarConfig')
     expect(callable).toHaveBeenCalledWith({
       spaceId: 'space-1',
       useLegacyPath: false,
+      calendarId: 'family@group.calendar.google.com',
     })
+    expect(store.calendarName).toBe('家族')
+  })
+
+  it('登録先の解除を家族スペース単位で要求する', async () => {
+    const spaceStore = useSpaceStore()
+    spaceStore.$patch({ useLegacyPath: false, currentSpaceId: 'space-1' })
+    const callable = vi.fn().mockResolvedValue({ data: undefined })
+    httpsCallableMock.mockReturnValue(callable)
+    const store = useCalendarStore()
+
+    await store.clearConfig()
+
+    expect(httpsCallableMock).toHaveBeenCalledWith({}, 'clearGoogleCalendarConfig')
+    expect(callable).toHaveBeenCalledWith({ spaceId: 'space-1', useLegacyPath: false })
   })
 })

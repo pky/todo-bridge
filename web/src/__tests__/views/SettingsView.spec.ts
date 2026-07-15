@@ -33,6 +33,21 @@ vi.mock('@/stores/news', () => ({
   }),
 }))
 
+vi.mock('@/stores/calendar', () => ({
+  useCalendarStore: () => ({
+    configured: false,
+    serviceAccountEmail: 'app@example.iam.gserviceaccount.com',
+    loading: false,
+    error: null,
+    subscribe: vi.fn(),
+    unsubscribe: vi.fn(),
+    saveConfig: vi.fn(),
+    clearConfig: vi.fn(),
+    calendarId: '',
+    calendarName: '',
+  }),
+}))
+
 vi.mock('@/services/cloudFunctionsService', () => ({
   createFamilySpaceApi: vi.fn(),
   updateFamilySpaceNameApi: vi.fn(),
@@ -142,6 +157,10 @@ describe('SettingsView', () => {
 
     expect(wrapper.text()).toContain('スペース名を変更')
     expect(wrapper.text()).toContain('メンバー 2 人')
+    expect(wrapper.text()).toContain('左側の「共有する相手」')
+    expect(wrapper.text()).toContain('「ユーザーやグループを追加」')
+    expect(wrapper.text()).toContain('左側の「カレンダーの統合」')
+    expect(wrapper.text()).toContain('共有先を確認して保存')
   })
 
   it('member には owner 管理導線が表示されない', async () => {
@@ -172,6 +191,8 @@ describe('SettingsView', () => {
 
     expect(wrapper.text()).not.toContain('スペース名を変更')
     expect(wrapper.text()).toContain('メンバー 2 人')
+    expect(wrapper.text()).not.toContain('共有先を確認して保存')
+    expect(wrapper.text()).toContain('Google Calendar連携は家族スペースのownerが設定します')
   })
 
   it('移行済みの個人スペースでもOCR設定を表示する', async () => {

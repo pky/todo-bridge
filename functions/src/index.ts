@@ -48,6 +48,7 @@ export {
   getDocumentAccessUrl,
   getDocumentText,
   getDocumentThumbnailAccessUrl,
+  reanalyzeDocumentSuggestions,
 } from './documents/api'
 export {
   extractDocumentTextOnUpload,
@@ -62,10 +63,14 @@ export {
   trashDocument,
 } from './documents/deletion'
 export { updateDocumentOcrSettings } from './documents/ocrSettings'
+export { createDocumentCalendarEvent } from './documents/calendarRegistration'
 export { localDocumentObject } from './documents/providers/localObjectHttp'
 
-// TODO: カレンダー自動登録機能を一時無効化
-// export { connectGoogleCalendar, disconnectGoogleCalendar } from './calendar'
+export {
+  clearGoogleCalendarConfig,
+  getGoogleCalendarServiceConfig,
+  saveGoogleCalendarConfig,
+} from './calendar'
 
 // 孤立したサブタスクを復旧（親タスクを再作成）
 export const recoverOrphanedSubtasks = functions

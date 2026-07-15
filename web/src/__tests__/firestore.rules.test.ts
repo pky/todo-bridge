@@ -422,4 +422,16 @@ describeWithEmulator('firestore rules', () => {
     await assertSucceeds(updateDoc(doc(aliceDb, settingsPath), { calendarId: 'family-calendar' }))
     await assertFails(updateDoc(doc(bobDb, settingsPath), { calendarId: 'attacker-calendar' }))
   })
+
+  it('Google CalendarのOAuth秘密情報は認証済みクライアントにも見せない', async () => {
+    await seedDoc('appConfig/googleCalendar', {
+      clientId: '公開可能なID',
+      clientSecret: 'クライアントへ返さない値',
+    })
+    await seedDoc('appConfig/authAccess', { allowedEmails: [] })
+    const aliceDb = testEnv.authenticatedContext('alice', { email: 'alice@example.com' }).firestore()
+
+    await assertFails(getDoc(doc(aliceDb, 'appConfig/googleCalendar')))
+    await assertSucceeds(getDoc(doc(aliceDb, 'appConfig/authAccess')))
+  })
 })

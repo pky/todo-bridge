@@ -22,18 +22,34 @@ test('園行事の日付と次行の時刻を予定候補にまとめる', () =>
   const suggestions = extractDocumentSuggestions([page([
     '〈茶話会〉',
     '日にち：5月15日（金）',
-    '時間：13時45分〜14時45分',
+    '時間：13時45分~14時45分',
     '場所：中央公民館',
-  ].join('\n'))])
+  ].join('\n'))], new Date('2026-07-14T00:00:00+09:00'))
   const event = suggestions.find((item) => item.type === 'calendar_event')
 
   assert.equal(event.value.dateText, '5月15日')
+  assert.equal(event.value.date, '2026-05-15')
   assert.equal(event.value.yearAmbiguous, true)
+  assert.equal(event.value.inferredYear, 2026)
   assert.equal(event.value.time, '13:45')
+  assert.equal(event.value.endTime, '14:45')
+  assert.equal(event.value.location, '中央公民館')
+  assert.equal(event.title, '茶話会')
   assert.match(event.sourceExcerpt, /時間：13時45分/)
 })
 
-test('期限、予定、持ち物、金額、連絡先を根拠ページつきで抽出する', () => {
+test('記載曜日が基準年と違う場合は近い一致年を日付候補にする', () => {
+  const suggestions = extractDocumentSuggestions([
+    page('開催日：5月15日（木）\n時間：10時00分'),
+  ], new Date('2026-07-14T00:00:00+09:00'))
+  const event = suggestions.find((item) => item.type === 'calendar_event')
+
+  assert.equal(event.value.date, '2025-05-15')
+  assert.equal(event.value.inferredYear, 2025)
+  assert.equal(event.value.yearAmbiguous, true)
+})
+
+test('期限だけを操作可能な候補として抽出し、単独の情報候補を作らない', () => {
   const suggestions = extractDocumentSuggestions([page([
     '提出期限：2026年7月20日までに提出してください',
     '持ち物：水筒、帽子',
@@ -44,26 +60,13 @@ test('期限、予定、持ち物、金額、連絡先を根拠ページつき�
   assert.ok(suggestions.some((item) => item.type === 'task'
     && item.value.date === '2026-07-20'
     && item.pageNumber === 2))
-  assert.ok(suggestions.some((item) => item.type === 'field'
-    && item.value.fieldType === 'items'))
-  assert.ok(suggestions.some((item) => item.type === 'amount'
-    && item.value.amount === 1500))
-  assert.ok(suggestions.some((item) => item.type === 'contact'
-    && item.value.kind === 'phone'))
-  assert.ok(suggestions.some((item) => item.type === 'contact'
-    && item.value.kind === 'email'))
+  assert.equal(suggestions.length, 1)
   assert.ok(suggestions.every((item) => item.sourceExcerpt.length > 0))
 })
 
-test('年と役割が不明な日付を曖昧なfield候補にする', () => {
+test('用途を判断できない日付は操作候補にしない', () => {
   const suggestions = extractDocumentSuggestions([page('次回は7月20日です')])
-  const date = suggestions.find((item) => item.value.fieldType === 'date')
-
-  assert.equal(date.type, 'field')
-  assert.equal(date.value.date, null)
-  assert.equal(date.value.yearAmbiguous, true)
-  assert.equal(date.value.roleAmbiguous, true)
-  assert.ok(date.confidence < 0.6)
+  assert.deepEqual(suggestions, [])
 })
 
 test('存在しない日付と空の解析結果を採用しない', () => {

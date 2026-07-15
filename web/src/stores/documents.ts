@@ -12,10 +12,12 @@ import {
 } from 'firebase/firestore'
 import { db } from '@/services/firebase'
 import {
+  createDocumentCalendarEventApi,
   getDocumentAccessUrlApi,
   getDocumentTextApi,
   getDocumentThumbnailAccessUrlApi,
   retryDocumentTextApi,
+  reanalyzeDocumentSuggestionsApi,
   retryDocumentThumbnailApi,
   permanentlyDeleteDocumentApi,
   restoreDocumentApi,
@@ -249,6 +251,44 @@ export const useDocumentsStore = defineStore('documents', () => {
     }
   }
 
+  async function registerCalendarEvent(
+    documentId: string,
+    suggestionId: string,
+    input: Omit<UpdateDocumentSuggestionInput, 'status'>
+  ): Promise<void> {
+    await updateSuggestion(documentId, suggestionId, { ...input, status: 'pending' })
+    if (suggestionSavingIds.value.includes(suggestionId)) return
+    suggestionSavingIds.value = [...suggestionSavingIds.value, suggestionId]
+    suggestionsError.value = null
+    try {
+      await createDocumentCalendarEventApi(
+        requireCurrentSpaceId(),
+        documentId,
+        suggestionId
+      )
+    } catch (registrationError) {
+      suggestionsError.value = registrationError instanceof Error
+        ? registrationError.message
+        : 'Google Calendarへ登録できませんでした'
+      throw registrationError
+    } finally {
+      suggestionSavingIds.value = suggestionSavingIds.value.filter((id) => id !== suggestionId)
+    }
+  }
+
+  async function reanalyzeSuggestions(documentId: string): Promise<number> {
+    suggestionsError.value = null
+    try {
+      const result = await reanalyzeDocumentSuggestionsApi(requireCurrentSpaceId(), documentId)
+      return result.suggestionCount
+    } catch (reanalyzeError) {
+      suggestionsError.value = reanalyzeError instanceof Error
+        ? reanalyzeError.message
+        : '候補を再抽出できませんでした'
+      throw reanalyzeError
+    }
+  }
+
   function selectDocument(documentId: string | null): void {
     selectedDocumentId.value = documentId
   }
@@ -370,6 +410,8 @@ export const useDocumentsStore = defineStore('documents', () => {
     retryText,
     subscribeSuggestions,
     updateSuggestion,
+    registerCalendarEvent,
+    reanalyzeSuggestions,
     moveToTrash,
     restoreFromTrash,
     permanentlyDelete,

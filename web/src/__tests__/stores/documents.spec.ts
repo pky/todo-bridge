@@ -6,11 +6,13 @@ import { useSpaceStore } from '@/stores/space'
 
 const {
   onSnapshotMock,
+  createDocumentCalendarEventApiMock,
   uploadDocumentMock,
   getDocumentAccessUrlApiMock,
   getDocumentThumbnailAccessUrlApiMock,
   getDocumentTextApiMock,
   retryDocumentTextApiMock,
+  reanalyzeDocumentSuggestionsApiMock,
   retryDocumentThumbnailApiMock,
   trashDocumentApiMock,
   restoreDocumentApiMock,
@@ -19,11 +21,13 @@ const {
   serverTimestampMock,
 } = vi.hoisted(() => ({
   onSnapshotMock: vi.fn(),
+  createDocumentCalendarEventApiMock: vi.fn(),
   uploadDocumentMock: vi.fn(),
   getDocumentAccessUrlApiMock: vi.fn(),
   getDocumentThumbnailAccessUrlApiMock: vi.fn(),
   getDocumentTextApiMock: vi.fn(),
   retryDocumentTextApiMock: vi.fn(),
+  reanalyzeDocumentSuggestionsApiMock: vi.fn(),
   retryDocumentThumbnailApiMock: vi.fn(),
   trashDocumentApiMock: vi.fn(),
   restoreDocumentApiMock: vi.fn(),
@@ -45,11 +49,13 @@ vi.mock('firebase/firestore', () => ({
 vi.mock('@/services/firebase', () => ({ db: {} }))
 
 vi.mock('@/services/documentService', () => ({
+  createDocumentCalendarEventApi: createDocumentCalendarEventApiMock,
   uploadDocument: uploadDocumentMock,
   getDocumentAccessUrlApi: getDocumentAccessUrlApiMock,
   getDocumentThumbnailAccessUrlApi: getDocumentThumbnailAccessUrlApiMock,
   getDocumentTextApi: getDocumentTextApiMock,
   retryDocumentTextApi: retryDocumentTextApiMock,
+  reanalyzeDocumentSuggestionsApi: reanalyzeDocumentSuggestionsApiMock,
   retryDocumentThumbnailApi: retryDocumentThumbnailApiMock,
   trashDocumentApi: trashDocumentApiMock,
   restoreDocumentApi: restoreDocumentApiMock,
@@ -202,5 +208,65 @@ describe('documents store', () => {
         updatedAt: 'server-timestamp',
       }
     )
+  })
+
+  it('修正した予定候補を保存してGoogle Calendar登録を要求する', async () => {
+    onSnapshotMock.mockImplementation((target, next) => {
+      if (Array.isArray(target) && target.includes('suggestions')) {
+        next({
+          docs: [{
+            id: 'suggestion-1',
+            data: () => ({
+              type: 'calendar_event',
+              status: 'pending',
+              title: '茶話会',
+              value: { date: '2026-05-15', time: '13:45' },
+            }),
+          }],
+        })
+      }
+      return vi.fn()
+    })
+    createDocumentCalendarEventApiMock.mockResolvedValue({
+      success: true,
+      eventId: 'event-1',
+      alreadyRegistered: false,
+    })
+    const store = useDocumentsStore()
+    store.subscribeSuggestions('document-1')
+
+    await store.registerCalendarEvent('document-1', 'suggestion-1', {
+      title: '茶話会',
+      value: {
+        date: '2026-05-15',
+        time: '13:45',
+        endTime: '14:45',
+        location: '中央公民館',
+      },
+    })
+
+    expect(updateDocMock).toHaveBeenCalledWith(
+      [{}, 'spaces', 'space-1', 'documents', 'document-1', 'suggestions', 'suggestion-1'],
+      expect.objectContaining({
+        title: '茶話会',
+        status: 'pending',
+      })
+    )
+    expect(createDocumentCalendarEventApiMock).toHaveBeenCalledWith(
+      'space-1',
+      'document-1',
+      'suggestion-1'
+    )
+  })
+
+  it('保存済みOCRから候補を再抽出する', async () => {
+    reanalyzeDocumentSuggestionsApiMock.mockResolvedValue({
+      success: true,
+      suggestionCount: 1,
+    })
+    const store = useDocumentsStore()
+
+    await expect(store.reanalyzeSuggestions('document-1')).resolves.toBe(1)
+    expect(reanalyzeDocumentSuggestionsApiMock).toHaveBeenCalledWith('space-1', 'document-1')
   })
 })

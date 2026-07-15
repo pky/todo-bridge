@@ -91,6 +91,8 @@ export interface DocumentSuggestion {
   status: DocumentSuggestionStatus
   title: string
   value: Record<string, unknown>
+  calendarEventId?: string | null
+  calendarRegistrationVersion?: number
   pageNumber: number | null
   sourceExcerpt: string
   confidence: number | null

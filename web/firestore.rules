@@ -271,8 +271,13 @@ service cloud.firestore {
     }
 
     // 設定コレクション（認証済みユーザーなら読み取り可能）
-    match /appConfig/{document=**} {
-      allow read: if isSignedIn();
+    match /appConfig/{document} {
+      allow read: if isSignedIn() && document != 'googleCalendar';
+      allow write: if false;
+    }
+
+    match /appConfig/{document}/{nested=**} {
+      allow read: if isSignedIn() && document != 'googleCalendar';
       allow write: if false;
     }
 

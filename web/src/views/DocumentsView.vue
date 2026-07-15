@@ -22,6 +22,7 @@ const accessError = ref<string | null>(null)
 const textResult = ref<DocumentTextResult | null>(null)
 const textLoading = ref(false)
 const textRetrying = ref(false)
+const suggestionsReanalyzing = ref(false)
 const textError = ref<string | null>(null)
 let accessSequence = 0
 let textSequence = 0
@@ -116,16 +117,28 @@ function openInput(input: HTMLInputElement | null): void {
   input?.click()
 }
 
+function selectFamilyDocumentSpace(): void {
+  if (!spaceStore.currentSpaceId?.startsWith('personal_')) return
+  const familyMembership = spaceStore.memberships.find(
+    (membership) => !membership.spaceId.startsWith('personal_')
+  )
+  if (familyMembership) spaceStore.selectSpace(familyMembership.spaceId)
+}
+
 async function handleFileSelection(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
+  if (!file) {
+    input.value = ''
+    return
+  }
 
   try {
     await documentsStore.addDocument(file, 'file')
   } catch {
     // Storeのエラーを画面に表示する
+  } finally {
+    input.value = ''
   }
 }
 
@@ -229,6 +242,32 @@ async function saveSuggestion(
   }
 }
 
+async function registerSuggestionCalendar(
+  suggestionId: string,
+  input: Omit<UpdateDocumentSuggestionInput, 'status'>
+): Promise<void> {
+  const document = selectedDocument.value
+  if (!document) return
+  try {
+    await documentsStore.registerCalendarEvent(document.id, suggestionId, input)
+  } catch {
+    // Storeのエラーを候補欄に表示する
+  }
+}
+
+async function reanalyzeSelectedSuggestions(): Promise<void> {
+  const document = selectedDocument.value
+  if (!document || suggestionsReanalyzing.value) return
+  suggestionsReanalyzing.value = true
+  try {
+    await documentsStore.reanalyzeSuggestions(document.id)
+  } catch {
+    // Storeのエラーを候補欄に表示する
+  } finally {
+    suggestionsReanalyzing.value = false
+  }
+}
+
 function closeDetail(): void {
   documentsStore.selectDocument(null)
 }
@@ -280,6 +319,7 @@ async function permanentlyDeleteSelectedDocument(): Promise<void> {
 
 onMounted(async () => {
   await spaceStore.initSpace()
+  selectFamilyDocumentSpace()
   documentsStore.subscribe()
 })
 
@@ -544,7 +584,10 @@ watch(textResult, async () => {
               :loading="documentsStore.suggestionsLoading"
               :error="documentsStore.suggestionsError"
               :saving-ids="documentsStore.suggestionSavingIds"
+              :reanalyzing="suggestionsReanalyzing"
               @save="saveSuggestion"
+              @register-calendar="registerSuggestionCalendar"
+              @reanalyze="reanalyzeSelectedSuggestions"
               @open-page="openSuggestionPage"
             />
           </div>

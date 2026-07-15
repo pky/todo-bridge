@@ -13,9 +13,8 @@ export interface ExtractedDocumentSuggestion {
 }
 
 const DATE_PATTERN = /(?:(\d{4})年)?\s*(\d{1,2})月\s*(\d{1,2})日/g
-const MONEY_PATTERN = /(?:[¥￥]\s*([\d,]+)|([\d,]+)\s*円)/g
-const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi
-const PHONE_PATTERN = /(?<!\d)(0\d{1,4}[-‐ー]\d{1,4}[-‐ー]\d{3,4})(?!\d)/g
+const JAPANESE_WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'] as const
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000
 
 function compactExcerpt(value: string, maxLength: number = 300): string {
   const compact = value.replace(/\s+/g, ' ').trim()
@@ -51,13 +50,40 @@ function getDateContext(text: string, start: number): string {
   return compactExcerpt(text.slice(lineStart).split(/\r?\n/).slice(0, 3).join('\n'))
 }
 
-function formatTime(match: RegExpMatchArray | null): string | null {
-  if (!match) return null
-  const period = match[1]
-  let hour = Number(match[2])
+function formatTime(period: string | undefined, hourText: string, minuteText?: string): string {
+  let hour = Number(hourText)
   if (period === '午後' && hour < 12) hour += 12
   if (period === '午前' && hour === 12) hour = 0
-  return `${String(hour).padStart(2, '0')}:${String(Number(match[3] ?? 0)).padStart(2, '0')}`
+  return `${String(hour).padStart(2, '0')}:${String(Number(minuteText ?? 0)).padStart(2, '0')}`
+}
+
+function extractTimeRange(text: string): { time: string | null; endTime: string | null } {
+  const match = text.match(
+    /(?:(午前|午後)\s*)?(\d{1,2})(?::|時)\s*(\d{1,2})?分?(?:\s*[〜～~ー-]\s*(?:(午前|午後)\s*)?(\d{1,2})(?::|時)\s*(\d{1,2})?分?)?/
+  )
+  if (!match) return { time: null, endTime: null }
+  return {
+    time: formatTime(match[1], match[2], match[3]),
+    endTime: match[5] ? formatTime(match[4] ?? match[1], match[5], match[6]) : null,
+  }
+}
+
+function extractEventTitle(text: string, dateStart: number, dateText: string): string {
+  const precedingLines = text.slice(0, dateStart).split(/\r?\n/).reverse()
+  const heading = precedingLines.find((line) => {
+    const compact = line.trim()
+    return compact.length > 0
+      && compact.length <= 100
+      && !/^(?:日にち|日程|日時|開催日|予定|場所|会場|時間)\s*[：:]?/.test(compact)
+  })?.trim()
+  if (!heading) return `予定：${dateText}`
+  const unwrapped = heading.replace(/^[〈《【［\[(（]\s*/, '').replace(/\s*[〉》】］\])）]$/, '').trim()
+  return unwrapped || `予定：${dateText}`
+}
+
+function extractLocation(text: string): string | null {
+  const match = text.match(/(?:場所|会場)\s*[：:]\s*([^\r\n]+)/)
+  return match?.[1]?.trim() || null
 }
 
 function toIsoDate(year: number, month: number, day: number): string | null {
@@ -68,91 +94,97 @@ function toIsoDate(year: number, month: number, day: number): string | null {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
-function extractDates(page: OcrPageResult): ExtractedDocumentSuggestion[] {
+function extractWeekday(text: string, dateEnd: number): number | null {
+  const suffix = text.slice(dateEnd, dateEnd + 16)
+  const match = suffix.match(/^\s*[（(]?\s*([日月火水木金土])(?:曜(?:日)?)?\s*[）)]?/)
+  if (!match) return null
+  const weekday = JAPANESE_WEEKDAYS.indexOf(match[1] as typeof JAPANESE_WEEKDAYS[number])
+  return weekday >= 0 ? weekday : null
+}
+
+function inferDateWithoutYear(
+  month: number,
+  day: number,
+  weekday: number | null,
+  referenceDate: Date
+): { date: string | null; inferredYear: number | null } {
+  const referenceInJst = new Date(referenceDate.getTime() + JST_OFFSET_MS)
+  const referenceYear = referenceInJst.getUTCFullYear()
+  const years = weekday === null
+    ? [referenceYear]
+    : Array.from({ length: 7 }, (_, index) => referenceYear - 3 + index)
+  const referenceTime = Date.UTC(
+    referenceYear,
+    referenceInJst.getUTCMonth(),
+    referenceInJst.getUTCDate()
+  )
+  const candidates = years.flatMap((year) => {
+    const date = toIsoDate(year, month, day)
+    if (!date) return []
+    const dateTime = Date.UTC(year, month - 1, day)
+    if (weekday !== null && new Date(dateTime).getUTCDay() !== weekday) return []
+    return [{ date, year, distance: Math.abs(dateTime - referenceTime) }]
+  })
+  candidates.sort((left, right) => left.distance - right.distance)
+  const nearest = candidates[0]
+  return nearest
+    ? { date: nearest.date, inferredYear: nearest.year }
+    : { date: null, inferredYear: null }
+}
+
+function extractDates(page: OcrPageResult, referenceDate: Date): ExtractedDocumentSuggestion[] {
   const suggestions: ExtractedDocumentSuggestion[] = []
   for (const match of page.text.matchAll(DATE_PATTERN)) {
     const year = match[1] ? Number(match[1]) : null
     const month = Number(match[2])
     const day = Number(match[3])
-    const date = year ? toIsoDate(year, month, day) : null
-    if (year && !date) continue
     const lineExcerpt = getContext(page.text, match.index ?? 0, match[0].length)
     const excerpt = getDateContext(page.text, match.index ?? 0)
     const isDeadline = /(まで|締切|期限|提出|必着)/.test(lineExcerpt)
     const isEvent = /(日にち|日程|日時|開催|行事|予定|集合|開始|実施)/.test(lineExcerpt)
-    const timeMatch = excerpt.match(/(?:(午前|午後)\s*)?(\d{1,2})(?::|時)\s*(\d{1,2})?分?/)
+    const timeRange = extractTimeRange(excerpt)
     const role = isDeadline && !isEvent ? 'deadline' : isEvent && !isDeadline ? 'event' : 'ambiguous'
+    if (role === 'ambiguous') continue
+    const dateEnd = (match.index ?? 0) + match[0].length
+    const weekday = extractWeekday(page.text, dateEnd)
+    const inferred = year === null
+      ? inferDateWithoutYear(month, day, weekday, referenceDate)
+      : { date: null, inferredYear: null }
+    const date = year ? toIsoDate(year, month, day) : inferred.date
+    if (year && !date) continue
     const suggestion = createSuggestion({
-      type: role === 'deadline' ? 'task' : role === 'event' ? 'calendar_event' : 'field',
+      type: role === 'deadline' ? 'task' : 'calendar_event',
       title: role === 'deadline'
         ? `期限：${match[0].trim()}`
-        : role === 'event' ? `予定：${match[0].trim()}` : `日付：${match[0].trim()}`,
+        : extractEventTitle(page.text, match.index ?? 0, match[0].trim()),
       value: {
-        ...(role === 'ambiguous' ? { fieldType: 'date' } : {}),
         date,
         dateText: match[0].trim(),
         yearAmbiguous: year === null,
+        ...(inferred.inferredYear !== null ? { inferredYear: inferred.inferredYear } : {}),
         role,
-        roleAmbiguous: role === 'ambiguous',
-        time: formatTime(timeMatch),
+        time: timeRange.time,
+        ...(timeRange.endTime ? { endTime: timeRange.endTime } : {}),
+        ...(role === 'event' && extractLocation(excerpt)
+          ? { location: extractLocation(excerpt) }
+          : {}),
       },
       pageNumber: page.pageNumber,
       sourceExcerpt: excerpt,
-      confidence: year && role !== 'ambiguous' ? 0.9 : role !== 'ambiguous' ? 0.72 : 0.55,
+      confidence: year ? 0.9 : 0.72,
     })
     if (suggestion) suggestions.push(suggestion)
   }
   return suggestions
 }
 
-function extractPatternValues(page: OcrPageResult): ExtractedDocumentSuggestion[] {
-  const suggestions: ExtractedDocumentSuggestion[] = []
-  const addMatches = (
-    pattern: RegExp,
-    build: (match: RegExpMatchArray, excerpt: string) => Omit<ExtractedDocumentSuggestion, 'id' | 'pageNumber' | 'sourceExcerpt'>
-  ) => {
-    for (const match of page.text.matchAll(pattern)) {
-      const excerpt = getContext(page.text, match.index ?? 0, match[0].length)
-      const suggestion = createSuggestion({
-        ...build(match, excerpt),
-        pageNumber: page.pageNumber,
-        sourceExcerpt: excerpt,
-      })
-      if (suggestion) suggestions.push(suggestion)
-    }
-  }
-  addMatches(MONEY_PATTERN, (match) => {
-    const amount = Number((match[1] ?? match[2]).replace(/,/g, ''))
-    return { type: 'amount', title: `金額：${match[0]}`, value: { amount, currency: 'JPY', raw: match[0] }, confidence: 0.9 }
-  })
-  addMatches(EMAIL_PATTERN, (match) => ({
-    type: 'contact', title: `メール：${match[0]}`, value: { kind: 'email', address: match[0] }, confidence: 0.95,
-  }))
-  addMatches(PHONE_PATTERN, (match) => ({
-    type: 'contact', title: `電話：${match[0]}`, value: { kind: 'phone', number: match[0] }, confidence: 0.9,
-  }))
-  page.text.split(/\r?\n/).forEach((line) => {
-    const fieldMatch = line.match(/^\s*(持ち物|場所|会場|支払先)\s*[：:]\s*(.+)$/)
-    if (!fieldMatch) return
-    const fieldType = fieldMatch[1] === '持ち物' ? 'items'
-      : fieldMatch[1] === '支払先' ? 'payee' : 'location'
-    const suggestion = createSuggestion({
-      type: 'field',
-      title: `${fieldMatch[1]}：${compactExcerpt(fieldMatch[2], 100)}`,
-      value: { fieldType, text: compactExcerpt(fieldMatch[2], 500) },
-      pageNumber: page.pageNumber,
-      sourceExcerpt: compactExcerpt(line),
-      confidence: 0.88,
-    })
-    if (suggestion) suggestions.push(suggestion)
-  })
-  return suggestions
-}
-
-export function extractDocumentSuggestions(pages: OcrPageResult[]): ExtractedDocumentSuggestion[] {
+export function extractDocumentSuggestions(
+  pages: OcrPageResult[],
+  referenceDate: Date = new Date()
+): ExtractedDocumentSuggestion[] {
   const unique = new Map<string, ExtractedDocumentSuggestion>()
   pages.forEach((page) => {
-    [...extractDates(page), ...extractPatternValues(page)].forEach((suggestion) => {
+    extractDates(page, referenceDate).forEach((suggestion) => {
       unique.set(suggestion.id, suggestion)
     })
   })

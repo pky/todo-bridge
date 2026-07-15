@@ -23,6 +23,17 @@ export interface CompleteDocumentUploadResult {
   status: string
 }
 
+export interface CreateDocumentCalendarEventResult {
+  success: boolean
+  eventId: string
+  alreadyRegistered: boolean
+}
+
+export interface ReanalyzeDocumentSuggestionsResult {
+  success: boolean
+  suggestionCount: number
+}
+
 export interface DocumentAccessResult {
   url: string
   expiresAt: string
@@ -90,7 +101,12 @@ export interface UpdateDocumentOcrSettingsResult {
 
 export async function calculateFileSha256(file: File): Promise<string | null> {
   if (!globalThis.crypto?.subtle) return null
-  const hash = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
+  return calculateArrayBufferSha256(await file.arrayBuffer())
+}
+
+async function calculateArrayBufferSha256(data: ArrayBuffer): Promise<string | null> {
+  if (!globalThis.crypto?.subtle) return null
+  const hash = await crypto.subtle.digest('SHA-256', data)
   return Array.from(new Uint8Array(hash))
     .map((value) => value.toString(16).padStart(2, '0'))
     .join('')
@@ -108,7 +124,7 @@ export async function createDocumentUploadApi(
 
 export async function uploadDocumentFile(
   upload: SignedDocumentUpload,
-  file: File
+  file: Blob
 ): Promise<void> {
   const response = await fetch(upload.url, {
     method: upload.method,
@@ -142,6 +158,18 @@ export async function getDocumentAccessUrlApi(
   return (await callable({ spaceId, documentId })).data
 }
 
+export async function createDocumentCalendarEventApi(
+  spaceId: string,
+  documentId: string,
+  suggestionId: string
+): Promise<CreateDocumentCalendarEventResult> {
+  const callable = httpsCallable<
+    { spaceId: string; documentId: string; suggestionId: string },
+    CreateDocumentCalendarEventResult
+  >(functions, 'createDocumentCalendarEvent')
+  return (await callable({ spaceId, documentId, suggestionId })).data
+}
+
 export async function getDocumentThumbnailAccessUrlApi(
   spaceId: string,
   documentId: string
@@ -161,6 +189,17 @@ export async function getDocumentTextApi(
     { spaceId: string; documentId: string },
     DocumentTextResult
   >(functions, 'getDocumentText')
+  return (await callable({ spaceId, documentId })).data
+}
+
+export async function reanalyzeDocumentSuggestionsApi(
+  spaceId: string,
+  documentId: string
+): Promise<ReanalyzeDocumentSuggestionsResult> {
+  const callable = httpsCallable<
+    { spaceId: string; documentId: string },
+    ReanalyzeDocumentSuggestionsResult
+  >(functions, 'reanalyzeDocumentSuggestions')
   return (await callable({ spaceId, documentId })).data
 }
 
@@ -286,7 +325,8 @@ export async function uploadDocument(
   source: FamilyDocumentSource
 ): Promise<string> {
   const mimeType = file.type || 'application/octet-stream'
-  const sha256 = await calculateFileSha256(file)
+  const fileData = await file.arrayBuffer()
+  const sha256 = await calculateArrayBufferSha256(fileData)
   const created = await createDocumentUploadApi({
     spaceId,
     name: file.name || '名称未設定',
@@ -295,7 +335,7 @@ export async function uploadDocument(
     sizeBytes: file.size,
     ...(sha256 ? { sha256 } : {}),
   })
-  await uploadDocumentFile(created.upload, file)
+  await uploadDocumentFile(created.upload, new Blob([fileData], { type: mimeType }))
   await completeDocumentUploadApi(spaceId, created.documentId)
   return created.documentId
 }
