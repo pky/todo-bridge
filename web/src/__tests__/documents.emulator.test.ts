@@ -7,6 +7,7 @@ import {
   createDocumentUploadApi,
   downloadDocumentSearchIndex,
   getDocumentAccessUrlApi,
+  getDocumentBulkDownloadManifestApi,
   getDocumentSearchIndexApi,
   getDocumentThumbnailAccessUrlApi,
   getDocumentTextApi,
@@ -131,6 +132,18 @@ describeWithEmulators('家族書類ボックス Emulator結合', () => {
     expect(response.ok).toBe(true)
     expect(response.headers.get('content-type')).toContain('application/pdf')
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(originalContent)
+
+    const bulkManifest = await getDocumentBulkDownloadManifestApi(spaceId)
+    const bulkEntry = bulkManifest.parts
+      .flatMap((part) => part.entries)
+      .find((entry) => entry.documentId === documentId)
+    expect(bulkEntry).toEqual(expect.objectContaining({
+      archiveName: '学校のお知らせ.pdf',
+      sizeBytes: file.size,
+    }))
+    const bulkResponse = await fetch(bulkEntry?.url ?? '')
+    expect(bulkResponse.ok).toBe(true)
+    expect(new Uint8Array(await bulkResponse.arrayBuffer())).toEqual(originalContent)
 
     const previewSnapshot = await waitForPreview(documentId)
     expect(previewSnapshot.data()).toEqual(expect.objectContaining({

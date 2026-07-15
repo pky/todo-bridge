@@ -46,6 +46,7 @@ export {
   createDocumentUpload,
   completeDocumentUpload,
   getDocumentAccessUrl,
+  getDocumentBulkDownloadManifest,
   getDocumentText,
   getDocumentThumbnailAccessUrl,
   reanalyzeDocumentSuggestions,
@@ -74,82 +75,6 @@ export {
   saveGoogleCalendarAutomationConfig,
   saveGoogleCalendarConfig,
 } from './calendar'
-
-// 孤立したサブタスクを復旧（親タスクを再作成）
-export const recoverOrphanedSubtasks = functions
-  .region('asia-northeast1')
-  .https.onCall(async (data) => {
-    const { userId, oldParentId, newTaskName, listId } = data
-    if (!userId || !oldParentId || !newTaskName || !listId) {
-      throw new functions.https.HttpsError('invalid-argument', 'userId, oldParentId, newTaskName, listId are required')
-    }
-
-    const tasksRef = db.collection(`users/${userId}/tasks`)
-
-    // 1. 新しい親タスクを作成
-    const now = admin.firestore.Timestamp.now()
-    const newTaskRef = await tasksRef.add({
-      name: newTaskName,
-      listId: listId,
-      parentId: null,
-      priority: 4,
-      tags: [],
-      dueDate: null,
-      startDate: null,
-      repeat: null,
-      notes: [],
-      url: null,
-      completed: false,
-      dateCompleted: null,
-      dateCreated: now,
-      dateModified: now,
-    })
-
-    // 2. 孤立したサブタスクのparentIdを更新
-    const orphanedSnapshot = await tasksRef.where('parentId', '==', oldParentId).get()
-    const batch = db.batch()
-    let count = 0
-
-    orphanedSnapshot.docs.forEach((doc) => {
-      batch.update(doc.ref, { parentId: newTaskRef.id })
-      count++
-    })
-
-    await batch.commit()
-
-    return {
-      success: true,
-      newTaskId: newTaskRef.id,
-      subtasksUpdated: count,
-    }
-  })
-
-// タスクにメモを追加（名前で検索）
-export const addNotesToTaskByName = functions
-  .region('asia-northeast1')
-  .https.onCall(async (data) => {
-    const { userId, listId, taskName, notes } = data
-    if (!userId || !listId || !taskName || !notes) {
-      throw new functions.https.HttpsError('invalid-argument', 'userId, listId, taskName, notes are required')
-    }
-
-    const tasksRef = db.collection(`users/${userId}/tasks`)
-    const snapshot = await tasksRef
-      .where('listId', '==', listId)
-      .where('name', '==', taskName)
-      .where('parentId', '==', null)
-      .limit(1)
-      .get()
-
-    if (snapshot.empty) {
-      throw new functions.https.HttpsError('not-found', 'タスクが見つかりません')
-    }
-
-    const taskDoc = snapshot.docs[0]
-    await taskDoc.ref.update({ notes })
-
-    return { success: true, taskId: taskDoc.id }
-  })
 
 // デバッグ用: タスク検索関数
 export const searchTask = functions

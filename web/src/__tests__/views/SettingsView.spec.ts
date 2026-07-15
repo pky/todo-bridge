@@ -7,6 +7,7 @@ import { useSpaceStore } from '@/stores/space'
 
 const getDocsMock = vi.hoisted(() => vi.fn())
 const getDocMock = vi.hoisted(() => vi.fn())
+const routeQueryMock = vi.hoisted(() => ({ value: {} as Record<string, string> }))
 const calendarStoreMock = vi.hoisted(() => ({
   configured: false,
   serviceAccountEmail: 'app@example.iam.gserviceaccount.com',
@@ -25,6 +26,7 @@ const calendarStoreMock = vi.hoisted(() => ({
 }))
 
 vi.mock('vue-router', () => ({
+  useRoute: () => ({ query: routeQueryMock.value }),
   useRouter: () => ({
     push: vi.fn(),
     back: vi.fn(),
@@ -118,6 +120,7 @@ describe('SettingsView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    routeQueryMock.value = {}
     calendarStoreMock.configured = false
     calendarStoreMock.calendarId = ''
     calendarStoreMock.calendarName = ''
@@ -172,6 +175,71 @@ describe('SettingsView', () => {
     expect(wrapper.text()).toContain('「ユーザーやグループを追加」')
     expect(wrapper.text()).toContain('左側の「カレンダーの統合」')
     expect(wrapper.text()).toContain('共有先を確認して保存')
+  })
+
+  it('設定カテゴリをタブで切り替える', async () => {
+    const authStore = useAuthStore()
+    authStore.$patch({
+      user: { uid: 'owner-1', email: 'owner@example.com', displayName: 'Owner', photoURL: null },
+      loading: false,
+    })
+    const spaceStore = useSpaceStore()
+    spaceStore.$patch({
+      currentSpaceId: 'family-space',
+      useLegacyPath: false,
+      initialized: true,
+      memberships: [{
+        spaceId: 'family-space',
+        role: 'owner',
+        status: 'active',
+        displayName: '家族共有',
+        joinedAt: null,
+      }],
+    })
+
+    const wrapper = shallowMount(SettingsView)
+    await flushView()
+
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs.map((tab) => tab.text())).toEqual(['アカウント', '書類・連携', '通知', 'データ'])
+    expect(tabs[0].attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="settings-account"]').attributes('style')).toBeUndefined()
+    expect(wrapper.get('[data-testid="settings-integrations"]').attributes('style')).toContain('display: none')
+
+    await tabs[1].trigger('click')
+
+    expect(tabs[0].attributes('aria-selected')).toBe('false')
+    expect(tabs[1].attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('[data-testid="settings-account"]').attributes('style')).toContain('display: none')
+    expect(wrapper.get('[data-testid="settings-integrations"]').attributes('style')).toBeUndefined()
+  })
+
+  it('連携設定へのURLでは書類・連携タブを最初から表示する', async () => {
+    routeQueryMock.value = { tab: 'integrations' }
+    const authStore = useAuthStore()
+    authStore.$patch({
+      user: { uid: 'owner-1', email: 'owner@example.com', displayName: 'Owner', photoURL: null },
+      loading: false,
+    })
+    const spaceStore = useSpaceStore()
+    spaceStore.$patch({
+      currentSpaceId: 'family-space',
+      useLegacyPath: false,
+      initialized: true,
+      memberships: [{
+        spaceId: 'family-space',
+        role: 'owner',
+        status: 'active',
+        displayName: '家族共有',
+        joinedAt: null,
+      }],
+    })
+
+    const wrapper = shallowMount(SettingsView)
+    await flushView()
+
+    expect(wrapper.get('[data-testid="settings-account"]').attributes('style')).toContain('display: none')
+    expect(wrapper.get('[data-testid="settings-integrations"]').attributes('style')).toBeUndefined()
   })
 
   it('member には owner 管理導線が表示されない', async () => {

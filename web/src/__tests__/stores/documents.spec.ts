@@ -9,6 +9,8 @@ const {
   createDocumentCalendarEventApiMock,
   uploadDocumentMock,
   getDocumentAccessUrlApiMock,
+  getDocumentBulkDownloadManifestApiMock,
+  getDocumentDownloadUrlApiMock,
   getDocumentThumbnailAccessUrlApiMock,
   getDocumentTextApiMock,
   retryDocumentTextApiMock,
@@ -24,6 +26,8 @@ const {
   createDocumentCalendarEventApiMock: vi.fn(),
   uploadDocumentMock: vi.fn(),
   getDocumentAccessUrlApiMock: vi.fn(),
+  getDocumentBulkDownloadManifestApiMock: vi.fn(),
+  getDocumentDownloadUrlApiMock: vi.fn(),
   getDocumentThumbnailAccessUrlApiMock: vi.fn(),
   getDocumentTextApiMock: vi.fn(),
   retryDocumentTextApiMock: vi.fn(),
@@ -52,6 +56,8 @@ vi.mock('@/services/documentService', () => ({
   createDocumentCalendarEventApi: createDocumentCalendarEventApiMock,
   uploadDocument: uploadDocumentMock,
   getDocumentAccessUrlApi: getDocumentAccessUrlApiMock,
+  getDocumentBulkDownloadManifestApi: getDocumentBulkDownloadManifestApiMock,
+  getDocumentDownloadUrlApi: getDocumentDownloadUrlApiMock,
   getDocumentThumbnailAccessUrlApi: getDocumentThumbnailAccessUrlApiMock,
   getDocumentTextApi: getDocumentTextApiMock,
   retryDocumentTextApi: retryDocumentTextApiMock,
@@ -193,6 +199,32 @@ describe('documents store', () => {
 
     expect(getDocumentTextApiMock).toHaveBeenCalledWith('space-1', 'document-1')
     expect(retryDocumentTextApiMock).toHaveBeenCalledWith('space-1', 'document-1')
+  })
+
+  it('単体書き出し用URLを現在のspaceIdへ要求する', async () => {
+    getDocumentDownloadUrlApiMock.mockResolvedValue({
+      url: 'https://example.com/download',
+      name: 'document.pdf',
+      mimeType: 'application/pdf',
+    })
+    const store = useDocumentsStore()
+
+    await store.getDownloadUrl('document-1')
+
+    expect(getDocumentDownloadUrlApiMock).toHaveBeenCalledWith('space-1', 'document-1')
+  })
+
+  it('一括ZIP用一覧を現在のspaceIdへ要求する', async () => {
+    getDocumentBulkDownloadManifestApiMock.mockResolvedValue({
+      totalFiles: 1,
+      totalBytes: 100,
+      parts: [],
+    })
+    const store = useDocumentsStore()
+
+    await store.getBulkDownloadManifest()
+
+    expect(getDocumentBulkDownloadManifestApiMock).toHaveBeenCalledWith('space-1')
   })
 
   it('抽出候補を購読し、修正値と採用者を保存する', async () => {

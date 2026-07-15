@@ -8,10 +8,15 @@ const unsubscribeMock = vi.fn()
 const addDocumentMock = vi.fn()
 const selectDocumentMock = vi.fn()
 const getAccessUrlMock = vi.fn()
+const getDownloadUrlMock = vi.fn()
+const getBulkDownloadManifestMock = vi.fn()
 const getTextMock = vi.fn()
 const retryTextMock = vi.fn()
+const shareOrDownloadFileMock = vi.hoisted(() => vi.fn().mockResolvedValue('shared'))
+const downloadDocumentArchivesMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const routerPushMock = vi.fn()
 const selectedDocument = ref<Record<string, unknown> | null>(null)
+const documents = ref<Record<string, unknown>[]>([])
 const spaceStoreMock = {
   currentSpaceId: 'space-1',
   memberships: [{ spaceId: 'space-1', displayName: '家族', role: 'owner' }],
@@ -27,13 +32,21 @@ vi.mock('@/components/documents/DocumentSearch.vue', () => ({
   default: { template: '<div data-testid="document-search" />' },
 }))
 
+vi.mock('@/utils/shareFile', () => ({
+  shareOrDownloadFile: shareOrDownloadFileMock,
+}))
+
+vi.mock('@/utils/downloadDocumentArchives', () => ({
+  downloadDocumentArchives: downloadDocumentArchivesMock,
+}))
+
 vi.mock('@/stores/space', () => ({
   useSpaceStore: () => spaceStoreMock,
 }))
 
 vi.mock('@/stores/documents', () => ({
   useDocumentsStore: () => ({
-    documents: [],
+    get documents() { return documents.value },
     selectedDocumentId: null,
     get selectedDocument() { return selectedDocument.value },
     loading: false,
@@ -52,6 +65,8 @@ vi.mock('@/stores/documents', () => ({
     addDocument: addDocumentMock,
     selectDocument: selectDocumentMock,
     getAccessUrl: getAccessUrlMock,
+    getDownloadUrl: getDownloadUrlMock,
+    getBulkDownloadManifest: getBulkDownloadManifestMock,
     getText: getTextMock,
     reloadThumbnail: vi.fn(),
     retryThumbnail: vi.fn(),
@@ -70,6 +85,7 @@ describe('DocumentsView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     selectedDocument.value = null
+    documents.value = []
     spaceStoreMock.currentSpaceId = 'space-1'
     spaceStoreMock.memberships = [{ spaceId: 'space-1', displayName: '家族', role: 'owner' }]
   })
@@ -222,4 +238,74 @@ describe('DocumentsView', () => {
       query: { attachDocument: 'document-1', createFromDocument: '1' },
     })
   })
+
+  it('書類詳細から原本を共有・書き出しする', async () => {
+    getAccessUrlMock.mockResolvedValue({ url: 'https://example.com/document.pdf' })
+    getDownloadUrlMock.mockResolvedValue({
+      url: 'https://example.com/download.pdf',
+      name: '学校のお知らせ.pdf',
+      mimeType: 'application/pdf',
+    })
+    selectedDocument.value = {
+      id: 'document-1',
+      name: '学校のお知らせ.pdf',
+      category: 'school_childcare',
+      sizeBytes: 1024,
+      mimeType: 'application/pdf',
+      status: 'ready',
+      integrityStatus: 'ok',
+      previewStatus: 'completed',
+      ocrStatus: 'completed',
+      ocrObjectKey: null,
+      pageCount: 1,
+      createdAt: { toDate: () => new Date() },
+    }
+    const wrapper = mount(DocumentsView)
+    await flushPromises()
+
+    const shareButton = wrapper.findAll('button').find(
+      (button) => button.text() === '共有・書き出し'
+    )
+    await shareButton?.trigger('click')
+    await flushPromises()
+
+    expect(getDownloadUrlMock).toHaveBeenCalledWith('document-1')
+    expect(shareOrDownloadFileMock).toHaveBeenCalledWith({
+      url: 'https://example.com/download.pdf',
+      name: '学校のお知らせ.pdf',
+      mimeType: 'application/pdf',
+    })
+    expect(wrapper.text()).toContain('共有先へ書類を渡しました。')
+  })
+
+  it('ごみ箱以外の書類を一括ZIPダウンロードする', async () => {
+    documents.value = [{
+      id: 'document-1',
+      name: '学校のお知らせ.pdf',
+      category: 'school_childcare',
+      sizeBytes: 3,
+      mimeType: 'application/pdf',
+      status: 'ready',
+      previewStatus: 'completed',
+      thumbnailObjectKey: null,
+      createdAt: { toDate: () => new Date() },
+    }]
+    const manifest = {
+      totalFiles: 1,
+      totalBytes: 3,
+      parts: [{ partNumber: 1, fileName: 'documents.zip', totalBytes: 3, entries: [] }],
+    }
+    getBulkDownloadManifestMock.mockResolvedValue(manifest)
+    const wrapper = mount(DocumentsView)
+    await flushPromises()
+
+    const bulkButton = wrapper.findAll('button').find((button) => button.text() === '一括ZIP')
+    await bulkButton?.trigger('click')
+    await flushPromises()
+
+    expect(getBulkDownloadManifestMock).toHaveBeenCalledOnce()
+    expect(downloadDocumentArchivesMock).toHaveBeenCalledWith(manifest, expect.any(Function))
+    expect(wrapper.text()).toContain('1件の書類をZIPでダウンロードしました。')
+  })
+
 })

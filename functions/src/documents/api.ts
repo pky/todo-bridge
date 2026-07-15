@@ -13,6 +13,7 @@ import {
   validateStoredObject,
 } from './lifecycle'
 import { CreateDocumentUploadInput, FamilyDocument } from './types'
+import { buildDocumentArchiveParts } from './archivePlan'
 import {
   MAX_DOCUMENT_FILE_SIZE_BYTES,
   validateCreateDocumentUploadInput,
@@ -21,6 +22,7 @@ import {
 const db = admin.firestore()
 const UPLOAD_URL_EXPIRY_SECONDS = 10 * 60
 const DOWNLOAD_URL_EXPIRY_SECONDS = 5 * 60
+const BULK_DOWNLOAD_URL_EXPIRY_SECONDS = 30 * 60
 const R2_SECRETS = [
   'R2_ACCOUNT_ID',
   'R2_BUCKET',
@@ -231,6 +233,8 @@ export const getDocumentAccessUrl = documentRuntime
   .region('asia-northeast1')
   .https.onCall(async (data, context) => {
     const { spaceId, documentId } = parseDocumentRequest(data)
+    const download = typeof data === 'object' && data !== null
+      && (data as Record<string, unknown>).download === true
     await requireActiveMember(context, spaceId)
     const documentSnapshot = await db.doc(`spaces/${spaceId}/documents/${documentId}`).get()
     if (!documentSnapshot.exists) {
@@ -246,12 +250,73 @@ export const getDocumentAccessUrl = documentRuntime
     const access = await provider.createDownloadUrl({
       objectKey: document.originalObjectKey,
       expiresInSeconds: DOWNLOAD_URL_EXPIRY_SECONDS,
+      ...(download ? { downloadFileName: document.name } : {}),
     })
     return {
       url: access.url,
       expiresAt: access.expiresAt.toISOString(),
       mimeType: document.mimeType,
       name: document.name,
+    }
+  })
+
+export const getDocumentBulkDownloadManifest = documentRuntime
+  .region('asia-northeast1')
+  .https.onCall(async (data, context) => {
+    if (typeof data !== 'object' || data === null
+      || typeof (data as Record<string, unknown>).spaceId !== 'string') {
+      throw new functions.https.HttpsError('invalid-argument', 'spaceIdが必要です')
+    }
+    const spaceId = ((data as Record<string, unknown>).spaceId as string).trim()
+    if (!spaceId) {
+      throw new functions.https.HttpsError('invalid-argument', 'spaceIdが必要です')
+    }
+    await requireActiveMember(context, spaceId)
+    const snapshot = await db.collection(`spaces/${spaceId}/documents`)
+      .orderBy('createdAt', 'desc')
+      .limit(2000)
+      .get()
+    const documents = snapshot.docs
+      .map((documentSnapshot) => documentSnapshot.data() as FamilyDocument)
+      .filter((document) => (
+        ['uploaded', 'processing', 'ready'].includes(document.status)
+          && document.integrityStatus !== 'missing_original'
+          && isObjectKeyInDocument(document.originalObjectKey, spaceId, document.id)
+      ))
+    if (documents.length === 0) {
+      throw new functions.https.HttpsError('failed-precondition', 'ダウンロードできる書類がありません')
+    }
+    const provider = createObjectStorageProvider()
+    const parts = buildDocumentArchiveParts(documents.map((document) => ({
+      documentId: document.id,
+      name: document.name,
+      mimeType: document.mimeType,
+      sizeBytes: document.sizeBytes,
+      category: document.category,
+      documentDate: document.documentDate?.toDate().toISOString().slice(0, 10) ?? null,
+    })))
+    const partCount = parts.length
+    const datedPrefix = `documents-${new Date().toISOString().slice(0, 10)}`
+    const manifestParts = await Promise.all(parts.map(async (part) => ({
+      partNumber: part.partNumber,
+      fileName: partCount === 1
+        ? `${datedPrefix}.zip`
+        : `${datedPrefix}-part-${String(part.partNumber).padStart(2, '0')}.zip`,
+      totalBytes: part.totalBytes,
+      entries: await Promise.all(part.entries.map(async (entry) => {
+        const document = documents.find((candidate) => candidate.id === entry.documentId)
+        if (!document) throw new Error('ZIP対象の書類が見つかりません')
+        const access = await provider.createDownloadUrl({
+          objectKey: document.originalObjectKey,
+          expiresInSeconds: BULK_DOWNLOAD_URL_EXPIRY_SECONDS,
+        })
+        return { ...entry, url: access.url }
+      })),
+    })))
+    return {
+      totalFiles: documents.length,
+      totalBytes: documents.reduce((sum, document) => sum + document.sizeBytes, 0),
+      parts: manifestParts,
     }
   })
 

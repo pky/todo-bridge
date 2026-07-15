@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useSpaceStore } from '@/stores/space'
 import { useListsStore } from '@/stores/lists'
 import { useTasksStore } from '@/stores/tasks'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import {
   createFamilySpaceApi,
@@ -30,6 +30,7 @@ const spaceStore = useSpaceStore()
 const listsStore = useListsStore()
 const tasksStore = useTasksStore()
 const router = useRouter()
+const route = useRoute()
 const NewsPreferencesSection = defineAsyncComponent(() => import('@/components/settings/NewsPreferencesSection.vue'))
 const MobileNotificationSection = defineAsyncComponent(() => import('@/components/settings/MobileNotificationSection.vue'))
 const DocumentOcrSettingsSection = defineAsyncComponent(() => import('@/components/settings/DocumentOcrSettingsSection.vue'))
@@ -60,6 +61,19 @@ const calendarAutoCategoryOptions = [
   { value: 'home_warranty', label: '住居・家電・保証' },
   { value: 'billing_receipt', label: '請求・領収' },
 ] as const
+const settingsTabs = [
+  { id: 'account', label: 'アカウント' },
+  { id: 'integrations', label: '書類・連携' },
+  { id: 'notifications', label: '通知' },
+  { id: 'data', label: 'データ' },
+] as const
+type SettingsTab = (typeof settingsTabs)[number]['id']
+const requestedSettingsTab = typeof route.query.tab === 'string' ? route.query.tab : ''
+const activeSettingsTab = ref<SettingsTab>(
+  settingsTabs.some((tab) => tab.id === requestedSettingsTab)
+    ? requestedSettingsTab as SettingsTab
+    : 'account'
+)
 
 const currentSpaceName = computed(() => {
   if (!spaceStore.currentSpaceId) return '未設定'
@@ -410,7 +424,31 @@ async function handleRunDataMigration(): Promise<void> {
       <h1 class="text-base font-semibold text-gray-800">設定</h1>
     </header>
 
-    <div class="max-w-lg mx-auto px-4 py-6 space-y-6">
+    <div class="max-w-lg mx-auto px-4 py-6">
+
+      <nav
+        class="mb-6 overflow-x-auto rounded-xl border border-gray-200 bg-white p-1 shadow-sm"
+        aria-label="設定カテゴリ"
+      >
+        <div class="flex min-w-max gap-1" role="tablist">
+          <button
+            v-for="tab in settingsTabs"
+            :key="tab.id"
+            type="button"
+            role="tab"
+            :aria-selected="activeSettingsTab === tab.id"
+            :class="[
+              'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+              activeSettingsTab === tab.id
+                ? 'bg-slate-800 text-white'
+                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+            ]"
+            @click="activeSettingsTab = tab.id"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+      </nav>
 
       <!-- TODO: カレンダー機能を一時無効化
       <!- - Google Calendar APIキー設定 - ->
@@ -517,8 +555,13 @@ async function handleRunDataMigration(): Promise<void> {
       </section>
       -->
 
-      <!-- アカウント -->
-      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div
+        v-show="activeSettingsTab === 'account'"
+        class="space-y-6"
+        data-testid="settings-account"
+      >
+        <!-- アカウント -->
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div class="px-4 py-3 border-b border-gray-100">
           <h2 class="text-sm font-semibold text-gray-700">アカウント</h2>
         </div>
@@ -542,10 +585,10 @@ async function handleRunDataMigration(): Promise<void> {
             ログアウト
           </button>
         </div>
-      </section>
+        </section>
 
-      <!-- 共有スペース -->
-      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <!-- 共有スペース -->
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div class="px-4 py-3 border-b border-gray-100">
           <h2 class="text-sm font-semibold text-gray-700">共有スペース</h2>
           <p class="text-xs text-gray-500 mt-0.5">
@@ -671,21 +714,27 @@ async function handleRunDataMigration(): Promise<void> {
           </div>
 
         </div>
-      </section>
-
-      <div
-        v-if="!spaceStore.useLegacyPath && spaceStore.currentSpaceId"
-        data-testid="document-ocr-settings"
-      >
-        <Suspense>
-          <DocumentOcrSettingsSection
-            :space-id="spaceStore.currentSpaceId"
-            :can-manage="canManageDocumentOcr"
-          />
-        </Suspense>
+        </section>
       </div>
 
-      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div
+        v-show="activeSettingsTab === 'integrations'"
+        class="space-y-6"
+        data-testid="settings-integrations"
+      >
+        <div
+          v-if="!spaceStore.useLegacyPath && spaceStore.currentSpaceId"
+          data-testid="document-ocr-settings"
+        >
+          <Suspense>
+            <DocumentOcrSettingsSection
+              :space-id="spaceStore.currentSpaceId"
+              :can-manage="canManageDocumentOcr"
+            />
+          </Suspense>
+        </div>
+
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div class="px-4 py-3 border-b border-gray-100">
           <h2 class="text-sm font-semibold text-gray-700">Google Calendar連携</h2>
           <p class="text-xs text-gray-500 mt-0.5">書類から確認した予定を家族のカレンダーへ登録します</p>
@@ -827,19 +876,30 @@ async function handleRunDataMigration(): Promise<void> {
           </div>
           <p v-if="calendarStore.error" class="mt-2 text-xs text-red-600">{{ calendarStore.error }}</p>
         </div>
-      </section>
+        </section>
+      </div>
 
+      <div
+        v-show="activeSettingsTab === 'notifications'"
+        class="space-y-6"
+        data-testid="settings-notifications"
+      >
+        <Suspense>
+          <NewsPreferencesSection />
+        </Suspense>
 
-      <Suspense>
-        <NewsPreferencesSection />
-      </Suspense>
+        <Suspense>
+          <MobileNotificationSection />
+        </Suspense>
+      </div>
 
-      <Suspense>
-        <MobileNotificationSection />
-      </Suspense>
-
-      <!-- インポートとデータ更新 -->
-      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div
+        v-show="activeSettingsTab === 'data'"
+        class="space-y-6"
+        data-testid="settings-data"
+      >
+        <!-- インポートとデータ更新 -->
+        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div class="px-4 py-3 border-b border-gray-100">
           <h2 class="text-sm font-semibold text-gray-700">インポートとデータ更新</h2>
           <p class="text-xs text-gray-500 mt-0.5">
@@ -936,7 +996,8 @@ async function handleRunDataMigration(): Promise<void> {
             </button>
           </div>
         </div>
-      </section>
+        </section>
+      </div>
 
     </div>
   </div>

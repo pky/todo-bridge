@@ -9,6 +9,11 @@ import DocumentSearch from '@/components/documents/DocumentSearch.vue'
 import DocumentSuggestions from '@/components/documents/DocumentSuggestions.vue'
 import type { DocumentSearchResult } from '@/stores/documentSearch'
 import type { UpdateDocumentSuggestionInput } from '@/stores/documents'
+import { shareOrDownloadFile } from '@/utils/shareFile'
+import {
+  downloadDocumentArchives,
+  type DocumentArchiveProgress,
+} from '@/utils/downloadDocumentArchives'
 
 const documentsStore = useDocumentsStore()
 const spaceStore = useSpaceStore()
@@ -18,6 +23,13 @@ const uploadDestinationOpen = ref(false)
 const uploadTargetSpaceId = ref('')
 const viewMode = ref<'documents' | 'trash'>('documents')
 const mutatingDocumentId = ref<string | null>(null)
+const sharingDocumentId = ref<string | null>(null)
+const shareMessage = ref<string | null>(null)
+const shareError = ref<string | null>(null)
+const bulkExporting = ref(false)
+const bulkExportProgress = ref<DocumentArchiveProgress | null>(null)
+const bulkExportMessage = ref<string | null>(null)
+const bulkExportError = ref<string | null>(null)
 const accessUrl = ref<string | null>(null)
 const accessLoading = ref(false)
 const accessError = ref<string | null>(null)
@@ -41,6 +53,9 @@ const currentMembership = computed(() => spaceStore.memberships.find(
   (membership) => membership.spaceId === spaceStore.currentSpaceId
 ))
 const isCurrentSpaceOwner = computed(() => currentMembership.value?.role === 'owner')
+const isSelectedDocumentSharing = computed(() => (
+  !!selectedDocument.value && sharingDocumentId.value === selectedDocument.value.id
+))
 const currentSpaceLabel = computed(() => formatSpaceLabel(spaceStore.currentSpaceId))
 const usageTotalBytes = computed(() => (
   (documentsStore.usage?.originalBytes ?? 0) + (documentsStore.usage?.derivedBytes ?? 0)
@@ -301,6 +316,55 @@ async function createTaskFromSelectedDocument(): Promise<void> {
   })
 }
 
+async function shareSelectedDocument(): Promise<void> {
+  const document = selectedDocument.value
+  if (!document || isSelectedDocumentSharing.value) return
+  sharingDocumentId.value = document.id
+  shareMessage.value = null
+  shareError.value = null
+  try {
+    const access = await documentsStore.getDownloadUrl(document.id)
+    const result = await shareOrDownloadFile({
+      url: access.url,
+      name: access.name || document.name,
+      mimeType: access.mimeType || document.mimeType,
+    })
+    shareMessage.value = result === 'shared'
+      ? '共有先へ書類を渡しました。'
+      : '書類をダウンロードしました。'
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return
+    shareError.value = error instanceof Error
+      ? error.message
+      : '書類を共有・書き出しできませんでした'
+  } finally {
+    sharingDocumentId.value = null
+  }
+}
+
+async function downloadAllDocuments(): Promise<void> {
+  if (bulkExporting.value) return
+  bulkExporting.value = true
+  bulkExportProgress.value = null
+  bulkExportMessage.value = null
+  bulkExportError.value = null
+  try {
+    const manifest = await documentsStore.getBulkDownloadManifest()
+    await downloadDocumentArchives(manifest, (progress) => {
+      bulkExportProgress.value = progress
+    })
+    bulkExportMessage.value = manifest.parts.length === 1
+      ? `${manifest.totalFiles}件の書類をZIPでダウンロードしました。`
+      : `${manifest.totalFiles}件の書類を${manifest.parts.length}個のZIPに分けてダウンロードしました。`
+  } catch (error) {
+    bulkExportError.value = error instanceof Error
+      ? error.message
+      : '書類を一括ダウンロードできませんでした'
+  } finally {
+    bulkExporting.value = false
+  }
+}
+
 function switchView(nextView: 'documents' | 'trash'): void {
   viewMode.value = nextView
   documentsStore.selectDocument(null)
@@ -413,6 +477,12 @@ watch(textResult, async () => {
         </div>
         <div class="hidden items-center gap-2 sm:flex">
           <button
+            v-if="viewMode === 'documents'"
+            class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+            :disabled="bulkExporting || visibleDocuments.length === 0"
+            @click="downloadAllDocuments"
+          >{{ bulkExporting ? 'ZIP作成中...' : '一括ZIP' }}</button>
+          <button
             class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             :disabled="isAtCapacity || viewMode === 'trash'"
             @click="openUploadDestination"
@@ -493,9 +563,27 @@ watch(textResult, async () => {
         </div>
 
         <div v-if="viewMode === 'documents'" class="border-b border-slate-100 p-3 sm:hidden">
-          <button class="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:bg-slate-300" :disabled="isAtCapacity" @click="openUploadDestination">書類・写真を追加</button>
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+              :disabled="bulkExporting || visibleDocuments.length === 0"
+              @click="downloadAllDocuments"
+            >{{ bulkExporting ? 'ZIP作成中...' : '一括ZIP' }}</button>
+            <button class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:bg-slate-300" :disabled="isAtCapacity" @click="openUploadDestination">書類を追加</button>
+          </div>
           <p class="mt-1 text-center text-xs text-slate-500">追加時に個人／家族を選べます</p>
         </div>
+
+        <div v-if="bulkExportProgress" class="m-3 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+          ZIP {{ bulkExportProgress.currentPart }}/{{ bulkExportProgress.totalParts }}・
+          {{ bulkExportProgress.completedFiles }}/{{ bulkExportProgress.totalFiles }}件
+        </div>
+        <p v-if="bulkExportMessage" class="m-3 rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700">
+          {{ bulkExportMessage }}
+        </p>
+        <p v-if="bulkExportError" class="m-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+          {{ bulkExportError }}
+        </p>
 
         <DocumentSearch v-if="viewMode === 'documents'" @select="selectSearchResult" />
 
@@ -678,12 +766,23 @@ watch(textResult, async () => {
             <div v-if="selectedDocument.status !== 'trashed'" class="space-y-2">
               <button
                 class="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-                :disabled="mutatingDocumentId === selectedDocument.id"
+                :disabled="mutatingDocumentId === selectedDocument.id || isSelectedDocumentSharing"
                 @click="createTaskFromSelectedDocument"
               >この書類からタスクを作成</button>
               <button
+                class="w-full rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 disabled:opacity-50"
+                :disabled="mutatingDocumentId === selectedDocument.id || isSelectedDocumentSharing"
+                @click="shareSelectedDocument"
+              >{{ isSelectedDocumentSharing ? '書類を準備中...' : '共有・書き出し' }}</button>
+              <p v-if="shareMessage" class="rounded-lg bg-green-50 px-3 py-2 text-xs text-green-700">
+                {{ shareMessage }}
+              </p>
+              <p v-if="shareError" class="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                {{ shareError }}
+              </p>
+              <button
                 class="w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
-                :disabled="mutatingDocumentId === selectedDocument.id"
+                :disabled="mutatingDocumentId === selectedDocument.id || isSelectedDocumentSharing"
                 @click="moveSelectedToTrash"
               >ごみ箱へ移動</button>
             </div>

@@ -14,6 +14,8 @@ import { db } from '@/services/firebase'
 import {
   createDocumentCalendarEventApi,
   getDocumentAccessUrlApi,
+  getDocumentBulkDownloadManifestApi,
+  getDocumentDownloadUrlApi,
   getDocumentTextApi,
   getDocumentThumbnailAccessUrlApi,
   retryDocumentTextApi,
@@ -24,6 +26,7 @@ import {
   trashDocumentApi,
   uploadDocument,
   type DocumentAccessResult,
+  type DocumentBulkDownloadManifest,
   type DocumentTextResult,
 } from '@/services/documentService'
 import { useSpaceStore } from './space'
@@ -335,6 +338,14 @@ export const useDocumentsStore = defineStore('documents', () => {
     return getDocumentAccessUrlApi(requireCurrentSpaceId(), documentId)
   }
 
+  async function getDownloadUrl(documentId: string): Promise<DocumentAccessResult> {
+    return getDocumentDownloadUrlApi(requireCurrentSpaceId(), documentId)
+  }
+
+  async function getBulkDownloadManifest(): Promise<DocumentBulkDownloadManifest> {
+    return getDocumentBulkDownloadManifestApi(requireCurrentSpaceId())
+  }
+
   async function getText(documentId: string): Promise<DocumentTextResult> {
     return getDocumentTextApi(requireCurrentSpaceId(), documentId)
   }
@@ -424,6 +435,8 @@ export const useDocumentsStore = defineStore('documents', () => {
     selectDocument,
     addDocument,
     getAccessUrl,
+    getDownloadUrl,
+    getBulkDownloadManifest,
     getText,
     reloadThumbnail,
     retryThumbnail,

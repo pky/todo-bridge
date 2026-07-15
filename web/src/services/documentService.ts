@@ -102,6 +102,30 @@ export interface DocumentSearchIndexAccessResult {
   expiresAt: string
 }
 
+export interface DocumentBulkDownloadEntry {
+  documentId: string
+  name: string
+  archiveName: string
+  mimeType: string
+  sizeBytes: number
+  category: string
+  documentDate: string | null
+  url: string
+}
+
+export interface DocumentBulkDownloadPart {
+  partNumber: number
+  fileName: string
+  totalBytes: number
+  entries: DocumentBulkDownloadEntry[]
+}
+
+export interface DocumentBulkDownloadManifest {
+  totalFiles: number
+  totalBytes: number
+  parts: DocumentBulkDownloadPart[]
+}
+
 export interface UpdateDocumentOcrSettingsResult {
   success: boolean
   enabled: boolean
@@ -222,6 +246,27 @@ export async function getDocumentAccessUrlApi(
     DocumentAccessResult
   >(functions, 'getDocumentAccessUrl')
   return (await callable({ spaceId, documentId })).data
+}
+
+export async function getDocumentDownloadUrlApi(
+  spaceId: string,
+  documentId: string
+): Promise<DocumentAccessResult> {
+  const callable = httpsCallable<
+    { spaceId: string; documentId: string; download: true },
+    DocumentAccessResult
+  >(functions, 'getDocumentAccessUrl')
+  return (await callable({ spaceId, documentId, download: true })).data
+}
+
+export async function getDocumentBulkDownloadManifestApi(
+  spaceId: string
+): Promise<DocumentBulkDownloadManifest> {
+  const callable = httpsCallable<
+    { spaceId: string },
+    DocumentBulkDownloadManifest
+  >(functions, 'getDocumentBulkDownloadManifest')
+  return (await callable({ spaceId })).data
 }
 
 export async function createDocumentCalendarEventApi(

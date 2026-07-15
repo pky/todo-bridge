@@ -16,10 +16,6 @@ const importing = ref(false)
 const clearing = ref(false)
 const migrating = ref(false)
 const migrateResult = ref<{ listsUpdated: number } | null>(null)
-const recoverResult = ref<{ newTaskId: string; subtasksUpdated: number } | null>(null)
-const recovering = ref(false)
-const addingNotes = ref(false)
-const notesAdded = ref(false)
 const exporting = ref(false)
 const progress = ref<ImportProgress | null>(null)
 const result = ref<ImportResult | null>(null)
@@ -119,66 +115,6 @@ async function handleMigrate() {
     error.value = e instanceof Error ? e.message : 'マイグレーションに失敗しました'
   } finally {
     migrating.value = false
-  }
-}
-
-async function handleRecover() {
-  if (!authStore.user) return
-
-  recovering.value = true
-  error.value = null
-  recoverResult.value = null
-
-  try {
-    const functions = getFunctions(undefined, 'asia-northeast1')
-    const recover = httpsCallable<
-      { userId: string; oldParentId: string; newTaskName: string; listId: string },
-      { success: boolean; newTaskId: string; subtasksUpdated: number }
-    >(functions, 'recoverOrphanedSubtasks')
-
-    const response = await recover({
-      userId: authStore.user.uid,
-      oldParentId: 'xWyRRvsGG6KuVZQJGWGJ',
-      newTaskName: 'Info',
-      listId: 'nSCMRSajXOk1kS5L5z5p'
-    })
-    recoverResult.value = { newTaskId: response.data.newTaskId, subtasksUpdated: response.data.subtasksUpdated }
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : '復旧に失敗しました'
-  } finally {
-    recovering.value = false
-  }
-}
-
-async function handleAddNotes() {
-  if (!authStore.user) return
-
-  addingNotes.value = true
-  error.value = null
-
-  try {
-    const functions = getFunctions(undefined, 'asia-northeast1')
-    const addNotes = httpsCallable<
-      { userId: string; listId: string; taskName: string; notes: string[] },
-      { success: boolean; taskId: string }
-    >(functions, 'addNotesToTaskByName')
-
-    // RTMエクスポートから取得したInfoタスクのメモ
-    const infoNotes = [
-      `intelij\n\n6ZZQO5SJ06-eyJsaWNlbnNlSWQiOiI2WlpRTzVTSjA2IiwibGljZW5zZWVOYW1lIjoiRWlqaSBJa2VkYSIsImFzc2lnbmVlTmFtZSI6IiIsImFzc2lnbmVlRW1haWwiOiIiLCJsaWNlbnNlUmVzdHJpY3Rpb24iOiIiLCJjaGVja0NvbmN1cnJlbnRVc2UiOmZhbHNlLCJwcm9kdWN0cyI6W3siY29kZSI6IklJIiwicGFpZFVwVG8iOiIyMDE3LTA5LTA4In0seyJjb2RlIjoiUlMwIiwicGFpZFVwVG8iOiIyMDE3LTA5LTA4In0seyJjb2RlIjoiV1MiLCJwYWlkVXBUbyI6IjIwMTctMDktMDgifSx7ImNvZGUiOiJSRCIsInBhaWRVcFRvIjoiMjAxNy0wOS0wOCJ9LHsiY29kZSI6IlJDIiwicGFpZFVwVG8iOiIyMDE3LTA5LTA4In0seyJjb2RlIjoiREMiLCJwYWlkVXBUbyI6IjIwMTctMDktMDgifSx7ImNvZGUiOiJEQiIsInBhaWRVcFRvIjoiMjAxNy0wOS0wOCJ9LHsiY29kZSI6IlJNIiwicGFpZFVwVG8iOiIyMDE3LTA5LTA4In0seyJjb2RlIjoiRE0iLCJwYWlkVXBUbyI6IjIwMTctMDktMDgifSx7ImNvZGUiOiJBQyIsInBhaWRVcFRvIjoiMjAxNy0wOS0wOCJ9LHsiY29kZSI6IkRQTiIsInBhaWRVcFRvIjoiMjAxNy0wOS0wOCJ9LHsiY29kZSI6IlBTIiwicGFpZFVwVG8iOiIyMDE3LTA5LTA4In0seyJjb2RlIjoiQ0wiLCJwYWlkVXBUbyI6IjIwMTctMDktMDgifSx7ImNvZGUiOiJQQyIsInBhaWRVcFRvIjoiMjAxNy0wOS0wOCJ9XSwiaGFzaCI6IjY0MjYzMzgvMCIsImdyYWNlUGVyaW9kRGF5cyI6NywiYXV0b1Byb2xvbmdhdGVkIjp0cnVlLCJpc0F1dG9Qcm9sb25nYXRlZCI6dHJ1ZX0=-p1j+9XkzD3QRWDYE2JBDqBahOCYagADKKBbUAP/Id4JpYwMNFgb7tN5DYJpRP73Iq4G85EJ14+hb1MJziC90xziAmWwlccp9rFuEmgKqfphgigbW6JoljGiVo8UE4K/V6DWqFOM5d6yg8s2cOZmaJlBhK9XGU4OhVn0Cprz0I+YT+eV/tDDZS7kMgDHzLurErYitcqxgFdZqU/TJnuuuy15+dffeWy1ACzgkbpg9ueV9Nf7+xtpaUKPdgCPTU07wmMRDwe8ExogAmL7Dt+IogpAP79fzGhIXPmVYwI3kb1jLJT2WrSpj174l7O6a51c14wdqiZzM2WfD3WVVDQlOiA==-MIIEPjCCAiagAwIBAgIBBTANBgkqhkiG9w0BAQsFADAYMRYwFAYDVQQDDA1KZXRQcm9maWxlIENBMB4XDTE1MTEwMjA4MjE0OFoXDTE4MTEwMTA4MjE0OFowETEPMA0GA1UEAwwGcHJvZDN5MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxcQkq+zdxlR2mmRYBPzGbUNdMN6OaXiXzxIWtMEkrJMO/5oUfQJbLLuMSMK0QHFmaI37WShyxZcfRCidwXjot4zmNBKnlyHodDij/78TmVqFl8nOeD5+07B8VEaIu7c3E1N+e1doC6wht4I4+IEmtsPAdoaj5WCQVQbrI8KeT8M9VcBIWX7fD0fhexfg3ZRt0xqwMcXGNp3DdJHiO0rCdU+Itv7EmtnSVq9jBG1usMSFvMowR25mju2JcPFp1+I4ZI+FqgR8gyG8oiNDyNEoAbsR3lOpI7grUYSvkB/xVy/VoklPCK2h0f0GJxFjnye8NT1PAywoyl7RmiAVRE/EKwIDAQABo4GZMIGWMAkGA1UdEwQCMAAwHQYDVR0OBBYEFGEpG9oZGcfLMGNBkY7SgHiMGgTcMEgGA1UdIwRBMD+AFKOetkhnQhI2Qb1t4Lm0oFKLl/GzoRykGjAYMRYwFAYDVQQDDA1KZXRQcm9maWxlIENBggkA0myxg7KDeeEwEwYDVR0lBAwwCgYIKwYBBQUHAwEwCwYDVR0PBAQDAgWgMA0GCSqGSIb3DQEBCwUAA4ICAQC9WZuYgQedSuOc5TOUSrRigMw4/+wuC5EtZBfvdl4HT/8vzMW/oUlIP4YCvA0XKyBaCJ2iX+ZCDKoPfiYXiaSiH+HxAPV6J79vvouxKrWg2XV6ShFtPLP+0gPdGq3x9R3+kJbmAm8w+FOdlWqAfJrLvpzMGNeDU14YGXiZ9bVzmIQbwrBA+c/F4tlK/`
-    ]
-
-    await addNotes({
-      userId: authStore.user.uid,
-      listId: 'nSCMRSajXOk1kS5L5z5p', // 個人リストのID
-      taskName: 'Info',
-      notes: infoNotes
-    })
-    notesAdded.value = true
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'メモ追加に失敗しました'
-  } finally {
-    addingNotes.value = false
   }
 }
 
@@ -348,40 +284,6 @@ function goToHome() {
           class="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {{ migrating ? '処理中...' : 'タスク数を初期化' }}
-        </button>
-      </div>
-
-      <!-- 孤立サブタスク復旧 -->
-      <div class="bg-white rounded-lg shadow-md p-8 mt-6">
-        <h2 class="text-xl font-bold text-gray-800 mb-4">
-          Infoタスク復旧
-        </h2>
-        <p class="text-gray-600 mb-4 text-sm">
-          削除されたInfoタスクを再作成し、サブタスクを紐付けます。
-        </p>
-
-        <div v-if="recoverResult" class="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <p class="text-green-700">
-            復旧完了: {{ recoverResult.subtasksUpdated }}件のサブタスクを紐付けました
-          </p>
-          <p v-if="notesAdded" class="text-green-700 mt-2">メモも追加しました</p>
-        </div>
-
-        <button
-          @click="handleRecover"
-          :disabled="importing || clearing || migrating || recovering || recoverResult !== null"
-          class="w-full px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {{ recovering ? '復旧中...' : 'Infoタスクを復旧' }}
-        </button>
-
-        <button
-          v-if="!notesAdded"
-          @click="handleAddNotes"
-          :disabled="addingNotes"
-          class="w-full mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {{ addingNotes ? 'メモ追加中...' : 'Infoタスクにメモを追加' }}
         </button>
       </div>
 
