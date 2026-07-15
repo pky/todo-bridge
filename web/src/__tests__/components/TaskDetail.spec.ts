@@ -3,6 +3,8 @@ import { mount } from '@vue/test-utils'
 import { reactive } from 'vue'
 import TaskDetail from '@/components/TaskDetail.vue'
 
+const getDocumentSuggestionsMock = vi.hoisted(() => vi.fn())
+
 const tasksStoreState = reactive({
   selectedTaskId: 'child-task',
   selectedTask: null as Record<string, unknown> | null,
@@ -68,6 +70,10 @@ vi.mock('@/stores/space', () => ({
   useSpaceStore: () => spaceStoreState,
 }))
 
+vi.mock('@/services/documentService', () => ({
+  getDocumentSuggestionsApi: getDocumentSuggestionsMock,
+}))
+
 vi.mock('@/composables/useToast', () => ({
   useToast: () => ({
     showError: vi.fn(),
@@ -79,6 +85,8 @@ describe('TaskDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     spaceStoreState.currentSpaceId = 'space-1'
+    documentsStoreState.documents = []
+    documentTaskLinksStoreState.documentIds = []
 
     tasksStoreState.tasks = [
       {
@@ -171,5 +179,62 @@ describe('TaskDetail', () => {
     await editButton?.trigger('click')
 
     expect(wrapper.get('textarea').element.value).toBe('選択してコピーしたいメモ')
+  })
+
+  it('書類の読み取り候補を確認してから既存タスクへ反映する', async () => {
+    documentsStoreState.documents = [{
+      id: 'document-1',
+      spaceId: 'space-1',
+      name: '園のお知らせ.jpg',
+      mimeType: 'image/jpeg',
+      classificationVersion: 1,
+      ocrStatus: 'completed',
+    }]
+    documentTaskLinksStoreState.documentIds = ['document-1']
+    getDocumentSuggestionsMock.mockResolvedValue([{
+      id: 'suggestion-1',
+      type: 'calendar_event',
+      status: 'pending',
+      title: '保護者会',
+      value: {
+        date: '2026-07-25',
+        time: '13:00',
+        endTime: '14:30',
+        location: '多目的室',
+      },
+      sourceExcerpt: '7月25日 13時から14時30分まで',
+    }])
+
+    const wrapper = mount(TaskDetail, {
+      global: {
+        stubs: {
+          DocumentAttachmentPicker: true,
+          TaskItem: true,
+        },
+      },
+    })
+
+    const applyButton = wrapper.findAll('button').find(
+      (button) => button.text() === '読み取り候補を反映'
+    )
+    await applyButton?.trigger('click')
+
+    expect(getDocumentSuggestionsMock).toHaveBeenCalledWith('space-1', 'document-1')
+    expect(tasksStoreState.updateTask).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="task-suggestion-dialog"]').text()).toContain('保護者会')
+    expect(wrapper.get('[data-testid="task-suggestion-dialog"]').text()).toContain('多目的室')
+
+    await wrapper.get('[data-testid="confirm-task-suggestion"]').trigger('click')
+
+    expect(tasksStoreState.updateTask).toHaveBeenCalledOnce()
+    const [taskId, update] = tasksStoreState.updateTask.mock.calls[0]!
+    expect(taskId).toBe('child-task')
+    expect(update).toEqual(expect.objectContaining({
+      name: '保護者会',
+      allDay: false,
+      notes: ['場所: 多目的室', '7月25日 13時から14時30分まで'],
+    }))
+    expect(update.startDate.toDate()).toEqual(new Date('2026-07-25T13:00'))
+    expect(update.dueDate.toDate()).toEqual(new Date('2026-07-25T14:30'))
   })
 })

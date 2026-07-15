@@ -12,6 +12,7 @@ import DocumentAttachmentPicker from '@/components/documents/DocumentAttachmentP
 import { Timestamp } from 'firebase/firestore'
 import { parseTaskInput } from '@/utils/parseTaskInput'
 import { useToast } from '@/composables/useToast'
+import { getDocumentSuggestionsApi } from '@/services/documentService'
 
 const props = withDefaults(defineProps<{
   showHeader?: boolean
@@ -45,6 +46,21 @@ const editUrl = ref('')
 const noteFormRef = ref<HTMLElement | null>(null)
 const editDueTime = ref('')
 const calendarSaving = ref(false)
+const suggestionLoadingDocumentId = ref<string | null>(null)
+const suggestionApplying = ref(false)
+const suggestionPreview = ref<{
+  documentId: string
+  documentName: string
+  title: string
+  date: string | null
+  time: string | null
+  endTime: string | null
+  location: string | null
+  sourceExcerpt: string
+} | null>(null)
+const applySuggestionName = ref(true)
+const applySuggestionDate = ref(true)
+const applySuggestionNotes = ref(true)
 
 const task = computed(() => tasksStore.selectedTask)
 const isFamilyTask = computed(() => {
@@ -248,6 +264,113 @@ async function handleOpenDocument(documentId: string) {
     window.open(result.url, '_blank', 'noopener')
   } catch (error) {
     showError(error instanceof Error ? error.message : '書類を開けませんでした')
+  }
+}
+
+async function prepareDocumentSuggestion(documentId: string) {
+  if (suggestionLoadingDocumentId.value) return
+  const document = relatedDocuments.value.find((item) => item.id === documentId)
+  if (!document) return
+  suggestionLoadingDocumentId.value = documentId
+  try {
+    const suggestions = await getDocumentSuggestionsApi(document.spaceId, documentId)
+    const activeSuggestions = suggestions.filter((item) => item.status !== 'dismissed')
+    const suggestion = activeSuggestions.find((item) => item.type === 'task')
+      ?? activeSuggestions.find((item) => item.type === 'calendar_event')
+      ?? activeSuggestions.find((item) => typeof item.value.date === 'string')
+    if (!suggestion) {
+      showError('この書類にはタスクへ反映できる読み取り候補がありません')
+      return
+    }
+    suggestionPreview.value = {
+      documentId,
+      documentName: document.name,
+      title: suggestion.title,
+      date: typeof suggestion.value.date === 'string' ? suggestion.value.date : null,
+      time: typeof suggestion.value.time === 'string' ? suggestion.value.time : null,
+      endTime: typeof suggestion.value.endTime === 'string' ? suggestion.value.endTime : null,
+      location: typeof suggestion.value.location === 'string' ? suggestion.value.location : null,
+      sourceExcerpt: suggestion.sourceExcerpt,
+    }
+    applySuggestionName.value = !!suggestion.title.trim()
+    applySuggestionDate.value = !!suggestionPreview.value.date
+    applySuggestionNotes.value = !!(
+      suggestionPreview.value.location || suggestionPreview.value.sourceExcerpt
+    )
+  } catch (error) {
+    showError(error instanceof Error ? error.message : '読み取り候補を取得できませんでした')
+  } finally {
+    suggestionLoadingDocumentId.value = null
+  }
+}
+
+function buildSuggestionTaskDates(preview: NonNullable<typeof suggestionPreview.value>): {
+  startDate: Timestamp | null
+  dueDate: Timestamp
+  allDay: boolean
+} | null {
+  if (!preview.date || !/^\d{4}-\d{2}-\d{2}$/.test(preview.date)) return null
+  const [year, month, day] = preview.date.split('-').map(Number)
+  if (!preview.time || !/^\d{2}:\d{2}$/.test(preview.time)) {
+    return {
+      startDate: null,
+      dueDate: Timestamp.fromDate(new Date(year!, month! - 1, day!)),
+      allDay: true,
+    }
+  }
+  const start = new Date(`${preview.date}T${preview.time}`)
+  if (Number.isNaN(start.getTime())) return null
+  const end = preview.endTime && /^\d{2}:\d{2}$/.test(preview.endTime)
+    ? new Date(`${preview.date}T${preview.endTime}`)
+    : new Date(start.getTime() + 60 * 60 * 1000)
+  if (Number.isNaN(end.getTime())) return null
+  if (end <= start) end.setDate(end.getDate() + 1)
+  return {
+    startDate: Timestamp.fromDate(start),
+    dueDate: Timestamp.fromDate(end),
+    allDay: false,
+  }
+}
+
+async function applyPreparedDocumentSuggestion() {
+  const currentTask = task.value
+  const preview = suggestionPreview.value
+  if (!currentTask || !preview || suggestionApplying.value) return
+  const update: Parameters<typeof tasksStore.updateTask>[1] = {}
+  if (applySuggestionName.value && preview.title.trim()) {
+    update.name = preview.title.trim()
+  }
+  if (applySuggestionDate.value) {
+    const dates = buildSuggestionTaskDates(preview)
+    if (!dates) {
+      showError('読み取り候補の日時が不正です')
+      return
+    }
+    Object.assign(update, dates)
+  }
+  if (applySuggestionNotes.value) {
+    const generatedNotes = [
+      preview.location ? `場所: ${preview.location}` : null,
+      preview.sourceExcerpt || null,
+    ].filter((value): value is string => !!value)
+    update.notes = [...currentTask.notes]
+    generatedNotes.forEach((note) => {
+      if (!update.notes!.includes(note)) update.notes!.push(note)
+    })
+  }
+  if (Object.keys(update).length === 0) {
+    showError('反映する項目を選んでください')
+    return
+  }
+  suggestionApplying.value = true
+  try {
+    await tasksStore.updateTask(currentTask.id, update)
+    suggestionPreview.value = null
+    showInfo('書類の読み取り候補をタスクへ反映しました')
+  } catch (error) {
+    showError(error instanceof Error ? error.message : '読み取り候補を反映できませんでした')
+  } finally {
+    suggestionApplying.value = false
   }
 }
 
@@ -721,6 +844,17 @@ const priorityOptions = [
                 class="mt-1 text-[11px] text-red-600 disabled:text-gray-400"
                 @click="handleUnlinkDocument(document.id)"
               >紐づけを解除</button>
+              <button
+                v-if="document.classificationVersion != null"
+                type="button"
+                :disabled="suggestionLoadingDocumentId !== null"
+                class="mt-1 block text-[11px] font-medium text-blue-600 disabled:text-gray-400"
+                @click="prepareDocumentSuggestion(document.id)"
+              >{{ suggestionLoadingDocumentId === document.id ? '候補を取得中...' : '読み取り候補を反映' }}</button>
+              <p
+                v-else-if="document.ocrStatus === 'pending' || document.ocrStatus === 'processing'"
+                class="mt-1 text-[11px] text-gray-400"
+              >読み取り中...</p>
             </article>
           </div>
         </div>
@@ -907,6 +1041,51 @@ const priorityOptions = [
         >
           タスクを削除
         </button>
+      </div>
+
+      <div
+        v-if="suggestionPreview"
+        data-testid="task-suggestion-dialog"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4"
+        @click.self="suggestionPreview = null"
+      >
+        <div class="w-full max-w-md rounded-xl bg-white p-4 shadow-xl">
+          <h3 class="font-semibold text-gray-800">読み取り候補をタスクへ反映</h3>
+          <p class="mt-1 truncate text-xs text-gray-500">{{ suggestionPreview.documentName }}</p>
+          <div class="mt-4 space-y-3 text-sm">
+            <label class="flex items-start gap-2">
+              <input v-model="applySuggestionName" data-testid="apply-suggestion-name" type="checkbox" class="mt-1 rounded text-blue-600" />
+              <span><span class="block text-xs text-gray-500">タスク名</span>{{ suggestionPreview.title }}</span>
+            </label>
+            <label v-if="suggestionPreview.date" class="flex items-start gap-2">
+              <input v-model="applySuggestionDate" data-testid="apply-suggestion-date" type="checkbox" class="mt-1 rounded text-blue-600" />
+              <span>
+                <span class="block text-xs text-gray-500">日時</span>
+                {{ suggestionPreview.date }}
+                <template v-if="suggestionPreview.time"> {{ suggestionPreview.time }}<template v-if="suggestionPreview.endTime">〜{{ suggestionPreview.endTime }}</template></template>
+              </span>
+            </label>
+            <label v-if="suggestionPreview.location || suggestionPreview.sourceExcerpt" class="flex items-start gap-2">
+              <input v-model="applySuggestionNotes" data-testid="apply-suggestion-notes" type="checkbox" class="mt-1 rounded text-blue-600" />
+              <span class="min-w-0">
+                <span class="block text-xs text-gray-500">メモへ追加</span>
+                <span v-if="suggestionPreview.location" class="block">場所: {{ suggestionPreview.location }}</span>
+                <span class="block whitespace-pre-wrap break-words text-xs text-gray-600">{{ suggestionPreview.sourceExcerpt }}</span>
+              </span>
+            </label>
+          </div>
+          <p class="mt-3 rounded bg-amber-50 px-3 py-2 text-xs text-amber-800">選択した項目だけを変更します。確認するまでタスクは更新されません。</p>
+          <div class="mt-4 flex justify-end gap-2">
+            <button type="button" :disabled="suggestionApplying" class="px-3 py-2 text-sm text-gray-600" @click="suggestionPreview = null">キャンセル</button>
+            <button
+              type="button"
+              data-testid="confirm-task-suggestion"
+              :disabled="suggestionApplying"
+              class="rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:bg-gray-300"
+              @click="applyPreparedDocumentSuggestion"
+            >{{ suggestionApplying ? '反映中...' : '選択した内容を反映' }}</button>
+          </div>
+        </div>
       </div>
     </template>
   </aside>
