@@ -6,10 +6,23 @@ import { db, functions } from '@/services/firebase'
 import { useAuthStore } from './auth'
 import { useSpaceStore } from './space'
 
+export const CALENDAR_AUTO_CATEGORIES = [
+  'school_childcare',
+  'medical',
+  'insurance_tax',
+  'home_warranty',
+  'billing_receipt',
+] as const
+
+export type CalendarAutoCategory = typeof CALENDAR_AUTO_CATEGORIES[number]
+
 export const useCalendarStore = defineStore('calendar', () => {
   const serviceAccountEmail = ref('')
   const calendarId = ref('')
   const calendarName = ref('')
+  const autoRegistrationEnabled = ref(false)
+  const autoRegistrationCategories = ref<CalendarAutoCategory[]>(['school_childcare'])
+  const autoRegistrationMinConfidence = ref(0.9)
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -43,15 +56,34 @@ export const useCalendarStore = defineStore('calendar', () => {
     if (_unsubscribe) _unsubscribe()
     calendarId.value = ''
     calendarName.value = ''
+    autoRegistrationEnabled.value = false
+    autoRegistrationCategories.value = ['school_childcare']
+    autoRegistrationMinConfidence.value = 0.9
     const settingsRef = getCalendarSettingsDocRef()
     _unsubscribe = onSnapshot(settingsRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data()
         calendarId.value = data.calendarId ?? ''
         calendarName.value = data.calendarName ?? ''
+        autoRegistrationEnabled.value = data.calendarAutoRegistrationEnabled === true
+        autoRegistrationCategories.value = Array.isArray(data.calendarAutoRegistrationCategories)
+          ? data.calendarAutoRegistrationCategories.filter(
+            (value: unknown): value is CalendarAutoCategory => (
+              typeof value === 'string'
+                && CALENDAR_AUTO_CATEGORIES.includes(value as CalendarAutoCategory)
+            )
+          )
+          : ['school_childcare']
+        autoRegistrationMinConfidence.value =
+          typeof data.calendarAutoRegistrationMinConfidence === 'number'
+            ? data.calendarAutoRegistrationMinConfidence
+            : 0.9
       } else {
         calendarId.value = ''
         calendarName.value = ''
+        autoRegistrationEnabled.value = false
+        autoRegistrationCategories.value = ['school_childcare']
+        autoRegistrationMinConfidence.value = 0.9
       }
     })
     void loadServiceConfig()
@@ -104,8 +136,50 @@ export const useCalendarStore = defineStore('calendar', () => {
       await clearConfigFn(calendarScopeInput())
       calendarId.value = ''
       calendarName.value = ''
+      autoRegistrationEnabled.value = false
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Google Calendar設定を解除できませんでした'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function saveAutomationConfig(): Promise<void> {
+    const spaceStore = useSpaceStore()
+    if (!spaceStore.currentSpaceId || spaceStore.useLegacyPath) {
+      throw new Error('自動登録は家族スペースで設定してください')
+    }
+    loading.value = true
+    error.value = null
+    try {
+      const saveAutomationConfigFn = httpsCallable<
+        {
+          spaceId: string
+          useLegacyPath: false
+          enabled: boolean
+          categories: CalendarAutoCategory[]
+          minConfidence: number
+        },
+        {
+          success: boolean
+          enabled: boolean
+          categories: CalendarAutoCategory[]
+          minConfidence: number
+        }
+      >(functions, 'saveGoogleCalendarAutomationConfig')
+      const result = await saveAutomationConfigFn({
+        spaceId: spaceStore.currentSpaceId,
+        useLegacyPath: false,
+        enabled: autoRegistrationEnabled.value,
+        categories: autoRegistrationCategories.value,
+        minConfidence: autoRegistrationMinConfidence.value,
+      })
+      autoRegistrationEnabled.value = result.data.enabled
+      autoRegistrationCategories.value = result.data.categories
+      autoRegistrationMinConfidence.value = result.data.minConfidence
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Google Calendar自動登録設定を保存できませんでした'
       throw e
     } finally {
       loading.value = false
@@ -143,12 +217,16 @@ export const useCalendarStore = defineStore('calendar', () => {
     _unsubscribe = null
     calendarId.value = ''
     calendarName.value = ''
+    autoRegistrationEnabled.value = false
   }
 
   return {
     serviceAccountEmail,
     calendarId,
     calendarName,
+    autoRegistrationEnabled,
+    autoRegistrationCategories,
+    autoRegistrationMinConfidence,
     loading,
     error,
     configured,
@@ -157,6 +235,7 @@ export const useCalendarStore = defineStore('calendar', () => {
     loadServiceConfig,
     saveConfig,
     clearConfig,
+    saveAutomationConfig,
     registerTask,
   }
 })

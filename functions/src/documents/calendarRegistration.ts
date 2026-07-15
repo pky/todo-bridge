@@ -114,7 +114,7 @@ export const createDocumentCalendarEvent = functions
       time,
       endTime,
       location: optionalString(suggestion.value.location),
-      description: `書類「${document.name}」から登録\n${suggestion.sourceExcerpt}`,
+      description: `書類「${document.name}」から登録`,
     }
     let nextRegistrationVersion = existingEventId
       ? registrationVersion(

@@ -52,6 +52,14 @@ const clearResult = ref<ClearResult | null>(null)
 const maintenanceError = ref<string | null>(null)
 const migrationMessage = ref('')
 const calendarIdInput = ref('')
+const calendarAutomationSaved = ref(false)
+const calendarAutoCategoryOptions = [
+  { value: 'school_childcare', label: '学校・保育' },
+  { value: 'medical', label: '医療' },
+  { value: 'insurance_tax', label: '保険・税金' },
+  { value: 'home_warranty', label: '住居・家電・保証' },
+  { value: 'billing_receipt', label: '請求・領収' },
+] as const
 
 const currentSpaceName = computed(() => {
   if (!spaceStore.currentSpaceId) return '未設定'
@@ -107,6 +115,12 @@ async function handleClearCalendarConfig() {
   if (!confirm('Google Calendarの登録先設定を解除しますか？')) return
   await calendarStore.clearConfig()
   calendarIdInput.value = ''
+}
+
+async function handleSaveCalendarAutomationConfig() {
+  calendarAutomationSaved.value = false
+  await calendarStore.saveAutomationConfig()
+  calendarAutomationSaved.value = true
 }
 
 onMounted(async () => {
@@ -737,11 +751,78 @@ async function handleRunDataMigration(): Promise<void> {
             <p v-if="calendarStore.configured" class="text-sm text-green-700">
               登録先: {{ calendarStore.calendarName || calendarStore.calendarId }}
             </p>
+            <div
+              v-if="calendarStore.configured"
+              class="space-y-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3"
+            >
+              <label class="flex items-start gap-2 text-sm text-slate-700">
+                <input
+                  v-model="calendarStore.autoRegistrationEnabled"
+                  type="checkbox"
+                  class="mt-0.5 rounded border-slate-300"
+                  @change="calendarAutomationSaved = false"
+                />
+                <span>
+                  明確な予定を自動登録する
+                  <span class="mt-1 block text-xs leading-5 text-slate-500">
+                    年月日、予定内容、分類の信頼度が条件を満たす将来の予定だけを登録します。曖昧な候補は確認待ちのまま残します。
+                  </span>
+                </span>
+              </label>
+
+              <fieldset :disabled="!calendarStore.autoRegistrationEnabled" class="space-y-2 disabled:opacity-50">
+                <legend class="text-xs font-medium text-slate-600">自動登録する書類カテゴリ</legend>
+                <div class="grid gap-2 sm:grid-cols-2">
+                  <label
+                    v-for="option in calendarAutoCategoryOptions"
+                    :key="option.value"
+                    class="flex items-center gap-2 text-xs text-slate-700"
+                  >
+                    <input
+                      v-model="calendarStore.autoRegistrationCategories"
+                      :value="option.value"
+                      type="checkbox"
+                      class="rounded border-slate-300"
+                      @change="calendarAutomationSaved = false"
+                    />
+                    {{ option.label }}
+                  </label>
+                </div>
+              </fieldset>
+
+              <label class="block text-xs font-medium text-slate-600">
+                最低信頼度
+                <select
+                  v-model.number="calendarStore.autoRegistrationMinConfidence"
+                  :disabled="!calendarStore.autoRegistrationEnabled"
+                  class="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:opacity-50"
+                  @change="calendarAutomationSaved = false"
+                >
+                  <option :value="0.8">80%</option>
+                  <option :value="0.85">85%</option>
+                  <option :value="0.9">90%（推奨）</option>
+                </select>
+              </label>
+
+              <button
+                type="button"
+                :disabled="calendarStore.loading || (calendarStore.autoRegistrationEnabled && calendarStore.autoRegistrationCategories.length === 0)"
+                class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                @click="handleSaveCalendarAutomationConfig"
+              >{{ calendarStore.loading ? '保存中...' : '自動登録設定を保存' }}</button>
+              <p v-if="calendarAutomationSaved" class="text-xs text-green-700">自動登録設定を保存しました。</p>
+            </div>
           </div>
           <div v-else>
-            <p v-if="calendarStore.configured" class="text-sm text-gray-600">
-              登録先: {{ calendarStore.calendarName || calendarStore.calendarId }}
-            </p>
+            <template v-if="calendarStore.configured">
+              <p class="text-sm text-gray-600">
+                登録先: {{ calendarStore.calendarName || calendarStore.calendarId }}
+              </p>
+              <p
+                v-if="calendarStore.autoRegistrationEnabled"
+                class="mt-1 text-xs text-green-700"
+              >明確な予定の自動登録が有効です。</p>
+            </template>
             <p v-else class="text-sm text-slate-500">Google Calendar連携は家族スペースのownerが設定します。</p>
           </div>
           <p v-if="calendarStore.error" class="mt-2 text-xs text-red-600">{{ calendarStore.error }}</p>

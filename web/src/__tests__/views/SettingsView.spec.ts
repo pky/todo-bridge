@@ -7,6 +7,22 @@ import { useSpaceStore } from '@/stores/space'
 
 const getDocsMock = vi.hoisted(() => vi.fn())
 const getDocMock = vi.hoisted(() => vi.fn())
+const calendarStoreMock = vi.hoisted(() => ({
+  configured: false,
+  serviceAccountEmail: 'app@example.iam.gserviceaccount.com',
+  loading: false,
+  error: null,
+  subscribe: vi.fn(),
+  unsubscribe: vi.fn(),
+  saveConfig: vi.fn(),
+  clearConfig: vi.fn(),
+  saveAutomationConfig: vi.fn(),
+  calendarId: '',
+  calendarName: '',
+  autoRegistrationEnabled: false,
+  autoRegistrationCategories: ['school_childcare'],
+  autoRegistrationMinConfidence: 0.9,
+}))
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({
@@ -34,18 +50,7 @@ vi.mock('@/stores/news', () => ({
 }))
 
 vi.mock('@/stores/calendar', () => ({
-  useCalendarStore: () => ({
-    configured: false,
-    serviceAccountEmail: 'app@example.iam.gserviceaccount.com',
-    loading: false,
-    error: null,
-    subscribe: vi.fn(),
-    unsubscribe: vi.fn(),
-    saveConfig: vi.fn(),
-    clearConfig: vi.fn(),
-    calendarId: '',
-    calendarName: '',
-  }),
+  useCalendarStore: () => calendarStoreMock,
 }))
 
 vi.mock('@/services/cloudFunctionsService', () => ({
@@ -113,6 +118,12 @@ describe('SettingsView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    calendarStoreMock.configured = false
+    calendarStoreMock.calendarId = ''
+    calendarStoreMock.calendarName = ''
+    calendarStoreMock.autoRegistrationEnabled = false
+    calendarStoreMock.autoRegistrationCategories = ['school_childcare']
+    calendarStoreMock.autoRegistrationMinConfidence = 0.9
 
     getDocsMock.mockResolvedValue(createDocs([]))
     getDocMock.mockResolvedValue({
@@ -193,6 +204,38 @@ describe('SettingsView', () => {
     expect(wrapper.text()).toContain('メンバー 2 人')
     expect(wrapper.text()).not.toContain('共有先を確認して保存')
     expect(wrapper.text()).toContain('Google Calendar連携は家族スペースのownerが設定します')
+  })
+
+  it('Calendar設定済みのownerには書類予定の自動登録設定を表示する', async () => {
+    const authStore = useAuthStore()
+    authStore.$patch({
+      user: { uid: 'owner-1', email: 'owner@example.com', displayName: 'Owner', photoURL: null },
+      loading: false,
+    })
+    const spaceStore = useSpaceStore()
+    spaceStore.$patch({
+      currentSpaceId: 'family-space',
+      useLegacyPath: false,
+      initialized: true,
+      memberships: [{
+        spaceId: 'family-space',
+        role: 'owner',
+        status: 'active',
+        displayName: '家族共有',
+        joinedAt: null,
+      }],
+    })
+    getDocsMock.mockResolvedValue(buildMembersDocs())
+    calendarStoreMock.configured = true
+    calendarStoreMock.calendarId = 'family@group.calendar.google.com'
+    calendarStoreMock.calendarName = '家族'
+
+    const wrapper = shallowMount(SettingsView)
+    await flushView()
+
+    expect(wrapper.text()).toContain('明確な予定を自動登録する')
+    expect(wrapper.text()).toContain('自動登録する書類カテゴリ')
+    expect(wrapper.text()).toContain('自動登録設定を保存')
   })
 
   it('移行済みの個人スペースでもOCR設定を表示する', async () => {

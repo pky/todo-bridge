@@ -11,6 +11,7 @@ const {
   buildCalendarSettingsDocPath,
   buildCalendarTaskDocPath,
   validateGoogleCalendarConfig,
+  validateGoogleCalendarAutomationConfig,
 } = require('../lib/calendar')
 const {
   buildDocumentCalendarEventId,
@@ -23,6 +24,9 @@ const {
 const {
   buildDocumentTaskLinkId,
 } = require('../lib/documents/taskLinks')
+const {
+  evaluateCalendarAutomationCandidate,
+} = require('../lib/documents/calendarAutomation')
 
 test('書類予定候補を日時・終了時刻・場所つきイベントへ変換する', () => {
   assert.deepEqual(buildDocumentEventResource('event-id', {
@@ -75,6 +79,78 @@ test('Google Calendarの共有先設定を検証する', () => {
   })
   assert.throws(() => validateGoogleCalendarConfig({ calendarId: '' }))
   assert.throws(() => validateGoogleCalendarConfig({ calendarId: 'primary' }))
+})
+
+test('書類予定の自動登録設定を検証する', () => {
+  assert.deepEqual(validateGoogleCalendarAutomationConfig({
+    enabled: true,
+    categories: ['school_childcare', 'school_childcare', 'other'],
+    minConfidence: 0.9,
+  }), {
+    enabled: true,
+    categories: ['school_childcare'],
+    minConfidence: 0.9,
+  })
+  assert.throws(() => validateGoogleCalendarAutomationConfig({
+    enabled: true,
+    categories: [],
+    minConfidence: 0.9,
+  }))
+})
+
+test('明確で信頼度の高い将来予定だけを自動登録対象にする', () => {
+  const settings = {
+    enabled: true,
+    categories: ['school_childcare'],
+    minConfidence: 0.9,
+  }
+  const document = {
+    status: 'ready',
+    ocrStatus: 'completed',
+    category: 'school_childcare',
+    classificationConfidence: 0.9,
+  }
+  const suggestion = {
+    type: 'calendar_event',
+    status: 'pending',
+    title: '茶話会',
+    value: {
+      date: '2026-07-20',
+      yearAmbiguous: false,
+      time: '13:45',
+      endTime: '14:45',
+    },
+    confidence: 0.9,
+  }
+
+  assert.deepEqual(
+    evaluateCalendarAutomationCandidate(settings, document, suggestion, new Date('2026-07-15T00:00:00+09:00')),
+    { eligible: true, reason: 'eligible' }
+  )
+  assert.equal(evaluateCalendarAutomationCandidate(
+    settings,
+    document,
+    { ...suggestion, value: { ...suggestion.value, yearAmbiguous: true } },
+    new Date('2026-07-15T00:00:00+09:00')
+  ).reason, 'ambiguous_year')
+  assert.equal(evaluateCalendarAutomationCandidate(
+    settings,
+    document,
+    { ...suggestion, value: { ...suggestion.value, date: '2026-07-14' } },
+    new Date('2026-07-15T00:00:00+09:00')
+  ).reason, 'past')
+  assert.equal(evaluateCalendarAutomationCandidate(
+    settings,
+    document,
+    { ...suggestion, value: { ...suggestion.value, endTime: '12:00' } },
+    new Date('2026-07-15T00:00:00+09:00')
+  ).reason, 'invalid_time')
+  assert.equal(evaluateCalendarAutomationCandidate(
+    settings,
+    { ...document, classificationConfidence: 0.8 },
+    suggestion,
+    new Date('2026-07-15T00:00:00+09:00')
+  ).reason, 'confidence')
 })
 
 test('space calendar task path は spaces tasks 配下を返す', () => {

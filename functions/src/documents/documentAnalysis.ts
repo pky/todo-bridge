@@ -3,6 +3,7 @@ import { Timestamp } from 'firebase-admin/firestore'
 import { DocumentTextArtifact } from './ocr/artifact'
 import { classifyDocumentByRules } from './classification/ruleBasedClassifier'
 import { extractDocumentSuggestions } from './extraction/ruleBasedExtractor'
+import { autoRegisterDocumentCalendarSuggestions } from './calendarAutomation'
 import { FamilyDocument } from './types'
 
 export async function analyzeAndStoreDocumentText(
@@ -60,5 +61,21 @@ export async function analyzeAndStoreDocumentText(
     }
     transaction.update(documentRef, update)
   })
+
+  try {
+    const latestSnapshot = await documentRef.get()
+    if (latestSnapshot.exists) {
+      const latest = latestSnapshot.data() as FamilyDocument
+      if (latest.analysisVersion === document.analysisVersion && latest.status !== 'trashed') {
+        await autoRegisterDocumentCalendarSuggestions(
+          documentRef,
+          latest,
+          suggestions.map((suggestion) => ({ ...suggestion, status: 'pending' as const }))
+        )
+      }
+    }
+  } catch {
+    // Calendar連携の障害でOCR、分類、候補保存を失敗扱いにしない
+  }
   return suggestions.length
 }

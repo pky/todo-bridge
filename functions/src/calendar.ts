@@ -33,6 +33,21 @@ export interface DocumentCalendarEventInput {
 }
 
 const SCOPE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
+export const DOCUMENT_CALENDAR_AUTO_CATEGORIES = [
+  'school_childcare',
+  'medical',
+  'insurance_tax',
+  'home_warranty',
+  'billing_receipt',
+] as const
+
+export type DocumentCalendarAutoCategory = typeof DOCUMENT_CALENDAR_AUTO_CATEGORIES[number]
+
+export interface GoogleCalendarAutomationConfig {
+  enabled: boolean
+  categories: DocumentCalendarAutoCategory[]
+  minConfidence: number
+}
 
 export function validateGoogleCalendarConfig(data: unknown): { calendarId: string } {
   if (typeof data !== 'object' || data === null) {
@@ -44,6 +59,32 @@ export function validateGoogleCalendarConfig(data: unknown): { calendarId: strin
     throw new functions.https.HttpsError('invalid-argument', 'カレンダーIDを確認してください')
   }
   return { calendarId }
+}
+
+export function validateGoogleCalendarAutomationConfig(
+  data: unknown
+): GoogleCalendarAutomationConfig {
+  if (typeof data !== 'object' || data === null) {
+    throw new functions.https.HttpsError('invalid-argument', 'Google Calendar自動登録設定が不正です')
+  }
+  const input = data as Record<string, unknown>
+  const enabled = input.enabled === true
+  const categories = Array.isArray(input.categories)
+    ? [...new Set(input.categories.filter((value): value is DocumentCalendarAutoCategory => (
+      typeof value === 'string'
+        && DOCUMENT_CALENDAR_AUTO_CATEGORIES.includes(value as DocumentCalendarAutoCategory)
+    )))]
+    : []
+  const minConfidence = typeof input.minConfidence === 'number'
+    && Number.isFinite(input.minConfidence)
+    && input.minConfidence >= 0.7
+    && input.minConfidence <= 1
+    ? input.minConfidence
+    : 0.9
+  if (enabled && categories.length === 0) {
+    throw new functions.https.HttpsError('invalid-argument', '自動登録する書類カテゴリを選択してください')
+  }
+  return { enabled, categories, minConfidence }
 }
 
 function parseCalendarScope(data: unknown): { spaceId?: string; useLegacyPath: boolean } {
@@ -291,8 +332,41 @@ export const clearGoogleCalendarConfig = functions
     await db.doc(buildCalendarSettingsDocPath(context.auth.uid, spaceId, useLegacyPath)).set({
       calendarId: admin.firestore.FieldValue.delete(),
       calendarName: admin.firestore.FieldValue.delete(),
+      calendarAutoRegistrationEnabled: false,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     }, { merge: true })
+  })
+
+export const saveGoogleCalendarAutomationConfig = functions
+  .region('asia-northeast1')
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', '認証が必要です')
+    }
+    const { spaceId, useLegacyPath } = parseCalendarScope(data)
+    if (!spaceId || useLegacyPath) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        '自動登録は家族スペースで設定してください'
+      )
+    }
+    await assertCanManageCalendar(context.auth.uid, spaceId, useLegacyPath)
+    const config = validateGoogleCalendarAutomationConfig(data)
+    const settingsRef = db.doc(buildCalendarSettingsDocPath(context.auth.uid, spaceId, useLegacyPath))
+    const settingsSnapshot = await settingsRef.get()
+    if (config.enabled && !settingsSnapshot.data()?.calendarId) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        '先にGoogle Calendarの共有先を設定してください'
+      )
+    }
+    await settingsRef.set({
+      calendarAutoRegistrationEnabled: config.enabled,
+      calendarAutoRegistrationCategories: config.categories,
+      calendarAutoRegistrationMinConfidence: config.minConfidence,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true })
+    return { success: true, ...config }
   })
 
 // カレンダーイベントを作成し、eventIdをFirestoreのタスクドキュメントに保存

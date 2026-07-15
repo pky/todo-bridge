@@ -121,6 +121,33 @@ describe('Calendar Store', () => {
     expect(callable).toHaveBeenCalledWith({ spaceId: 'space-1', useLegacyPath: false })
   })
 
+  it('書類予定の自動登録設定を家族スペース単位で保存する', async () => {
+    const spaceStore = useSpaceStore()
+    spaceStore.$patch({ useLegacyPath: false, currentSpaceId: 'space-1' })
+    const callable = vi.fn().mockResolvedValue({
+      data: {
+        success: true,
+        enabled: true,
+        categories: ['school_childcare'],
+        minConfidence: 0.9,
+      },
+    })
+    httpsCallableMock.mockReturnValue(callable)
+    const store = useCalendarStore()
+    store.autoRegistrationEnabled = true
+
+    await store.saveAutomationConfig()
+
+    expect(httpsCallableMock).toHaveBeenCalledWith({}, 'saveGoogleCalendarAutomationConfig')
+    expect(callable).toHaveBeenCalledWith({
+      spaceId: 'space-1',
+      useLegacyPath: false,
+      enabled: true,
+      categories: ['school_childcare'],
+      minConfidence: 0.9,
+    })
+  })
+
   it('作成済みタスクを家族スペースのCalendarへ登録する', async () => {
     const spaceStore = useSpaceStore()
     spaceStore.$patch({ useLegacyPath: false, currentSpaceId: 'space-1' })

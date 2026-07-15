@@ -71,6 +71,7 @@ export { localDocumentObject } from './documents/providers/localObjectHttp'
 export {
   clearGoogleCalendarConfig,
   getGoogleCalendarServiceConfig,
+  saveGoogleCalendarAutomationConfig,
   saveGoogleCalendarConfig,
 } from './calendar'
 
