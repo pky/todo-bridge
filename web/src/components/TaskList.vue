@@ -37,6 +37,7 @@ const smartListNames: Record<string, string> = {
 const localSearchResults = computed(() => tasksStore.searchResults)
 
 const newTaskName = ref('')
+const newTaskListId = ref('')
 const newTaskDueDate = ref('')
 const newTaskStartTime = ref('')
 const newTaskEndTime = ref('')
@@ -101,6 +102,19 @@ const waitingForDocumentContent = computed(() => (
 const blockingForDocumentContent = computed(() => (
   waitingForDocumentContent.value && !newTaskName.value.trim()
 ))
+
+function defaultTaskListId(): string {
+  const selectedListId = listsStore.selectedListId
+  if (selectedListId && listsStore.lists.some((list) => list.id === selectedListId)) {
+    return selectedListId
+  }
+  return listsStore.lists[0]?.id ?? ''
+}
+
+function openAddForm(): void {
+  newTaskListId.value = defaultTaskListId()
+  isAdding.value = true
+}
 
 function buildTaskDates(): {
   startDate: Timestamp | null
@@ -189,7 +203,10 @@ async function handleUseDocumentContent(event: Event): Promise<void> {
 }
 
 async function handleAddTask() {
-  if (!newTaskName.value.trim() || isSubmitting.value || blockingForDocumentContent.value) return
+  if (!newTaskName.value.trim()
+    || !newTaskListId.value
+    || isSubmitting.value
+    || blockingForDocumentContent.value) return
 
   isSubmitting.value = true
   try {
@@ -198,6 +215,7 @@ async function handleAddTask() {
     const needsCommittedTask = selectedDocumentIds.value.length > 0 || addToGoogleCalendar.value
     const taskId = await tasksStore.createTask({
       name,
+      listId: newTaskListId.value,
       url,
       ...dates,
       notes: generatedNotes.value,
@@ -232,6 +250,7 @@ async function handleAddTask() {
 
 function resetAddForm() {
   newTaskName.value = ''
+  newTaskListId.value = ''
   newTaskDueDate.value = ''
   newTaskStartTime.value = ''
   newTaskEndTime.value = ''
@@ -254,6 +273,15 @@ watch(isFamilySpace, (familySpace) => {
 })
 
 watch(
+  () => [listsStore.selectedListId, ...listsStore.lists.map((list) => list.id)],
+  () => {
+    if (!isAdding.value
+      || listsStore.lists.some((list) => list.id === newTaskListId.value)) return
+    newTaskListId.value = defaultTaskListId()
+  }
+)
+
+watch(
   () => {
     const document = documentsStore.documents.find((item) => item.id === sourceDocumentId.value)
     return document
@@ -271,6 +299,7 @@ watch(
   async (documentId) => {
     if (typeof documentId !== 'string' || !documentId) return
     isAdding.value = true
+    newTaskListId.value = defaultTaskListId()
     selectedDocumentIds.value = [documentId]
     sourceDocumentId.value = documentId
     useDocumentContent.value = route.query.createFromDocument === '1'
@@ -427,7 +456,7 @@ async function handleDeleteCompletedTasks() {
     <div class="mb-4">
       <div v-if="!isAdding">
         <button
-          @click="isAdding = true"
+          @click="openAddForm"
           class="w-full text-left px-3 py-2 text-gray-500 hover:bg-gray-50 rounded-lg border border-dashed border-gray-300 hover:border-gray-400 transition-colors"
         >
           + タスクを追加
@@ -443,6 +472,18 @@ async function handleDeleteCompletedTasks() {
           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           autofocus
         />
+        <label class="mt-3 block text-xs text-gray-500">
+          追加先リスト
+          <select
+            v-model="newTaskListId"
+            data-testid="new-task-list"
+            class="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option v-for="list in listsStore.lists" :key="list.id" :value="list.id">
+              {{ list.name }}
+            </option>
+          </select>
+        </label>
         <!-- 期限と優先度 -->
         <div class="flex flex-wrap items-center gap-3 mt-3">
           <div class="flex items-center gap-2">
@@ -560,7 +601,7 @@ async function handleDeleteCompletedTasks() {
           <button
             @click="handleAddTask"
             data-testid="submit-task"
-            :disabled="isSubmitting || blockingForDocumentContent"
+            :disabled="!newTaskListId || isSubmitting || blockingForDocumentContent"
             class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:bg-gray-300"
           >
             {{ isSubmitting

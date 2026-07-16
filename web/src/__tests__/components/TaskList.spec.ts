@@ -33,6 +33,10 @@ const listsStore = reactive({
   selectedSmartList: null,
   selectedListId: 'list-1',
   selectedList: { id: 'list-1', name: '家族' },
+  lists: [
+    { id: 'list-1', name: '家族', spaceId: 'space-1' },
+    { id: 'list-2', name: '買い物', spaceId: 'space-1' },
+  ],
   tags: [],
 })
 
@@ -138,6 +142,30 @@ describe('TaskList', () => {
     )
     expect(documentTaskLinksStore.linkDocuments).toHaveBeenCalledWith('task-1', ['document-1'])
     expect(calendarStore.registerTask).toHaveBeenCalledWith('task-1')
+  })
+
+  it('タスク追加時に保存先リストを選べる', async () => {
+    const wrapper = mount(TaskList, {
+      global: {
+        stubs: {
+          TaskItem: true,
+          DocumentAttachmentPicker: true,
+        },
+      },
+    })
+
+    await wrapper.findAll('button').find((button) => button.text().includes('タスクを追加'))?.trigger('click')
+    await wrapper.get('[data-testid="new-task-list"]').setValue('list-2')
+    await wrapper.get('[data-testid="new-task-name"]').setValue('牛乳を買う')
+    await wrapper.get('[data-testid="submit-task"]').trigger('click')
+
+    expect(tasksStore.createTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: '牛乳を買う',
+        listId: 'list-2',
+      }),
+      { waitForCommit: false }
+    )
   })
 
   it('OCR処理中は状態を表示し、候補反映を待ってから追加できる', async () => {

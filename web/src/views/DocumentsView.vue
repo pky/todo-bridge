@@ -533,7 +533,7 @@ watch(textResult, async () => {
     </div>
 
     <main class="mx-auto grid max-w-7xl gap-4 p-3 sm:p-4 md:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.6fr)]">
-      <section class="min-h-[60vh] rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section data-testid="documents-list-panel" class="min-w-0 min-h-[60vh] rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3">
           <div>
             <h2 class="font-medium">{{ viewMode === 'trash' ? 'ごみ箱' : '書類' }}</h2>
@@ -619,7 +619,7 @@ watch(textResult, async () => {
                 <span v-else>{{ document.mimeType.startsWith('image/') ? '🖼️' : document.mimeType === 'application/pdf' ? '📕' : '📄' }}</span>
               </div>
               <div class="min-w-0 flex-1">
-                <div class="truncate text-sm font-medium">{{ document.name }}</div>
+                <div data-testid="document-list-name" class="truncate text-sm font-medium">{{ document.name }}</div>
                 <div class="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-slate-500">
                   <span>{{ currentSpaceLabel }}</span>
                   <span>{{ categoryLabels[document.category] }}</span>
@@ -646,11 +646,11 @@ watch(textResult, async () => {
       >
         <div v-if="selectedDocument" class="flex min-h-full flex-col">
           <div class="flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3">
-            <div class="min-w-0">
+            <div data-testid="document-detail-name" class="min-w-0 flex-1">
               <h2 class="truncate font-medium">{{ selectedDocument.name }}</h2>
               <p class="mt-1 text-xs text-slate-500">{{ categoryLabels[selectedDocument.category] }}・{{ formatBytes(selectedDocument.sizeBytes) }}</p>
             </div>
-            <button class="rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100 md:hidden" @click="closeDetail">閉じる</button>
+            <button data-testid="document-detail-close" class="shrink-0 rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100 md:hidden" @click="closeDetail">閉じる</button>
           </div>
 
           <div class="flex-1 p-3 sm:p-4">

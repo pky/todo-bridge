@@ -12,7 +12,9 @@ export interface ExtractedDocumentSuggestion {
   confidence: number | null
 }
 
-const DATE_PATTERN = /(?:(\d{4})年)?\s*(\d{1,2})月\s*(\d{1,2})日/g
+const DATE_PATTERN = /(?:(?:(\d{4})年)?\s*(\d{1,2})月\s*(\d{1,2})日|(?:(\d{4})\s*[/／]\s*)?(\d{1,2})\s*[/／]\s*(\d{1,2}))/g
+const DATE_REFERENCE_PATTERN = /(?:(?:\d{4})年)?\s*\d{1,2}月\s*\d{1,2}日|(?:(?:\d{4})\s*[/／]\s*)?\d{1,2}\s*[/／]\s*\d{1,2}/
+const EVENT_CONTEXT_PATTERN = /日にち|日程|日時|開催|行事|予定|集合|開始|実施|大会|練習|行こう|いこう|踊(?:る|ろう|って|ります)|お祭り|祭り|イベント/
 const JAPANESE_WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'] as const
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000
 
@@ -45,9 +47,9 @@ function getContext(text: string, start: number, length: number): string {
   return compactExcerpt(text.slice(lineStart, lineEnd))
 }
 
-function getDateContext(text: string, start: number): string {
+function getDateContext(text: string, start: number, lineCount: number = 3): string {
   const lineStart = text.lastIndexOf('\n', start) + 1
-  return compactExcerpt(text.slice(lineStart).split(/\r?\n/).slice(0, 3).join('\n'))
+  return compactExcerpt(text.slice(lineStart).split(/\r?\n/).slice(0, lineCount).join('\n'))
 }
 
 function formatTime(period: string | undefined, hourText: string, minuteText?: string): string {
@@ -68,22 +70,41 @@ function extractTimeRange(text: string): { time: string | null; endTime: string 
   }
 }
 
-function extractEventTitle(text: string, dateStart: number, dateText: string): string {
+function isEventTitleCandidate(line: string): boolean {
+  const compact = line.trim()
+  return compact.length > 0
+    && compact.length <= 100
+    && !DATE_REFERENCE_PATTERN.test(compact)
+    && !/^(?:日にち|日程|日時|開催日|予定|場所|会場|時間)\s*[：:]?/.test(compact)
+    && !/^[\s&＆の（()）日月火水木金土曜]+$/.test(compact)
+}
+
+function extractEventTitle(
+  text: string,
+  dateStart: number,
+  dateEnd: number,
+  dateText: string
+): string {
+  const followingLines = text.slice(dateEnd).split(/\r?\n/).slice(0, 4)
   const precedingLines = text.slice(0, dateStart).split(/\r?\n/).reverse()
-  const heading = precedingLines.find((line) => {
-    const compact = line.trim()
-    return compact.length > 0
-      && compact.length <= 100
-      && !/^(?:日にち|日程|日時|開催日|予定|場所|会場|時間)\s*[：:]?/.test(compact)
-  })?.trim()
+  const candidates = [...followingLines, ...precedingLines].filter(isEventTitleCandidate)
+  const heading = (candidates.find((line) => EVENT_CONTEXT_PATTERN.test(line))
+    ?? candidates[0])?.trim()
   if (!heading) return `予定：${dateText}`
-  const unwrapped = heading.replace(/^[〈《【［\[(（]\s*/, '').replace(/\s*[〉》】］\])）]$/, '').trim()
+  const unwrapped = heading.replace(/^[〈《【［[(（]\s*/, '').replace(/\s*[〉》】］\])）]$/, '').trim()
   return unwrapped || `予定：${dateText}`
 }
 
 function extractLocation(text: string): string | null {
   const match = text.match(/(?:場所|会場)\s*[：:]\s*([^\r\n]+)/)
-  return match?.[1]?.trim() || null
+  if (match?.[1]?.trim()) return match[1].trim()
+  const unlabeledLocation = text.split(/\s+/).map((part) => part.trim()).find((part) => (
+    part.length > 0
+      && part.length <= 100
+      && !DATE_REFERENCE_PATTERN.test(part)
+      && /(ホール|会館|公民館|体育館|教室|学校|園|駅前|広場|公園|センター)$/.test(part)
+  ))
+  return unlabeledLocation ?? null
 }
 
 function toIsoDate(year: number, month: number, day: number): string | null {
@@ -135,14 +156,17 @@ function inferDateWithoutYear(
 function extractDates(page: OcrPageResult, referenceDate: Date): ExtractedDocumentSuggestion[] {
   const suggestions: ExtractedDocumentSuggestion[] = []
   for (const match of page.text.matchAll(DATE_PATTERN)) {
-    const year = match[1] ? Number(match[1]) : null
-    const month = Number(match[2])
-    const day = Number(match[3])
+    const yearText = match[1] ?? match[4]
+    const year = yearText ? Number(yearText) : null
+    const month = Number(match[2] ?? match[5])
+    const day = Number(match[3] ?? match[6])
     const lineExcerpt = getContext(page.text, match.index ?? 0, match[0].length)
     const excerpt = getDateContext(page.text, match.index ?? 0)
+    const nearbyExcerpt = getDateContext(page.text, match.index ?? 0, 4)
     const isDeadline = /(まで|締切|期限|提出|必着)/.test(lineExcerpt)
-    const isEvent = /(日にち|日程|日時|開催|行事|予定|集合|開始|実施)/.test(lineExcerpt)
-    const timeRange = extractTimeRange(excerpt)
+    const isEvent = EVENT_CONTEXT_PATTERN.test(lineExcerpt)
+      || EVENT_CONTEXT_PATTERN.test(excerpt)
+    const timeRange = extractTimeRange(nearbyExcerpt)
     const role = isDeadline && !isEvent ? 'deadline' : isEvent && !isDeadline ? 'event' : 'ambiguous'
     if (role === 'ambiguous') continue
     const dateEnd = (match.index ?? 0) + match[0].length
@@ -156,7 +180,12 @@ function extractDates(page: OcrPageResult, referenceDate: Date): ExtractedDocume
       type: role === 'deadline' ? 'task' : 'calendar_event',
       title: role === 'deadline'
         ? `期限：${match[0].trim()}`
-        : extractEventTitle(page.text, match.index ?? 0, match[0].trim()),
+        : extractEventTitle(
+          page.text,
+          match.index ?? 0,
+          dateEnd,
+          match[0].trim()
+        ),
       value: {
         date,
         dateText: match[0].trim(),
@@ -170,7 +199,7 @@ function extractDates(page: OcrPageResult, referenceDate: Date): ExtractedDocume
           : {}),
       },
       pageNumber: page.pageNumber,
-      sourceExcerpt: excerpt,
+      sourceExcerpt: timeRange.time ? nearbyExcerpt : excerpt,
       confidence: year ? 0.9 : 0.72,
     })
     if (suggestion) suggestions.push(suggestion)

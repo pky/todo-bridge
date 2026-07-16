@@ -209,6 +209,53 @@ describe('DocumentsView', () => {
     expect(wrapper.get('[data-testid="document-text-section"]').text()).toContain('PDF内の文字')
   })
 
+  it('長いファイル名でもモバイル詳細の閉じるボタンを縮めない', async () => {
+    getAccessUrlMock.mockResolvedValue({ url: 'https://example.com/document.pdf' })
+    selectedDocument.value = {
+      id: 'document-1',
+      name: `${'とても長いファイル名'.repeat(20)}.pdf`,
+      category: 'other',
+      sizeBytes: 1024,
+      mimeType: 'application/pdf',
+      status: 'ready',
+      integrityStatus: 'ok',
+      previewStatus: 'completed',
+      ocrStatus: 'completed',
+      ocrObjectKey: null,
+      pageCount: 1,
+      createdAt: { toDate: () => new Date() },
+    }
+
+    const wrapper = mount(DocumentsView)
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="document-detail-name"]').classes()).toContain('flex-1')
+    expect(wrapper.get('[data-testid="document-detail-close"]').classes()).toContain('shrink-0')
+  })
+
+  it('URLエンコードされた長いファイル名でも一覧を画面幅に収める', async () => {
+    documents.value = [{
+      id: 'document-1',
+      name: `${'%E6%81%B5%E6%AF%94%E5%AF%BF'.repeat(20)}.pdf`,
+      category: 'other',
+      sizeBytes: 1024,
+      mimeType: 'application/pdf',
+      status: 'ready',
+      integrityStatus: 'ok',
+      previewStatus: 'completed',
+      ocrStatus: 'completed',
+      ocrObjectKey: null,
+      pageCount: 1,
+      createdAt: { toDate: () => new Date() },
+    }]
+
+    const wrapper = mount(DocumentsView)
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="documents-list-panel"]').classes()).toContain('min-w-0')
+    expect(wrapper.get('[data-testid="document-list-name"]').classes()).toContain('truncate')
+  })
+
   it('書類詳細から添付済みのタスク追加画面へ移動する', async () => {
     getAccessUrlMock.mockResolvedValue({ url: 'https://example.com/document.pdf' })
     selectedDocument.value = {

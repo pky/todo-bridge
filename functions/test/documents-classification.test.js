@@ -69,6 +69,34 @@ test('用途を判断できない日付は操作候補にしない', () => {
   assert.deepEqual(suggestions, [])
 })
 
+test('案内文のスラッシュ日付と曜日付き日付を予定候補にする', () => {
+  const suggestions = extractDocumentSuggestions([page([
+    '地域イベントのお知らせ',
+    'みんなで練習して',
+    '9/4(金)&9/5(土)の',
+    '地域イベントにいこう！',
+    '9月2日水',
+    '中央公民館ホール',
+    '踊りを練習しよう！',
+    '10:00〜11:00',
+    'ほかの曲も練習します',
+  ].join('\n'))], new Date('2026-07-16T00:00:00+09:00'))
+  const events = suggestions.filter((item) => item.type === 'calendar_event')
+
+  assert.deepEqual(events.map((item) => item.value.date), [
+    '2026-09-04',
+    '2026-09-05',
+    '2026-09-02',
+  ])
+  assert.ok(events.every((item) => item.value.yearAmbiguous === true))
+  assert.equal(events[0].value.time, null)
+  assert.equal(events[1].value.time, null)
+  assert.equal(events[2].value.time, '10:00')
+  assert.equal(events[2].value.endTime, '11:00')
+  assert.equal(events[2].value.location, '中央公民館ホール')
+  assert.match(events[2].sourceExcerpt, /10:00〜11:00/)
+})
+
 test('存在しない日付と空の解析結果を採用しない', () => {
   assert.deepEqual(extractDocumentSuggestions([page('2026年2月30日')]), [])
   assert.deepEqual(extractDocumentSuggestions([page('')]), [])
