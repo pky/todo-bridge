@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { useDocumentsStore } from '@/stores/documents'
+import {
+  buildDocumentUploadOcrWarning,
+  useDocumentsStore,
+} from '@/stores/documents'
 import { useAuthStore } from '@/stores/auth'
 import { useSpaceStore } from '@/stores/space'
 
@@ -72,6 +75,7 @@ describe('documents store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
+    vi.stubGlobal('confirm', vi.fn(() => true))
     useSpaceStore().$patch({
       currentSpaceId: 'space-1',
       initialized: true,
@@ -104,6 +108,66 @@ describe('documents store', () => {
     expect(uploadDocumentMock).toHaveBeenCalledWith('space-1', file, 'file')
     expect(store.selectedDocumentId).toBe('document-1')
     expect(store.uploading).toBe(false)
+  })
+
+  it('OCR警告値に達するアップロードは利用者の確認後に開始する', async () => {
+    uploadDocumentMock.mockResolvedValue('document-1')
+    const confirmMock = vi.mocked(globalThis.confirm)
+    confirmMock.mockReturnValue(false)
+    const store = useDocumentsStore()
+    store.usage = {
+      originalBytes: 0,
+      derivedBytes: 0,
+      documentCount: 0,
+      processingPageCountThisMonth: 799,
+      processingPageMonth: new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 7),
+      limitBytes: 10 * 1024 * 1024 * 1024,
+      warningBytes: 8 * 1024 * 1024 * 1024,
+      updatedAt: {} as never,
+    }
+    const file = new File(['jpeg-data'], 'scan.jpeg', { type: 'image/jpeg' })
+
+    await expect(store.addDocument(file, 'file')).resolves.toBeNull()
+
+    expect(confirmMock).toHaveBeenCalledWith(expect.stringMatching(/799\/1,000ページ/))
+    expect(confirmMock).toHaveBeenCalledWith(expect.stringMatching(/課金される可能性/))
+    expect(uploadDocumentMock).not.toHaveBeenCalled()
+    expect(store.uploading).toBe(false)
+  })
+
+  it('OCR警告を了承した場合はアップロードを開始する', async () => {
+    uploadDocumentMock.mockResolvedValue('document-1')
+    const store = useDocumentsStore()
+    store.usage = {
+      originalBytes: 0,
+      derivedBytes: 0,
+      documentCount: 0,
+      processingPageCountThisMonth: 999,
+      processingPageMonth: new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 7),
+      limitBytes: 10 * 1024 * 1024 * 1024,
+      warningBytes: 8 * 1024 * 1024 * 1024,
+      updatedAt: {} as never,
+    }
+    const file = new File(['pdf-data'], 'notice.pdf', { type: 'application/pdf' })
+
+    await expect(store.addDocument(file, 'file')).resolves.toBe('document-1')
+
+    expect(uploadDocumentMock).toHaveBeenCalledWith('space-1', file, 'file')
+  })
+
+  it('前月のOCR利用量では警告しない', () => {
+    const warning = buildDocumentUploadOcrWarning({
+      originalBytes: 0,
+      derivedBytes: 0,
+      documentCount: 0,
+      processingPageCountThisMonth: 999,
+      processingPageMonth: '2026-06',
+      limitBytes: 10 * 1024 * 1024 * 1024,
+      warningBytes: 8 * 1024 * 1024 * 1024,
+      updatedAt: {} as never,
+    }, { type: 'application/pdf' }, new Date('2026-07-17T00:00:00+09:00'))
+
+    expect(warning).toBeNull()
   })
 
   it('同じファイルのアップロードが重複発火しても1件だけ作成する', async () => {

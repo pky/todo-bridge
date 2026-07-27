@@ -45,6 +45,36 @@ export interface UpdateDocumentSuggestionInput {
   status: DocumentSuggestionStatus
 }
 
+export const DOCUMENT_OCR_MONTHLY_PAGE_LIMIT = 1000
+export const DOCUMENT_OCR_MONTHLY_WARNING_PAGES = 800
+
+function getJstMonth(date: Date): string {
+  return new Date(date.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 7)
+}
+
+export function buildDocumentUploadOcrWarning(
+  usage: DocumentUsage | null,
+  file: Pick<File, 'type'>,
+  now: Date = new Date()
+): string | null {
+  if (!usage || usage.processingPageMonth !== getJstMonth(now)) return null
+  if (file.type !== 'application/pdf' && !file.type.startsWith('image/')) return null
+
+  const currentPages = usage.processingPageCountThisMonth ?? 0
+  if (currentPages + 1 < DOCUMENT_OCR_MONTHLY_WARNING_PAGES) return null
+
+  const fileImpact = file.type === 'application/pdf'
+    ? 'PDFは、文字層がないページ数に応じて利用量が増えます。'
+    : 'この画像で外部OCR利用量が1ページ増える見込みです。'
+  return [
+    `今月の外部OCR利用量は${currentPages.toLocaleString('ja-JP')}/${DOCUMENT_OCR_MONTHLY_PAGE_LIMIT.toLocaleString('ja-JP')}ページです。`,
+    fileImpact,
+    `${DOCUMENT_OCR_MONTHLY_PAGE_LIMIT.toLocaleString('ja-JP')}ページを超えた分はOCRされず、原本だけ保存されます。`,
+    'Cloud Visionの無料枠はプロジェクト全体で共有されるため、他スペースの利用と合算すると課金される可能性があります。',
+    'この書類をアップロードしますか？',
+  ].join('\n')
+}
+
 export const useDocumentsStore = defineStore('documents', () => {
   const documents = ref<FamilyDocument[]>([])
   const selectedDocumentId = ref<string | null>(null)
@@ -297,7 +327,7 @@ export const useDocumentsStore = defineStore('documents', () => {
     selectedDocumentId.value = documentId
   }
 
-  function addDocument(file: File, source: FamilyDocumentSource): Promise<string> {
+  function addDocument(file: File, source: FamilyDocumentSource): Promise<string | null> {
     const spaceId = requireCurrentSpaceId()
     const uploadKey = [
       spaceId,
@@ -311,6 +341,9 @@ export const useDocumentsStore = defineStore('documents', () => {
     if (activeUpload) {
       return Promise.reject(new Error('別の書類を保存中です。完了してから追加してください'))
     }
+
+    const ocrWarning = buildDocumentUploadOcrWarning(usage.value, file)
+    if (ocrWarning && !globalThis.confirm(ocrWarning)) return Promise.resolve(null)
 
     uploading.value = true
     uploadFileName.value = file.name

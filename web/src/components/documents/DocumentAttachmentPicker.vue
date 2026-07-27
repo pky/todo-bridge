@@ -59,6 +59,7 @@ async function handleFileSelection(event: Event): Promise<void> {
   uploadError.value = null
   try {
     const documentId = await documentsStore.addDocument(file, 'file')
+    if (!documentId) return
     if (!draftIds.value.includes(documentId)) {
       draftIds.value = [...draftIds.value, documentId]
     }
