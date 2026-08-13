@@ -19,6 +19,9 @@ const props = withDefaults(defineProps<{
 }>(), {
   showHeader: true
 })
+const emit = defineEmits<{
+  focusDetail: []
+}>()
 
 const tasksStore = useTasksStore()
 const listsStore = useListsStore()
@@ -93,6 +96,15 @@ function handleBackToParent() {
   if (parentTask.value) {
     tasksStore.selectTask(parentTask.value.id)
   }
+}
+
+function handleSelectSubtask(taskId: string) {
+  tasksStore.selectTask(taskId)
+  emit('focusDetail')
+}
+
+function handleFocusDetail() {
+  emit('focusDetail')
 }
 
 watch(
@@ -903,7 +915,7 @@ const priorityOptions = [
               :key="subtask.id"
               :task="subtask"
               :selected="tasksStore.selectedTaskId === subtask.id"
-              @select="tasksStore.selectTask(subtask.id)"
+              @select="handleSelectSubtask(subtask.id)"
               @complete="tasksStore.toggleComplete(subtask.id)"
             />
             <div
@@ -916,7 +928,7 @@ const priorityOptions = [
         </div>
 
         <!-- メモ -->
-        <div>
+        <div @click="handleFocusDetail">
           <label class="block text-xs text-gray-500 mb-1">メモ</label>
           <div class="space-y-2">
             <div
@@ -1024,7 +1036,7 @@ const priorityOptions = [
             <div
               v-for="subtask in completedSubtasks"
               :key="subtask.id"
-              @click="tasksStore.selectTask(subtask.id)"
+              @click="handleSelectSubtask(subtask.id)"
               class="px-2 py-1 rounded cursor-pointer hover:bg-gray-50 text-xs sm:text-sm line-through text-gray-400 truncate"
             >
               {{ subtask.name }}

@@ -173,12 +173,32 @@ describe('TaskDetail', () => {
 
     await wrapper.get('p.whitespace-pre-wrap').trigger('click')
     expect(wrapper.find('textarea').exists()).toBe(false)
+    expect(wrapper.emitted('focusDetail')).toHaveLength(1)
 
     const editButton = wrapper.findAll('button').find((button) => button.text() === '編集')
     expect(editButton).toBeDefined()
     await editButton?.trigger('click')
 
     expect(wrapper.get('textarea').element.value).toBe('選択してコピーしたいメモ')
+  })
+
+  it('サブタスク選択時に詳細表示イベントを通知する', async () => {
+    const wrapper = mount(TaskDetail, {
+      global: {
+        stubs: {
+          DocumentAttachmentPicker: true,
+          TaskItem: {
+            props: ['task'],
+            template: '<button data-testid="subtask-item" @click="$emit(\'select\')">{{ task.name }}</button>',
+          },
+        },
+      },
+    })
+
+    await wrapper.get('[data-testid="subtask-item"]').trigger('click')
+
+    expect(tasksStoreState.selectTask).toHaveBeenCalledWith('grandchild-task')
+    expect(wrapper.emitted('focusDetail')).toHaveLength(1)
   })
 
   it('書類の読み取り候補を確認してから既存タスクへ反映する', async () => {

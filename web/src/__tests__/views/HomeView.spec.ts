@@ -32,6 +32,12 @@ const listsStoreState = reactive({
   ],
 })
 
+const tasksStoreState = reactive({
+  selectedTaskId: null as string | null,
+  selectedTask: null as { id: string, name: string } | null,
+  searchQuery: '',
+})
+
 vi.mock('vue-router', () => ({
   useRouter: () => ({
     push: vi.fn(),
@@ -70,14 +76,23 @@ vi.mock('@/stores/space', () => ({
 
 vi.mock('@/stores/tasks', () => ({
   useTasksStore: () => ({
-    selectedTaskId: null,
-    searchQuery: '',
+    get selectedTaskId() {
+      return tasksStoreState.selectedTaskId
+    },
+    get selectedTask() {
+      return tasksStoreState.selectedTask
+    },
+    get searchQuery() {
+      return tasksStoreState.searchQuery
+    },
     unsubscribe: tasksUnsubscribeMock,
     subscribe: tasksSubscribeMock,
     subscribeToList: subscribeToListMock,
     setSearchQuery: vi.fn(),
     clearSearch: vi.fn(),
-    selectTask: vi.fn(),
+    selectTask: (taskId: string | null) => {
+      tasksStoreState.selectedTaskId = taskId
+    },
   }),
 }))
 
@@ -107,11 +122,14 @@ vi.mock('@/components/Sidebar.vue', () => ({
 }))
 
 vi.mock('@/components/TaskList.vue', () => ({
-  default: { template: '<div />' },
+  default: { template: '<div data-testid="task-list" />' },
 }))
 
 vi.mock('@/components/TaskDetail.vue', () => ({
-  default: { template: '<div />' },
+  default: {
+    emits: ['focus-detail'],
+    template: '<button data-testid="detail-focus" @click="$emit(\'focus-detail\')" />',
+  },
 }))
 
 describe('HomeView', () => {
@@ -119,6 +137,8 @@ describe('HomeView', () => {
     vi.clearAllMocks()
     routeState.query.target = 'read-later'
     listsStoreState.selectedListId = null
+    tasksStoreState.selectedTaskId = null
+    tasksStoreState.selectedTask = null
     subscribeMock.mockResolvedValue(undefined)
     replaceMock.mockResolvedValue(undefined)
     selectListMock.mockImplementation((id: string | null) => {
@@ -144,5 +164,37 @@ describe('HomeView', () => {
     expect(selectSmartListMock).toHaveBeenCalledWith(null)
     expect(selectListMock).toHaveBeenCalledWith('read-later-id')
     expect(replaceMock).toHaveBeenCalledWith({ name: 'home' })
+  })
+
+  it('デスクトップで詳細内の操作時だけ一覧を閉じ、戻る操作で再表示する', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 })
+    const wrapper = mount(HomeView, {
+      global: {
+        stubs: {
+          RouterLink: {
+            props: ['to'],
+            template: '<a><slot /></a>',
+          },
+        },
+      },
+    })
+
+    tasksStoreState.selectedTaskId = 'task-1'
+    tasksStoreState.selectedTask = { id: 'task-1', name: 'エレナ' }
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[aria-label="タスク一覧へ戻る"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="desktop-task-list"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="detail-focus"]').trigger('click')
+
+    expect(wrapper.find('[aria-label="タスク一覧へ戻る"]').text()).toContain('エレナ')
+    expect(wrapper.find('[data-testid="desktop-task-list"]').exists()).toBe(false)
+
+    await wrapper.get('[aria-label="タスク一覧へ戻る"]').trigger('click')
+
+    expect(wrapper.find('[aria-label="タスク一覧へ戻る"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="desktop-task-list"]').exists()).toBe(true)
+    expect(tasksStoreState.selectedTaskId).toBe('task-1')
   })
 })

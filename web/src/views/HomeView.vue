@@ -59,6 +59,9 @@ function checkMobile() {
 
 // タスク詳細がモバイルで開いているか
 const isDetailOpen = computed(() => isMobile.value && tasksStore.selectedTaskId !== null)
+// デスクトップでは、タスク選択時に一覧を閉じて詳細を広げる
+const isDesktopDetailExpanded = ref(false)
+const selectedTaskName = computed(() => tasksStore.selectedTask?.name ?? 'タスク一覧')
 
 async function reloadHomeData() {
   if (!authStore.isAuthenticated) return
@@ -146,7 +149,12 @@ onUnmounted(() => {
 
 watch(
   () => tasksStore.selectedTaskId,
-  (taskId) => documentTaskLinksStore.subscribe(taskId),
+  (taskId) => {
+    documentTaskLinksStore.subscribe(taskId)
+    if (taskId === null) {
+      isDesktopDetailExpanded.value = false
+    }
+  },
   { immediate: true }
 )
 
@@ -202,6 +210,14 @@ function closeSidebar() {
 
 function closeDetail() {
   tasksStore.selectTask(null)
+}
+
+function showTaskList() {
+  isDesktopDetailExpanded.value = false
+}
+
+function expandTaskDetail() {
+  isDesktopDetailExpanded.value = true
 }
 </script>
 
@@ -334,13 +350,31 @@ function closeDetail() {
         </div>
 
         <!-- Task List -->
-        <div class="md:col-span-4 lg:col-span-4 bg-white rounded-lg shadow p-4 overflow-y-auto">
+        <div
+          v-if="!isDesktopDetailExpanded"
+          data-testid="desktop-task-list"
+          class="md:col-span-4 lg:col-span-4 bg-white rounded-lg shadow p-4 overflow-y-auto"
+        >
           <TaskList />
         </div>
 
         <!-- Task Detail -->
-        <div class="md:col-span-5 lg:col-span-6 bg-white rounded-lg shadow p-4 overflow-y-auto">
-          <TaskDetail />
+        <div
+          class="bg-white rounded-lg shadow p-4 overflow-y-auto"
+          :class="isDesktopDetailExpanded ? 'md:col-span-9 lg:col-span-10' : 'md:col-span-5 lg:col-span-6'"
+        >
+          <button
+            v-if="isDesktopDetailExpanded"
+            class="mb-4 flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
+            aria-label="タスク一覧へ戻る"
+            @click="showTaskList"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 19-7-7 7-7" />
+            </svg>
+            <span class="max-w-64 truncate">{{ selectedTaskName }}</span>
+          </button>
+          <TaskDetail @focus-detail="expandTaskDetail" />
         </div>
       </div>
 
