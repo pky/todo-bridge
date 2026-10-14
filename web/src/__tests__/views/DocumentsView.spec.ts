@@ -17,6 +17,7 @@ const downloadDocumentArchivesMock = vi.hoisted(() => vi.fn().mockResolvedValue(
 const routerPushMock = vi.fn()
 const selectedDocument = ref<Record<string, unknown> | null>(null)
 const documents = ref<Record<string, unknown>[]>([])
+const documentsLoading = ref(false)
 const spaceStoreMock = {
   currentSpaceId: 'space-1',
   memberships: [{ spaceId: 'space-1', displayName: '家族', role: 'owner' }],
@@ -52,7 +53,7 @@ vi.mock('@/stores/documents', () => ({
     get documents() { return documents.value },
     selectedDocumentId: null,
     get selectedDocument() { return selectedDocument.value },
-    loading: false,
+    get loading() { return documentsLoading.value },
     uploading: false,
     uploadFileName: null,
     thumbnailUrls: {},
@@ -89,6 +90,7 @@ describe('DocumentsView', () => {
     vi.clearAllMocks()
     selectedDocument.value = null
     documents.value = []
+    documentsLoading.value = false
     routeMock.query = {}
     spaceStoreMock.currentSpaceId = 'space-1'
     spaceStoreMock.memberships = [{ spaceId: 'space-1', displayName: '家族', role: 'owner' }]
@@ -316,6 +318,77 @@ describe('DocumentsView', () => {
     expect(selectDocumentMock).toHaveBeenCalledWith('document-2')
     expect(selectDocumentMock).toHaveBeenCalledTimes(1)
     wrapper.unmount()
+  })
+
+  it('前画面の一覧が残っていても、再購読後に受信した一覧からクエリの書類を選択する', async () => {
+    routeMock.query = { document: 'document-2' }
+    const textDocument = {
+      id: 'document-2',
+      name: '持ち物メモ.md',
+      category: 'other',
+      sizeBytes: 32,
+      mimeType: 'text/markdown',
+      status: 'ready',
+      integrityStatus: 'ok',
+      previewStatus: 'skipped',
+      ocrStatus: 'completed',
+      pageCount: 1,
+      createdAt: { toDate: () => new Date() },
+    }
+    // ホーム画面の購読が残っている状態で遷移してくる
+    documents.value = [textDocument]
+    // 書類画面の購読開始で一覧がリセットされ、読み込み中になる
+    subscribeMock.mockImplementationOnce(() => {
+      documents.value = []
+      documentsLoading.value = true
+    })
+
+    const wrapper = mount(DocumentsView)
+    await flushPromises()
+    expect(selectDocumentMock).not.toHaveBeenCalled()
+
+    documents.value = [textDocument]
+    documentsLoading.value = false
+    await flushPromises()
+
+    expect(selectDocumentMock).toHaveBeenCalledTimes(1)
+    expect(selectDocumentMock).toHaveBeenCalledWith('document-2')
+    wrapper.unmount()
+  })
+
+  it('テキスト書類のプレビューでは原本を開くリンクを表示しない', async () => {
+    getAccessUrlMock.mockResolvedValue({ url: 'https://example.com/memo.md' })
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('# 持ち物', { status: 200, headers: { 'Content-Type': 'text/markdown' } })
+    )
+    getTextMock.mockResolvedValue({
+      status: 'completed',
+      provider: 'plain_text',
+      pageCount: 1,
+      pendingExternalOcrPageNumbers: [],
+      pages: [{ pageNumber: 1, text: '# 持ち物', confidence: null, source: 'plain_text' }],
+    })
+    selectedDocument.value = {
+      id: 'document-2',
+      name: '持ち物メモ.md',
+      category: 'other',
+      sizeBytes: 32,
+      mimeType: 'text/markdown',
+      status: 'ready',
+      integrityStatus: 'ok',
+      previewStatus: 'skipped',
+      ocrStatus: 'completed',
+      ocrObjectKey: 'spaces/space-1/documents/document-2/analysis/v1/ocr.json.gz',
+      pageCount: 1,
+      createdAt: { toDate: () => new Date() },
+    }
+
+    const wrapper = mount(DocumentsView)
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="document-text-preview"]').text()).toContain('持ち物')
+    expect(wrapper.text()).not.toContain('原本を開く')
+    fetchMock.mockRestore()
   })
 
   it('長いファイル名でもモバイル詳細の閉じるボタンを縮めない', async () => {
