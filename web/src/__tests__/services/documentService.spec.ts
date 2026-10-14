@@ -134,6 +134,40 @@ describe('documentService', () => {
     })
   })
 
+  it('MIMEが空のMarkdownファイルは拡張子からtext/markdownとして送信する', async () => {
+    const createUpload = vi.fn().mockResolvedValue({
+      data: {
+        documentId: 'document-2',
+        upload: {
+          url: 'https://storage.example/upload',
+          method: 'PUT',
+          headers: { 'Content-Type': 'text/markdown' },
+          expiresAt: new Date().toISOString(),
+        },
+      },
+    })
+    const completeUpload = vi.fn().mockResolvedValue({
+      data: { documentId: 'document-2', status: 'uploaded' },
+    })
+    callableMocks.httpsCallable.mockImplementation((_functions, name) => (
+      name === 'createDocumentUpload' ? createUpload : completeUpload
+    ))
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(null, { status: 200 })
+    )
+    const file = new File(['# 持ち物'], 'memo.md', { type: '' })
+
+    await expect(uploadDocument('space-1', file, 'file')).resolves.toBe('document-2')
+
+    expect(createUpload).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'memo.md',
+      mimeType: 'text/markdown',
+    }))
+    const requestBody = fetchMock.mock.calls[0]?.[1]?.body
+    expect(requestBody).toBeInstanceOf(Blob)
+    expect((requestBody as Blob).type).toBe('text/markdown')
+  })
+
   it('選択ファイルを一度だけ読み込み同じデータをハッシュ計算と送信に使う', async () => {
     const createUpload = vi.fn().mockResolvedValue({
       data: {

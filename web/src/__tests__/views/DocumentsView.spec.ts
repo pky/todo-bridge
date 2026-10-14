@@ -97,7 +97,7 @@ describe('DocumentsView', () => {
     expect(wrapper.text()).toContain('まだ書類がありません')
     expect(wrapper.text()).toContain('書類・写真を追加')
     expect(wrapper.findAll('input[type="file"]')).toHaveLength(1)
-    expect(wrapper.get('[data-testid="document-input"]').attributes('accept')).toBe('image/*,application/pdf,.pdf')
+    expect(wrapper.get('[data-testid="document-input"]').attributes('accept')).toBe('image/*,application/pdf,.pdf,text/plain,.txt,text/markdown,.md,text/csv,.csv')
     expect(wrapper.get('[data-testid="document-input"]').attributes('capture')).toBeUndefined()
     expect(subscribeMock).toHaveBeenCalledOnce()
 
@@ -207,6 +207,48 @@ describe('DocumentsView', () => {
     expect(getTextMock).toHaveBeenCalledWith('document-1')
     expect(wrapper.get('[data-testid="document-text-section"]').text()).toContain('提出期限は7月20日です')
     expect(wrapper.get('[data-testid="document-text-section"]').text()).toContain('PDF内の文字')
+  })
+
+  it('テキスト書類は原本の本文をブラウザ内に表示する', async () => {
+    getAccessUrlMock.mockResolvedValue({ url: 'https://example.com/memo.md' })
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('# 持ち物\n- 水筒', { status: 200, headers: { 'Content-Type': 'text/markdown' } })
+    )
+    getTextMock.mockResolvedValue({
+      status: 'completed',
+      provider: 'plain_text',
+      pageCount: 1,
+      pendingExternalOcrPageNumbers: [],
+      pages: [{
+        pageNumber: 1,
+        text: '# 持ち物\n- 水筒',
+        confidence: null,
+        source: 'plain_text',
+      }],
+    })
+    selectedDocument.value = {
+      id: 'document-2',
+      name: '持ち物メモ.md',
+      category: 'school_childcare',
+      sizeBytes: 32,
+      mimeType: 'text/markdown',
+      status: 'ready',
+      integrityStatus: 'ok',
+      previewStatus: 'skipped',
+      ocrStatus: 'completed',
+      ocrObjectKey: 'spaces/space-1/documents/document-2/analysis/v1/ocr.json.gz',
+      pageCount: 1,
+      createdAt: { toDate: () => new Date() },
+    }
+
+    const wrapper = mount(DocumentsView)
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/memo.md')
+    expect(wrapper.get('[data-testid="document-text-preview"]').text()).toContain('- 水筒')
+    expect(wrapper.text()).not.toContain('この形式はブラウザ内プレビューに対応していません')
+    expect(wrapper.get('[data-testid="document-text-section"]').text()).toContain('テキスト本文')
+    fetchMock.mockRestore()
   })
 
   it('長いファイル名でもモバイル詳細の閉じるボタンを縮めない', async () => {

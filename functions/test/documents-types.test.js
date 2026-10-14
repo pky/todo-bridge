@@ -104,3 +104,33 @@ test('型が保証されていない外部入力でも例外を発生させな�
     'SHA-256が不正です',
   ])
 })
+
+test('1 MBを超えるテキスト書類を拒否する', () => {
+  const { MAX_TEXT_DOCUMENT_FILE_SIZE_BYTES } = require('../lib/documents/textFormats')
+
+  for (const mimeType of ['text/plain', 'text/markdown', 'text/csv']) {
+    const rejected = validateCreateDocumentUploadInput(createValidUploadInput({
+      name: 'メモ.md',
+      mimeType,
+      sizeBytes: MAX_TEXT_DOCUMENT_FILE_SIZE_BYTES + 1,
+    }))
+    assert.deepEqual(rejected.errors, ['テキストファイルのサイズが1 MBの上限を超えています'], mimeType)
+
+    const accepted = validateCreateDocumentUploadInput(createValidUploadInput({
+      name: 'メモ.md',
+      mimeType,
+      sizeBytes: MAX_TEXT_DOCUMENT_FILE_SIZE_BYTES,
+    }))
+    assert.deepEqual(accepted, { valid: true, errors: [] }, mimeType)
+  }
+})
+
+test('テキスト以外の書類には1 MB上限を適用しない', () => {
+  const { MAX_TEXT_DOCUMENT_FILE_SIZE_BYTES } = require('../lib/documents/textFormats')
+  const result = validateCreateDocumentUploadInput(createValidUploadInput({
+    mimeType: 'application/pdf',
+    sizeBytes: MAX_TEXT_DOCUMENT_FILE_SIZE_BYTES + 1,
+  }))
+
+  assert.deepEqual(result, { valid: true, errors: [] })
+})
