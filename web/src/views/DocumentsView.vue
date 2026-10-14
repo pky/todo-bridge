@@ -228,7 +228,8 @@ async function loadSelectedText(document: FamilyDocument | null): Promise<void> 
   const sequence = ++textSequence
   textResult.value = null
   textError.value = null
-  if (!document?.ocrObjectKey) return
+  // テキスト書類は本文をそのままプレビューするため、文字成果物は取得しない
+  if (!document?.ocrObjectKey || isTextDocumentMimeType(document.mimeType)) return
 
   textLoading.value = true
   try {
@@ -748,7 +749,7 @@ watch(textResult, async () => {
               </div>
             </div>
 
-            <section data-testid="document-text-section" class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
+            <section v-if="selectedPreviewType !== 'text'" data-testid="document-text-section" class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
               <div class="flex items-center justify-between gap-3">
                 <h3 class="text-sm font-medium text-slate-800">読み取った文字</h3>
                 <span
