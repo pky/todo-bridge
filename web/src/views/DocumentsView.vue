@@ -10,6 +10,7 @@ import DocumentSuggestions from '@/components/documents/DocumentSuggestions.vue'
 import type { DocumentSearchResult } from '@/stores/documentSearch'
 import type { UpdateDocumentSuggestionInput } from '@/stores/documents'
 import { shareOrDownloadFile } from '@/utils/shareFile'
+import { decodeTextDocument } from '@/utils/decodeTextDocument'
 import { DOCUMENT_UPLOAD_ACCEPT, isTextDocumentMimeType } from '@/utils/documentMimeTypes'
 import {
   downloadDocumentArchives,
@@ -184,7 +185,7 @@ async function loadTextPreview(url: string, sequence: number): Promise<void> {
   try {
     const response = await fetch(url)
     if (!response.ok) throw new Error(`本文の取得に失敗しました (${response.status})`)
-    const body = await response.text()
+    const body = decodeTextDocument(await response.arrayBuffer())
     if (sequence !== accessSequence) return
     textPreview.value = body
   } catch {
