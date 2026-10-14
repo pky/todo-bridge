@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { ref } from 'vue'
+import { reactive, ref } from 'vue'
 import DocumentsView from '@/views/DocumentsView.vue'
 
 const subscribeMock = vi.fn()
@@ -24,8 +24,11 @@ const spaceStoreMock = {
   selectSpace: vi.fn(),
 }
 
+const routeMock = reactive({ query: {} as Record<string, string> })
+
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: routerPushMock }),
+  useRoute: () => routeMock,
 }))
 
 vi.mock('@/components/documents/DocumentSearch.vue', () => ({
@@ -86,6 +89,7 @@ describe('DocumentsView', () => {
     vi.clearAllMocks()
     selectedDocument.value = null
     documents.value = []
+    routeMock.query = {}
     spaceStoreMock.currentSpaceId = 'space-1'
     spaceStoreMock.memberships = [{ spaceId: 'space-1', displayName: '家族', role: 'owner' }]
   })
@@ -285,6 +289,33 @@ describe('DocumentsView', () => {
 
     expect(wrapper.get('[data-testid="document-text-preview"]').text()).toBe('あい')
     fetchMock.mockRestore()
+  })
+
+  it('URLクエリで指定された書類を一覧の受信後に選択する', async () => {
+    routeMock.query = { document: 'document-2' }
+
+    const wrapper = mount(DocumentsView)
+    await flushPromises()
+    expect(selectDocumentMock).not.toHaveBeenCalled()
+
+    documents.value = [{
+      id: 'document-2',
+      name: '持ち物メモ.md',
+      category: 'other',
+      sizeBytes: 32,
+      mimeType: 'text/markdown',
+      status: 'ready',
+      integrityStatus: 'ok',
+      previewStatus: 'skipped',
+      ocrStatus: 'completed',
+      pageCount: 1,
+      createdAt: { toDate: () => new Date() },
+    }]
+    await flushPromises()
+
+    expect(selectDocumentMock).toHaveBeenCalledWith('document-2')
+    expect(selectDocumentMock).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
   })
 
   it('長いファイル名でもモバイル詳細の閉じるボタンを縮めない', async () => {

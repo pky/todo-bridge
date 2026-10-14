@@ -4,6 +4,11 @@ import { reactive } from 'vue'
 import TaskDetail from '@/components/TaskDetail.vue'
 
 const getDocumentSuggestionsMock = vi.hoisted(() => vi.fn())
+const routerPushMock = vi.hoisted(() => vi.fn())
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: routerPushMock }),
+}))
 
 const tasksStoreState = reactive({
   selectedTaskId: 'child-task',
@@ -257,4 +262,72 @@ describe('TaskDetail', () => {
     expect(update.startDate.toDate()).toEqual(new Date('2026-07-25T13:00'))
     expect(update.dueDate.toDate()).toEqual(new Date('2026-07-25T14:30'))
   })
+  it('テキスト書類は原本URLではなく書類画面のプレビューで開く', async () => {
+    documentsStoreState.documents = [{
+      id: 'document-2',
+      spaceId: 'space-1',
+      name: '持ち物メモ.md',
+      mimeType: 'text/markdown',
+      classificationVersion: null,
+      ocrStatus: 'completed',
+    }]
+    documentTaskLinksStoreState.documentIds = ['document-2']
+    const windowOpenMock = vi.spyOn(window, 'open').mockImplementation(() => null)
+
+    const wrapper = mount(TaskDetail, {
+      global: { stubs: { DocumentAttachmentPicker: true, TaskItem: true } },
+    })
+    const openButton = wrapper.findAll('button').find((button) => button.text().includes('持ち物メモ.md'))
+    await openButton?.trigger('click')
+
+    expect(routerPushMock).toHaveBeenCalledWith({ name: 'documents', query: { document: 'document-2' } })
+    expect(documentsStoreState.getAccessUrl).not.toHaveBeenCalled()
+    expect(windowOpenMock).not.toHaveBeenCalled()
+    windowOpenMock.mockRestore()
+  })
+
+  it('画像やPDFの関連書類は従来どおり原本URLを新しいタブで開く', async () => {
+    documentsStoreState.documents = [{
+      id: 'document-1',
+      spaceId: 'space-1',
+      name: '園のお知らせ.pdf',
+      mimeType: 'application/pdf',
+      classificationVersion: null,
+      ocrStatus: 'completed',
+    }]
+    documentTaskLinksStoreState.documentIds = ['document-1']
+    documentsStoreState.getAccessUrl.mockResolvedValue({ url: 'https://example.com/notice.pdf' })
+    const windowOpenMock = vi.spyOn(window, 'open').mockImplementation(() => null)
+
+    const wrapper = mount(TaskDetail, {
+      global: { stubs: { DocumentAttachmentPicker: true, TaskItem: true } },
+    })
+    const openButton = wrapper.findAll('button').find((button) => button.text().includes('園のお知らせ.pdf'))
+    await openButton?.trigger('click')
+    await Promise.resolve()
+
+    expect(documentsStoreState.getAccessUrl).toHaveBeenCalledWith('document-1')
+    expect(windowOpenMock).toHaveBeenCalledWith('https://example.com/notice.pdf', '_blank', 'noopener')
+    expect(routerPushMock).not.toHaveBeenCalled()
+    windowOpenMock.mockRestore()
+  })
+
+  it('テキスト書類の関連書類にはテキスト用アイコンを表示する', () => {
+    documentsStoreState.documents = [{
+      id: 'document-2',
+      spaceId: 'space-1',
+      name: '持ち物メモ.md',
+      mimeType: 'text/markdown',
+      classificationVersion: null,
+      ocrStatus: 'completed',
+    }]
+    documentTaskLinksStoreState.documentIds = ['document-2']
+
+    const wrapper = mount(TaskDetail, {
+      global: { stubs: { DocumentAttachmentPicker: true, TaskItem: true } },
+    })
+
+    expect(wrapper.text()).toContain('📝')
+  })
+
 })
