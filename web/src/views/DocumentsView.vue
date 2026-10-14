@@ -261,20 +261,25 @@ function selectDocument(documentId: string): void {
   documentsStore.selectDocument(documentId)
 }
 
-// クエリで指定された書類は、一覧の受信後に1回だけ選択する
-const pendingRouteDocumentId = ref(
-  typeof route.query.document === 'string' ? route.query.document : null
-)
-watch(
-  () => documentsStore.documents,
-  (list) => {
-    const targetId = pendingRouteDocumentId.value
-    if (!targetId || !list.some((document) => document.id === targetId)) return
-    pendingRouteDocumentId.value = null
-    selectDocument(targetId)
-  },
-  { immediate: true }
-)
+// クエリで指定された書類は、この画面の購読で受信した一覧を待って1回だけ選択する
+function selectDocumentFromRoute(): void {
+  const targetId = typeof route.query.document === 'string' ? route.query.document : null
+  if (!targetId) return
+  let selected = false
+  let stop: (() => void) | null = null
+  stop = watch(
+    () => [documentsStore.loading, documentsStore.documents] as const,
+    ([loading, list]) => {
+      if (selected || loading || !list.some((document) => document.id === targetId)) return
+      selected = true
+      selectDocument(targetId)
+      stop?.()
+    },
+    { immediate: true }
+  )
+  // immediate で即時に選択が済んだ場合は stop が未代入のため、ここで止める
+  if (selected) stop()
+}
 
 async function scrollToSearchPage(pageNumber: number): Promise<void> {
   await nextTick()
@@ -457,6 +462,7 @@ async function permanentlyDeleteSelectedDocument(): Promise<void> {
 onMounted(async () => {
   await spaceStore.initSpace()
   documentsStore.subscribe()
+  selectDocumentFromRoute()
 })
 
 onUnmounted(() => {
@@ -730,7 +736,6 @@ watch(textResult, async () => {
               <div v-else-if="accessError" class="rounded-lg bg-red-50 p-4 text-sm text-red-700">{{ accessError }}</div>
               <div v-else-if="textPreviewError" class="rounded-lg bg-red-50 p-4 text-sm text-red-700">{{ textPreviewError }}</div>
               <pre v-else-if="textPreview !== null" data-testid="document-text-preview" class="max-h-[72vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">{{ textPreview }}</pre>
-              <a v-if="accessUrl" :href="accessUrl" target="_blank" rel="noopener" class="mt-3 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">原本を開く</a>
             </div>
             <div v-else>
               <div v-if="accessLoading" class="flex min-h-80 items-center justify-center text-sm text-slate-500">原本を読み込み中...</div>
