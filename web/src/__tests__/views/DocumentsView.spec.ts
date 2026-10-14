@@ -251,6 +251,42 @@ describe('DocumentsView', () => {
     fetchMock.mockRestore()
   })
 
+  it('Shift_JISのテキスト書類もプレビューで文字化けさせない', async () => {
+    getAccessUrlMock.mockResolvedValue({ url: 'https://example.com/memo.txt' })
+    // 「あい」の Shift_JIS 表現
+    const shiftJisBody = new Uint8Array([0x82, 0xa0, 0x82, 0xa2])
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(shiftJisBody, { status: 200, headers: { 'Content-Type': 'text/plain' } })
+    )
+    getTextMock.mockResolvedValue({
+      status: 'completed',
+      provider: 'plain_text',
+      pageCount: 1,
+      pendingExternalOcrPageNumbers: [],
+      pages: [{ pageNumber: 1, text: 'あい', confidence: null, source: 'plain_text' }],
+    })
+    selectedDocument.value = {
+      id: 'document-3',
+      name: 'メモ.txt',
+      category: 'other',
+      sizeBytes: 4,
+      mimeType: 'text/plain',
+      status: 'ready',
+      integrityStatus: 'ok',
+      previewStatus: 'skipped',
+      ocrStatus: 'completed',
+      ocrObjectKey: 'spaces/space-1/documents/document-3/analysis/v1/ocr.json.gz',
+      pageCount: 1,
+      createdAt: { toDate: () => new Date() },
+    }
+
+    const wrapper = mount(DocumentsView)
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="document-text-preview"]').text()).toBe('あい')
+    fetchMock.mockRestore()
+  })
+
   it('長いファイル名でもモバイル詳細の閉じるボタンを縮めない', async () => {
     getAccessUrlMock.mockResolvedValue({ url: 'https://example.com/document.pdf' })
     selectedDocument.value = {
