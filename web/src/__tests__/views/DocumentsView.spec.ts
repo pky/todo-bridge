@@ -11,10 +11,12 @@ const getAccessUrlMock = vi.fn()
 const getDownloadUrlMock = vi.fn()
 const getBulkDownloadManifestMock = vi.fn()
 const getTextMock = vi.fn()
+const moveToTrashMock = vi.fn()
 const retryTextMock = vi.fn()
 const shareOrDownloadFileMock = vi.hoisted(() => vi.fn().mockResolvedValue('shared'))
 const downloadDocumentArchivesMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const routerPushMock = vi.fn()
+const routerReplaceMock = vi.fn()
 const selectedDocument = ref<Record<string, unknown> | null>(null)
 const documents = ref<Record<string, unknown>[]>([])
 const documentsLoading = ref(false)
@@ -28,7 +30,7 @@ const spaceStoreMock = {
 const routeMock = reactive({ query: {} as Record<string, string> })
 
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: routerPushMock }),
+  useRouter: () => ({ push: routerPushMock, replace: routerReplaceMock }),
   useRoute: () => routeMock,
 }))
 
@@ -79,7 +81,7 @@ vi.mock('@/stores/documents', () => ({
     updateSuggestion: vi.fn(),
     registerCalendarEvent: vi.fn(),
     reanalyzeSuggestions: vi.fn(),
-    moveToTrash: vi.fn(),
+    moveToTrash: moveToTrashMock,
     restoreFromTrash: vi.fn(),
     permanentlyDelete: vi.fn(),
   }),
@@ -392,6 +394,97 @@ describe('DocumentsView', () => {
     expect(wrapper.get('[data-testid="document-text-preview"]').text()).toContain('持ち物')
     expect(wrapper.text()).not.toContain('原本を開く')
     fetchMock.mockRestore()
+  })
+
+  it('ごみ箱へ移動したら詳細の選択を解除する', async () => {
+    moveToTrashMock.mockResolvedValue(undefined)
+    getAccessUrlMock.mockResolvedValue({ url: 'https://example.com/notice.pdf' })
+    selectedDocument.value = {
+      id: 'document-1',
+      name: 'お知らせ.pdf',
+      category: 'other',
+      sizeBytes: 1024,
+      mimeType: 'application/pdf',
+      status: 'ready',
+      integrityStatus: 'ok',
+      previewStatus: 'completed',
+      ocrStatus: 'completed',
+      ocrObjectKey: null,
+      pageCount: 1,
+      createdAt: { toDate: () => new Date() },
+    }
+
+    const wrapper = mount(DocumentsView)
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === 'ごみ箱へ移動')?.trigger('click')
+    await flushPromises()
+
+    expect(moveToTrashMock).toHaveBeenCalledWith('document-1')
+    expect(selectDocumentMock).toHaveBeenCalledWith(null)
+  })
+
+  it('URLクエリで書類を選択したらクエリをURLから消す', async () => {
+    routeMock.query = { document: 'document-2' }
+    documents.value = [{
+      id: 'document-2',
+      name: '持ち物メモ.md',
+      category: 'other',
+      sizeBytes: 32,
+      mimeType: 'text/markdown',
+      status: 'ready',
+      integrityStatus: 'ok',
+      previewStatus: 'skipped',
+      ocrStatus: 'completed',
+      pageCount: 1,
+      createdAt: { toDate: () => new Date() },
+    }]
+
+    const wrapper = mount(DocumentsView)
+    await flushPromises()
+
+    expect(selectDocumentMock).toHaveBeenCalledWith('document-2')
+    expect(routerReplaceMock).toHaveBeenCalledWith({ name: 'documents' })
+    wrapper.unmount()
+  })
+
+  it('URLクエリの書類がごみ箱にあればごみ箱タブに切り替えて選択する', async () => {
+    routeMock.query = { document: 'document-9' }
+    documents.value = [
+      {
+        id: 'document-1',
+        name: '通常の書類.pdf',
+        category: 'other',
+        sizeBytes: 1024,
+        mimeType: 'application/pdf',
+        status: 'ready',
+        integrityStatus: 'ok',
+        previewStatus: 'completed',
+        ocrStatus: 'completed',
+        pageCount: 1,
+        createdAt: { toDate: () => new Date() },
+      },
+      {
+        id: 'document-9',
+        name: '古いメモ.md',
+        category: 'other',
+        sizeBytes: 32,
+        mimeType: 'text/markdown',
+        status: 'trashed',
+        integrityStatus: 'ok',
+        previewStatus: 'skipped',
+        ocrStatus: 'completed',
+        pageCount: 1,
+        createdAt: { toDate: () => new Date() },
+      },
+    ]
+
+    const wrapper = mount(DocumentsView)
+    await flushPromises()
+
+    expect(selectDocumentMock).toHaveBeenCalledWith('document-9')
+    const listNames = wrapper.findAll('[data-testid="document-list-name"]').map((node) => node.text())
+    expect(listNames).toEqual(['古いメモ.md'])
+    wrapper.unmount()
   })
 
   it('長いファイル名でもモバイル詳細の閉じるボタンを縮めない', async () => {

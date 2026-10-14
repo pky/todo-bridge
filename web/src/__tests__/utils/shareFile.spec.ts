@@ -52,4 +52,50 @@ describe('書類の共有・書き出し', () => {
     expect(createObjectUrl).toHaveBeenCalledOnce()
     expect(click).toHaveBeenCalledOnce()
   })
+
+  it('共有シートがファイル形式を拒否した場合はダウンロードにフォールバックする', async () => {
+    // Chrome は .md などホワイトリスト外のファイルを NotAllowedError（Permission denied）で拒否する
+    const share = vi.fn().mockRejectedValue(new DOMException('Permission denied', 'NotAllowedError'))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      new Blob(['# メモ'], { type: 'text/markdown' }),
+      { status: 200 }
+    )))
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share })
+    Object.defineProperty(navigator, 'canShare', {
+      configurable: true,
+      value: vi.fn().mockReturnValue(true),
+    })
+    const createObjectUrl = vi.fn().mockReturnValue('blob:download')
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+
+    await expect(shareOrDownloadFile({
+      url: 'https://example.com/document',
+      name: 'メモ.md',
+      mimeType: 'text/markdown',
+    })).resolves.toBe('downloaded')
+
+    expect(share).toHaveBeenCalledOnce()
+    expect(click).toHaveBeenCalledOnce()
+  })
+
+  it('利用者が共有シートを閉じた場合はダウンロードせずに中断を伝える', async () => {
+    const share = vi.fn().mockRejectedValue(new DOMException('Share canceled', 'AbortError'))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(
+      new Blob(['# メモ'], { type: 'text/markdown' }),
+      { status: 200 }
+    )))
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share })
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: vi.fn().mockReturnValue(true) })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+
+    await expect(shareOrDownloadFile({
+      url: 'https://example.com/document',
+      name: 'メモ.md',
+      mimeType: 'text/markdown',
+    })).rejects.toMatchObject({ name: 'AbortError' })
+
+    expect(click).not.toHaveBeenCalled()
+  })
 })
