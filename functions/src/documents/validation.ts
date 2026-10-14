@@ -1,3 +1,4 @@
+import { isTextDocumentMimeType, MAX_TEXT_DOCUMENT_FILE_SIZE_BYTES } from './textFormats'
 import {
   FamilyDocumentSource,
   FamilyDocumentStatus,
@@ -88,6 +89,8 @@ export function validateCreateDocumentUploadInput(
     errors.push('ファイルサイズは正の整数で指定してください')
   } else if (input.sizeBytes > MAX_DOCUMENT_FILE_SIZE_BYTES) {
     errors.push('ファイルサイズが20 MBの上限を超えています')
+  } else if (isTextDocumentMimeType(mimeType) && input.sizeBytes > MAX_TEXT_DOCUMENT_FILE_SIZE_BYTES) {
+    errors.push('テキストファイルのサイズが1 MBの上限を超えています')
   }
 
   if (input.sha256 !== undefined

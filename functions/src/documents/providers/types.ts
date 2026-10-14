@@ -58,7 +58,7 @@ export interface ObjectStorageProvider {
   deleteObjects(objectKeys: string[]): Promise<void>
 }
 
-export type DocumentTextSource = 'pdf_text' | 'cloud_vision'
+export type DocumentTextSource = 'pdf_text' | 'cloud_vision' | 'plain_text'
 
 export interface OcrPageInput {
   pageNumber: number

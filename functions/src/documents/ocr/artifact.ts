@@ -4,6 +4,8 @@ import { promisify } from 'node:util'
 import { buildOcrResultObjectKey, isObjectKeyInDocument } from '../objectKeys'
 import { ObjectStorageProvider, OcrPageResult, OcrResult } from '../providers/types'
 import { FamilyDocument } from '../types'
+import { isTextDocumentMimeType } from '../textFormats'
+import { decodeTextDocument } from './plainText'
 import { extractPdfText } from './pdfText'
 
 const gzipAsync = promisify(gzip)
@@ -72,7 +74,9 @@ function isOcrPageResult(value: unknown): value is OcrPageResult {
     && typeof page.text === 'string'
     && (page.confidence === null
       || (typeof page.confidence === 'number' && Number.isFinite(page.confidence)))
-    && (page.source === 'pdf_text' || page.source === 'cloud_vision')
+    && (page.source === 'pdf_text'
+      || page.source === 'cloud_vision'
+      || page.source === 'plain_text')
 }
 
 export async function decodeDocumentTextArtifact(data: Buffer): Promise<DocumentTextArtifact> {
@@ -197,6 +201,65 @@ export async function generatePdfTextArtifact(
       analysisversion: String(document.analysisVersion),
       originalsha256: originalSha256,
       pagecount: String(extracted.pageCount),
+    },
+  })
+  return { objectKey, data, artifact, reused: false }
+}
+
+export async function generatePlainTextArtifact(
+  provider: ObjectStorageProvider,
+  spaceId: string,
+  documentId: string,
+  document: Pick<FamilyDocument, 'mimeType' | 'originalObjectKey' | 'analysisVersion'>
+): Promise<GeneratedDocumentTextArtifact> {
+  if (!isTextDocumentMimeType(document.mimeType)) {
+    throw new Error('テキスト文字抽出対象の書類ではありません')
+  }
+  if (!isObjectKeyInDocument(document.originalObjectKey, spaceId, documentId)) {
+    throw new Error('原本のオブジェクトキーが書類と一致しません')
+  }
+  const original = await provider.readObject(document.originalObjectKey)
+  if (!original) throw new Error('文字抽出用の原本が見つかりません')
+
+  const originalSha256 = calculateSha256(original)
+  const objectKey = buildOcrResultObjectKey(
+    spaceId,
+    documentId,
+    document.analysisVersion
+  )
+  const existing = await readStoredArtifact(
+    provider,
+    objectKey,
+    originalSha256,
+    document.analysisVersion
+  )
+  if (existing) return existing
+
+  const artifact: DocumentTextArtifact = {
+    schemaVersion: OCR_ARTIFACT_SCHEMA_VERSION,
+    analysisVersion: document.analysisVersion,
+    originalSha256,
+    provider: 'plain_text',
+    pageCount: 1,
+    pendingExternalOcrPageNumbers: [],
+    pages: [{
+      pageNumber: 1,
+      text: decodeTextDocument(original),
+      confidence: null,
+      source: 'plain_text',
+    }],
+  }
+  const data = await gzipAsync(Buffer.from(JSON.stringify(artifact)), { level: 9 })
+  await provider.writeObject({
+    objectKey,
+    contentType: 'application/gzip',
+    data,
+    metadata: {
+      schemaversion: String(OCR_ARTIFACT_SCHEMA_VERSION),
+      analysisversion: String(document.analysisVersion),
+      originalsha256: originalSha256,
+      pagecount: '1',
+      externalocrcompleted: 'true',
     },
   })
   return { objectKey, data, artifact, reused: false }

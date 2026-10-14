@@ -5,6 +5,7 @@ import { analyzeAndStoreDocumentText } from './documentAnalysis'
 import {
   GeneratedDocumentTextArtifact,
   generatePdfTextArtifact,
+  generatePlainTextArtifact,
   writeDocumentTextArtifact,
 } from './ocr/artifact'
 import { extractDocumentText } from './ocr/pipeline'
@@ -18,6 +19,7 @@ import { CloudVisionOcrProvider } from './providers/cloudVisionOcr'
 import { createObjectStorageProvider, isFunctionsEmulator } from './providers/providerFactory'
 import { DocumentOcrProvider } from './providers/types'
 import { generateDocumentThumbnail, supportsDocumentThumbnail } from './preview'
+import { isTextDocumentMimeType, supportsDocumentText } from './textFormats'
 import { FamilyDocument } from './types'
 
 const db = admin.firestore()
@@ -234,8 +236,7 @@ async function processDocumentText(
   })
   if (!initialDocument) return
 
-  if (initialDocument.mimeType !== 'application/pdf'
-    && !initialDocument.mimeType.startsWith('image/')) {
+  if (!supportsDocumentText(initialDocument.mimeType)) {
     await documentRef.set({
       ocrStatus: 'skipped',
       ocrError: null,
@@ -250,6 +251,13 @@ async function processDocumentText(
     const usageRef = db.doc(`spaces/${spaceId}/usage/documents`)
     if (initialDocument.mimeType === 'application/pdf') {
       localArtifact = await generatePdfTextArtifact(
+        provider,
+        spaceId,
+        documentId,
+        initialDocument
+      )
+    } else if (isTextDocumentMimeType(initialDocument.mimeType)) {
+      localArtifact = await generatePlainTextArtifact(
         provider,
         spaceId,
         documentId,
@@ -422,7 +430,7 @@ export const retryDocumentText = previewRuntime
         throw new functions.https.HttpsError('failed-precondition', 'ごみ箱内の書類は再読み取りできません')
       }
       if (!['uploaded', 'processing', 'ready'].includes(document.status)
-        || (document.mimeType !== 'application/pdf' && !document.mimeType.startsWith('image/'))) {
+        || !supportsDocumentText(document.mimeType)) {
         throw new functions.https.HttpsError('failed-precondition', '文字読み取り対象の書類ではありません')
       }
       if (document.ocrStatus === 'processing') {
