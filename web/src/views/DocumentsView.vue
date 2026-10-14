@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useDocumentsStore } from '@/stores/documents'
 import { useSpaceStore } from '@/stores/space'
 import type { FamilyDocument } from '@/types'
@@ -19,6 +19,7 @@ import {
 
 const documentsStore = useDocumentsStore()
 const spaceStore = useSpaceStore()
+const route = useRoute()
 const router = useRouter()
 const documentInput = ref<HTMLInputElement | null>(null)
 const uploadDestinationOpen = ref(false)
@@ -259,6 +260,21 @@ async function retrySelectedText(): Promise<void> {
 function selectDocument(documentId: string): void {
   documentsStore.selectDocument(documentId)
 }
+
+// クエリで指定された書類は、一覧の受信後に1回だけ選択する
+const pendingRouteDocumentId = ref(
+  typeof route.query.document === 'string' ? route.query.document : null
+)
+watch(
+  () => documentsStore.documents,
+  (list) => {
+    const targetId = pendingRouteDocumentId.value
+    if (!targetId || !list.some((document) => document.id === targetId)) return
+    pendingRouteDocumentId.value = null
+    selectDocument(targetId)
+  },
+  { immediate: true }
+)
 
 async function scrollToSearchPage(pageNumber: number): Promise<void> {
   await nextTick()

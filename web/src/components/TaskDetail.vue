@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { useTasksStore } from '@/stores/tasks'
 import { useListsStore } from '@/stores/lists'
 import { useDocumentsStore } from '@/stores/documents'
@@ -11,6 +12,7 @@ import DocumentAttachmentPicker from '@/components/documents/DocumentAttachmentP
 // import { useCalendarStore } from '@/stores/calendar' // TODO: カレンダー自動登録機能を一時無効化
 import { Timestamp } from 'firebase/firestore'
 import { parseTaskInput } from '@/utils/parseTaskInput'
+import { isTextDocumentMimeType } from '@/utils/documentMimeTypes'
 import { useToast } from '@/composables/useToast'
 import { getDocumentSuggestionsApi } from '@/services/documentService'
 
@@ -23,6 +25,7 @@ const emit = defineEmits<{
   focusDetail: []
 }>()
 
+const router = useRouter()
 const tasksStore = useTasksStore()
 const listsStore = useListsStore()
 const documentsStore = useDocumentsStore()
@@ -272,6 +275,12 @@ async function handleUnlinkDocument(documentId: string) {
 
 async function handleOpenDocument(documentId: string) {
   try {
+    // charset 不明のテキストは新しいタブだと文字化けするため、復号して表示する書類画面で開く
+    const document = relatedDocuments.value.find((item) => item.id === documentId)
+    if (document && isTextDocumentMimeType(document.mimeType)) {
+      await router.push({ name: 'documents', query: { document: documentId } })
+      return
+    }
     const result = await documentsStore.getAccessUrl(documentId)
     window.open(result.url, '_blank', 'noopener')
   } catch (error) {
@@ -846,7 +855,7 @@ const priorityOptions = [
                     :alt="`${document.name}のサムネイル`"
                     class="h-full w-full object-cover"
                   />
-                  <span v-else class="text-2xl">{{ document.mimeType.startsWith('image/') ? '🖼️' : '📄' }}</span>
+                  <span v-else class="text-2xl">{{ document.mimeType.startsWith('image/') ? '🖼️' : isTextDocumentMimeType(document.mimeType) ? '📝' : '📄' }}</span>
                 </div>
                 <p class="mt-1 truncate text-xs text-gray-700">{{ document.name }}</p>
               </button>
