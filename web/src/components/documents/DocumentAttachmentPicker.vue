@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useDocumentsStore } from '@/stores/documents'
 import { useSpaceStore } from '@/stores/space'
+import { DOCUMENT_UPLOAD_ACCEPT, isTextDocumentMimeType } from '@/utils/documentMimeTypes'
 
 const props = withDefaults(defineProps<{
   selectedIds: string[]
@@ -98,7 +99,7 @@ async function handleFileSelection(event: Event): Promise<void> {
         ref="fileInput"
         class="hidden"
         type="file"
-        accept="image/*,application/pdf,.pdf"
+        :accept="DOCUMENT_UPLOAD_ACCEPT"
         @change="handleFileSelection"
       />
 
@@ -124,7 +125,7 @@ async function handleFileSelection(event: Event): Promise<void> {
               :alt="`${document.name}のサムネイル`"
               class="h-full w-full object-cover"
             />
-            <span v-else>{{ document.mimeType.startsWith('image/') ? '🖼️' : '📄' }}</span>
+            <span v-else>{{ document.mimeType.startsWith('image/') ? '🖼️' : isTextDocumentMimeType(document.mimeType) ? '📝' : '📄' }}</span>
           </div>
           <span class="min-w-0 flex-1 truncate text-xs text-gray-700">{{ document.name }}</span>
         </label>

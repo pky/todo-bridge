@@ -10,6 +10,7 @@ import DocumentSuggestions from '@/components/documents/DocumentSuggestions.vue'
 import type { DocumentSearchResult } from '@/stores/documentSearch'
 import type { UpdateDocumentSuggestionInput } from '@/stores/documents'
 import { shareOrDownloadFile } from '@/utils/shareFile'
+import { DOCUMENT_UPLOAD_ACCEPT, isTextDocumentMimeType } from '@/utils/documentMimeTypes'
 import {
   downloadDocumentArchives,
   type DocumentArchiveProgress,
@@ -33,6 +34,9 @@ const bulkExportError = ref<string | null>(null)
 const accessUrl = ref<string | null>(null)
 const accessLoading = ref(false)
 const accessError = ref<string | null>(null)
+const textPreview = ref<string | null>(null)
+const textPreviewLoading = ref(false)
+const textPreviewError = ref<string | null>(null)
 const textResult = ref<DocumentTextResult | null>(null)
 const textLoading = ref(false)
 const textRetrying = ref(false)
@@ -78,10 +82,11 @@ const canPreviewSelectedDocument = computed(() => (
   && selectedDocument.value.integrityStatus !== 'missing_original'
   && ['uploaded', 'processing', 'ready', 'trashed'].includes(selectedDocument.value.status)
 ))
-const selectedPreviewType = computed<'image' | 'pdf' | 'other'>(() => {
+const selectedPreviewType = computed<'image' | 'pdf' | 'text' | 'other'>(() => {
   const mimeType = selectedDocument.value?.mimeType ?? ''
   if (mimeType.startsWith('image/')) return 'image'
   if (mimeType === 'application/pdf') return 'pdf'
+  if (isTextDocumentMimeType(mimeType)) return 'text'
   return 'other'
 })
 
@@ -174,10 +179,29 @@ async function handleFileSelection(event: Event): Promise<void> {
   }
 }
 
+async function loadTextPreview(url: string, sequence: number): Promise<void> {
+  textPreviewLoading.value = true
+  try {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error(`本文の取得に失敗しました (${response.status})`)
+    const body = await response.text()
+    if (sequence !== accessSequence) return
+    textPreview.value = body
+  } catch {
+    if (sequence !== accessSequence) return
+    textPreviewError.value = '本文を読み込めませんでした'
+  } finally {
+    if (sequence === accessSequence) textPreviewLoading.value = false
+  }
+}
+
 async function loadSelectedAccessUrl(document: FamilyDocument | null): Promise<void> {
   const sequence = ++accessSequence
   accessUrl.value = null
   accessError.value = null
+  textPreview.value = null
+  textPreviewError.value = null
+  textPreviewLoading.value = false
   if (!document
     || document.integrityStatus === 'missing_original'
     || !['uploaded', 'processing', 'ready', 'trashed'].includes(document.status)) return
@@ -187,6 +211,9 @@ async function loadSelectedAccessUrl(document: FamilyDocument | null): Promise<v
     const result = await documentsStore.getAccessUrl(document.id)
     if (sequence !== accessSequence) return
     accessUrl.value = result.url
+    if (selectedPreviewType.value === 'text') {
+      await loadTextPreview(result.url, sequence)
+    }
   } catch (error) {
     if (sequence !== accessSequence) return
     accessError.value = error instanceof Error ? error.message : '原本を開けませんでした'
@@ -491,7 +518,7 @@ watch(textResult, async () => {
       </div>
     </header>
 
-    <input ref="documentInput" data-testid="document-input" class="hidden" type="file" accept="image/*,application/pdf,.pdf" @change="handleFileSelection" />
+    <input ref="documentInput" data-testid="document-input" class="hidden" type="file" :accept="DOCUMENT_UPLOAD_ACCEPT" @change="handleFileSelection" />
 
     <div
       v-if="uploadDestinationOpen"
@@ -616,7 +643,7 @@ watch(textResult, async () => {
                   class="h-full w-full object-cover"
                   @error="documentsStore.reloadThumbnail(document.id)"
                 />
-                <span v-else>{{ document.mimeType.startsWith('image/') ? '🖼️' : document.mimeType === 'application/pdf' ? '📕' : '📄' }}</span>
+                <span v-else>{{ document.mimeType.startsWith('image/') ? '🖼️' : document.mimeType === 'application/pdf' ? '📕' : isTextDocumentMimeType(document.mimeType) ? '📝' : '📄' }}</span>
               </div>
               <div class="min-w-0 flex-1">
                 <div data-testid="document-list-name" class="truncate text-sm font-medium">{{ document.name }}</div>
@@ -681,6 +708,13 @@ watch(textResult, async () => {
                 >PDFを開く</a>
               </div>
             </div>
+            <div v-else-if="selectedPreviewType === 'text'">
+              <div v-if="accessLoading || textPreviewLoading" class="flex min-h-80 items-center justify-center text-sm text-slate-500">本文を読み込み中...</div>
+              <div v-else-if="accessError" class="rounded-lg bg-red-50 p-4 text-sm text-red-700">{{ accessError }}</div>
+              <div v-else-if="textPreviewError" class="rounded-lg bg-red-50 p-4 text-sm text-red-700">{{ textPreviewError }}</div>
+              <pre v-else-if="textPreview !== null" data-testid="document-text-preview" class="max-h-[72vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">{{ textPreview }}</pre>
+              <a v-if="accessUrl" :href="accessUrl" target="_blank" rel="noopener" class="mt-3 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">原本を開く</a>
+            </div>
             <div v-else>
               <div v-if="accessLoading" class="flex min-h-80 items-center justify-center text-sm text-slate-500">原本を読み込み中...</div>
               <div v-else-if="accessError" class="rounded-lg bg-red-50 p-4 text-sm text-red-700">{{ accessError }}</div>
@@ -726,7 +760,7 @@ watch(textResult, async () => {
                 >
                   <div class="mb-2 flex items-center justify-between text-xs text-slate-500">
                     <span>{{ page.pageNumber }}ページ</span>
-                    <span>{{ page.source === 'pdf_text' ? 'PDF内の文字' : '画像OCR' }}</span>
+                    <span>{{ page.source === 'pdf_text' ? 'PDF内の文字' : page.source === 'plain_text' ? 'テキスト本文' : '画像OCR' }}</span>
                   </div>
                   <p v-if="page.text" class="whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{{ page.text }}</p>
                   <p v-else class="text-sm text-slate-400">文字を取得できませんでした。</p>

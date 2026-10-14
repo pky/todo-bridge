@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore'
 import { functions } from '@/services/firebaseFunctions'
 import { db } from '@/services/firebase'
+import { resolveDocumentMimeType } from '@/utils/documentMimeTypes'
 import type {
   CreateDocumentUploadInput,
   DocumentSuggestion,
@@ -62,7 +63,7 @@ export interface DocumentTextPage {
   pageNumber: number
   text: string
   confidence: number | null
-  source: 'pdf_text' | 'cloud_vision'
+  source: 'pdf_text' | 'cloud_vision' | 'plain_text'
 }
 
 export interface DocumentTextResult {
@@ -435,7 +436,7 @@ export async function uploadDocument(
   file: File,
   source: FamilyDocumentSource
 ): Promise<string> {
-  const mimeType = file.type || 'application/octet-stream'
+  const mimeType = resolveDocumentMimeType(file)
   const fileData = await file.arrayBuffer()
   const sha256 = await calculateArrayBufferSha256(fileData)
   const created = await createDocumentUploadApi({
