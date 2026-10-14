@@ -273,7 +273,11 @@ function selectDocumentFromRoute(): void {
     ([loading, list]) => {
       if (selected || loading || !list.some((document) => document.id === targetId)) return
       selected = true
+      const target = list.find((document) => document.id === targetId)
+      // switchView は選択を解除するため、表示タブは直接切り替える
+      if (target?.status === 'trashed') viewMode.value = 'trash'
       selectDocument(targetId)
+      void router.replace({ name: 'documents' })
       stop?.()
     },
     { immediate: true }
@@ -426,6 +430,7 @@ async function moveSelectedToTrash(): Promise<void> {
   mutatingDocumentId.value = document.id
   try {
     await documentsStore.moveToTrash(document.id)
+    closeDetail()
   } catch {
     // Storeのエラーを画面に表示する
   } finally {

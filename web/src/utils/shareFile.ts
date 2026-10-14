@@ -27,8 +27,13 @@ export async function shareOrDownloadFile(input: ShareFileInput): Promise<FileEx
   })
   const shareData: ShareData = { files: [file], title: input.name }
   if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
-    await navigator.share(shareData)
-    return 'shared'
+    try {
+      await navigator.share(shareData)
+      return 'shared'
+    } catch (error) {
+      // Chrome は .md などの形式を共有シートへ渡せず NotAllowedError で拒否するため、ダウンロードに切り替える
+      if (!(error instanceof DOMException) || error.name !== 'NotAllowedError') throw error
+    }
   }
   downloadBlob(blob, input.name)
   return 'downloaded'
