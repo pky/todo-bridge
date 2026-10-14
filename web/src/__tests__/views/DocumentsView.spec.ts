@@ -253,7 +253,10 @@ describe('DocumentsView', () => {
     expect(fetchMock).toHaveBeenCalledWith('https://example.com/memo.md')
     expect(wrapper.get('[data-testid="document-text-preview"]').text()).toContain('- 水筒')
     expect(wrapper.text()).not.toContain('この形式はブラウザ内プレビューに対応していません')
-    expect(wrapper.get('[data-testid="document-text-section"]').text()).toContain('テキスト本文')
+    // 本文はプレビューで見えるため、読み取った文字欄は出さず文字成果物も取得しない
+    expect(wrapper.find('[data-testid="document-text-section"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('読み取った文字')
+    expect(getTextMock).not.toHaveBeenCalled()
     fetchMock.mockRestore()
   })
 
