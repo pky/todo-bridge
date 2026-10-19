@@ -9,6 +9,7 @@ interface TaskData {
   name: string
   listId: string
   completed: boolean
+  deleted?: boolean
   parentId?: string | null
   dueDate?: admin.firestore.Timestamp | null
   priority: number
@@ -79,7 +80,7 @@ export function getJstDayBoundaries(date: Date = new Date()): {
 export function categorizeTask(task: TaskData | null, now: Date): string[] {
   const categories: string[] = []
 
-  if (!task || task.completed || task.parentId) return categories
+  if (!task || task.completed || task.deleted || task.parentId) return categories
   if (!task.dueDate) {
     categories.push('noDate')
     return categories
@@ -165,8 +166,10 @@ function buildIncrementUpdateData(delta: Record<string, number>): Record<string,
   return updateData
 }
 
-function taskMatchesScope(task: TaskData, userId: string, scope?: ScopedRequest): boolean {
-  if (scope?.spaceId && !scope.useLegacyPath) {
+export function taskMatchesScope(task: TaskData, userId: string, scope?: ScopedRequest): boolean {
+  // 個人スペースではFirestore Rulesも可視性フィールドに関係なく所有者へ読み取りを許可する。
+  // 移行前のタスクには visibleToMemberIds がないため、通常リストと同じ条件で対象に含める。
+  if (scope?.spaceId && !scope.useLegacyPath && !scope.spaceId.startsWith('personal_')) {
     return Array.isArray((task as TaskData & { visibleToMemberIds?: string[] }).visibleToMemberIds)
       ? ((task as TaskData & { visibleToMemberIds?: string[] }).visibleToMemberIds ?? []).includes(userId)
       : false

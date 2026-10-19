@@ -10,6 +10,7 @@ const {
   buildSmartListCountsDocPath,
   getJstDayBoundaries,
   categorizeTask,
+  taskMatchesScope,
 } = require('../lib/smartLists')
 
 test('legacy smartListCounts は users 配下に保存する', () => {
@@ -55,4 +56,43 @@ test('JSTの今日に設定した終日タスクを today に含める', () => {
   }, now)
 
   assert.equal(categories.includes('today'), true)
+})
+
+test('論理削除済みタスクをスマートリストへ含めない', () => {
+  const categories = categorizeTask({
+    name: '削除済みタスク',
+    listId: 'list-1',
+    completed: false,
+    deleted: true,
+    priority: 4,
+    tags: [],
+    dueDate: admin.firestore.Timestamp.fromDate(new Date('2026-03-09T15:00:00.000Z')),
+  }, new Date('2026-03-10T03:00:00.000Z'))
+
+  assert.deepEqual(categories, [])
+})
+
+test('個人スペースでは可視性フィールドのない移行前タスクも表示対象にする', () => {
+  const matches = taskMatchesScope({
+    name: '移行前タスク',
+    listId: 'list-1',
+    completed: false,
+    priority: 4,
+    tags: [],
+  }, 'user-1', { spaceId: 'personal_user-1', useLegacyPath: false })
+
+  assert.equal(matches, true)
+})
+
+test('共有スペースでは可視性フィールドに含まれないタスクを表示対象にしない', () => {
+  const matches = taskMatchesScope({
+    name: '非公開タスク',
+    listId: 'list-1',
+    completed: false,
+    priority: 4,
+    tags: [],
+    visibleToMemberIds: ['user-2'],
+  }, 'user-1', { spaceId: 'family-1', useLegacyPath: false })
+
+  assert.equal(matches, false)
 })
