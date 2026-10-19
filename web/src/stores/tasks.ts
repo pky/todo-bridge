@@ -115,6 +115,7 @@ export const useTasksStore = defineStore('tasks', () => {
   // スマートリスト用
   const smartListTasksLoading = ref(false)
   const currentSmartListType = ref<string | null>(null)
+  let smartListLoadSequence = 0
   // サーバー側検索結果
   const serverSearchResults = ref<SearchResult[]>([])
   const serverSearchLoading = ref(false)
@@ -907,6 +908,9 @@ export const useTasksStore = defineStore('tasks', () => {
     allTasksCache.value = []
     selectedTaskId.value = null
     currentListId = null
+    smartListLoadSequence++
+    currentSmartListType.value = null
+    smartListTasksLoading.value = false
     completedTasksLoaded.value.clear()
     completedTasksCursors.clear() // Phase 4: カーソルもクリア（セキュリティ対策）
     incompleteCacheLoaded = false
@@ -1599,6 +1603,7 @@ export const useTasksStore = defineStore('tasks', () => {
 
   // スマートリストのタスクをCloud Functionsから読み込む
   async function loadSmartListTasks(smartListType: string) {
+    const loadSequence = ++smartListLoadSequence
     smartListTasksLoading.value = true
     currentSmartListType.value = smartListType
 
@@ -1606,6 +1611,9 @@ export const useTasksStore = defineStore('tasks', () => {
       const result = await getSmartListTasks(
         smartListType as 'today' | 'tomorrow' | 'overdue' | 'thisWeek' | 'noDate'
       )
+
+      // 別のスマートリストを選択済みなら、古い応答で表示や件数を上書きしない。
+      if (loadSequence !== smartListLoadSequence) return
 
       // SmartListTaskをTaskに変換
       const convertedTasks: Task[] = result.tasks.map((t: SmartListTask) => ({
@@ -1630,10 +1638,23 @@ export const useTasksStore = defineStore('tasks', () => {
       }))
 
       tasks.value = convertedTasks
+
+      // Callable Functionの結果は現在のユーザーが表示できるタスクだけを含むため、
+      // 遅れて届いた保存済みカウントを実際の一覧件数へ補正する。
+      const listsStore = useListsStore()
+      if (listsStore.selectedSmartList === smartListType) {
+        listsStore.smartListCounts = {
+          ...listsStore.smartListCounts,
+          [smartListType]: result.totalCount,
+        }
+      }
     } catch (err) {
+      if (loadSequence !== smartListLoadSequence) return
       error.value = (err as Error).message
     } finally {
-      smartListTasksLoading.value = false
+      if (loadSequence === smartListLoadSequence) {
+        smartListTasksLoading.value = false
+      }
     }
   }
 

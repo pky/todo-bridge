@@ -31,6 +31,11 @@ vi.mock('@/services/firebase', () => ({
   db: {},
 }))
 
+vi.mock('@/services/cloudFunctionsService', () => ({
+  getSmartListTasks: vi.fn(),
+  searchTasksApi: vi.fn(),
+}))
+
 // タスクオブジェクトのデフォルト値（テスト間で共通）
 const baseTask = {
   listId: 'inbox-id',
@@ -326,6 +331,29 @@ describe('Tasks Store', () => {
     expect(listsStore.smartListCounts.overdue).toBe(0)
 
     vi.useRealTimers()
+  })
+
+  it('空のスマートリスト取得結果で保存済みの件数を補正する', async () => {
+    const { getSmartListTasks } = await import('@/services/cloudFunctionsService')
+    vi.mocked(getSmartListTasks).mockResolvedValueOnce({ tasks: [], totalCount: 0 })
+
+    const store = useTasksStore()
+    const listsStore = useListsStore()
+    listsStore.$patch({
+      selectedSmartList: 'overdue',
+      smartListCounts: {
+        today: 0,
+        tomorrow: 0,
+        overdue: 1,
+        thisWeek: 0,
+        noDate: 0,
+      },
+    })
+
+    await store.loadSmartListTasks('overdue')
+
+    expect(store.incompleteTasks).toEqual([])
+    expect(listsStore.smartListCounts.overdue).toBe(0)
   })
 
   it('unsubscribe でタスクがクリアされる', () => {
