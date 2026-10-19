@@ -1,0 +1,9 @@
+# git worktree に複製する、.gitignore 対象のローカル専用ファイル
+# claude --worktree <name> がこの一覧を読んで新しい worktree にコピーする
+web/.env.local
+.firebaserc
+web/.firebaserc
+functions/.env
+functions/.env.local
+doc/
+progress.txt

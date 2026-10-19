@@ -81,7 +81,33 @@ When the issue is ambiguous:
 - editing multiple packages without evidence of a shared cause
 
 ## Project commands
-- Test: pnpm test ...
-- Lint: pnpm lint ...
-- Typecheck: pnpm typecheck ...
-- Build: pnpm build ...
+Package manager is npm (lockfiles are package-lock.json). Do not use pnpm or yarn.
+
+web/ (Vue / Vite / Pinia / Firebase):
+- Test: `cd web && npm run test:run`
+- Lint: `cd web && npm run lint`
+- Typecheck: `cd web && npm run type-check`
+- Build: `cd web && npm run build` (runs test:auth, vue-tsc -b, vite build)
+- Firestore rules (needs Java for the emulator): `cd web && npm run test:rules`
+- Responsive UI: `cd web && npm run test:responsive`
+
+functions/ (Firebase Cloud Functions):
+- Lint: `cd functions && npm run lint`
+- Test: `cd functions && npm test` (builds, then runs node --test)
+
+Before reporting a task as done, run lint, typecheck, test and build for every package you touched. All must pass without editing tests to make them pass.
+
+## Code Review Rules
+レビューの優先順。上から順に見る。指摘には必ず失敗シナリオ（どの入力でどう壊れるか）を付ける。
+1. データ破壊: 上書き、削除、移動、マイグレーション、永続化の変更（Firestore のドキュメント構造、firestore.rules、storage.rules の変更を含む）
+2. 認証と権限: 認可の抜け、権限チェックの緩和、セキュリティルールの緩和
+3. 秘密情報の混入: 鍵、トークン、個人情報、実環境 ID、内部 URL のハードコード
+4. テストの改変: 既存テストの削除、期待値の書き換え、スキップの追加
+5. 頼んでいない変更: 依頼範囲外のリファクタ、整形、依存の追加
+スタイルだけの指摘は出さない。失敗シナリオが書けない指摘は出さない。
+
+## Current State
+- Branch: main. Small single-line Japanese commit messages. No force push, no history rewrite.
+- Gates: GitHub Actions (.github/workflows/ci.yml) runs web lint / type-check / test:run / build, functions lint / test, and the Firestore rules test on every push to main and every pull request. Codex automatic code review runs when a pull request is opened.
+- Local-only files (web/.env.local, .firebaserc, doc/, progress.txt) are listed in .worktreeinclude so that git worktrees get a copy.
+- Agents must not run git push, deploy, rm, git reset or branch deletion. These are done by a human.
