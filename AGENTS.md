@@ -95,7 +95,7 @@ functions/ (Firebase Cloud Functions):
 - Lint: `cd functions && npm run lint`
 - Test: `cd functions && npm test` (builds, then runs node --test)
 
-Before reporting a task as done, run lint, typecheck, test and build for every package you touched. All must pass without editing tests to make them pass.
+Before reporting a task as done, run lint, typecheck, test and build for every package you touched. All must pass without editing tests to make them pass. `npm run verify` at the repository root runs every gate above except test:rules and test:responsive.
 
 ## Code Review Rules
 レビューの優先順。上から順に見る。指摘には必ず失敗シナリオ（どの入力でどう壊れるか）を付ける。

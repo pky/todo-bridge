@@ -1,5 +1,8 @@
 {
   "devDependencies": {
     "firebase-admin": "^13.6.1"
+  },
+  "scripts": {
+    "verify": "npm --prefix web run lint && npm --prefix web run type-check && npm --prefix web run test:run && npm --prefix web run build && npm --prefix functions run lint && npm --prefix functions test"
   }
 }
