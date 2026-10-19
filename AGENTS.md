@@ -106,6 +106,11 @@ Before reporting a task as done, run lint, typecheck, test and build for every p
 5. 頼んでいない変更: 依頼範囲外のリファクタ、整形、依存の追加
 スタイルだけの指摘は出さない。失敗シナリオが書けない指摘は出さない。
 
+このリポジトリ固有の観点:
+- 未完了タスクの取得に limit() を付ける変更は、全件表示の要件を壊すので blocker
+- firestore.rules と storage.rules の allow 条件を広げる変更は、理由と対応するルールテストが無ければ blocker
+- 実環境のプロジェクト ID、実ユーザーのデータ、ローカル絶対パスがテストやドキュメントに入ったら blocker
+
 ## Current State
 - Branch: main. Small single-line Japanese commit messages. No force push, no history rewrite.
 - Gates: GitHub Actions (.github/workflows/ci.yml) runs web lint / type-check / test:run / build, functions lint / test, and the Firestore rules test on every push to main and every pull request. Codex automatic code review runs when a pull request is opened.
