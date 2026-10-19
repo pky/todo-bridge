@@ -112,7 +112,8 @@ Before reporting a task as done, run lint, typecheck, test and build for every p
 - 実環境のプロジェクト ID、実ユーザーのデータ、ローカル絶対パスがテストやドキュメントに入ったら blocker
 
 ## Current State
-- Branch: main. Small single-line Japanese commit messages. No force push, no history rewrite.
-- Gates: GitHub Actions (.github/workflows/ci.yml) runs web lint / type-check / test:run / build, functions lint / test, and the Firestore rules test on every push to main and every pull request. Codex automatic code review runs when a pull request is opened.
+- Branch: main, committed and pushed directly by a single developer. No pull requests. Small single-line Japanese commit messages. No force push, no history rewrite.
+- Gates before push (local): `npm run verify` at the repository root, then a review of the diff by a reviewer that did not write it (Claude fresh-reviewer agent or Codex CLI review). Both must pass before the human pushes.
+- Gates after push: GitHub Actions (.github/workflows/ci.yml) runs web lint / type-check / test:run / build, functions lint / test, and the Firestore rules test on every push to main. A red run is fixed in the next commit.
 - Local-only files (web/.env.local, .firebaserc, doc/, progress.txt) are listed in .worktreeinclude so that git worktrees get a copy.
 - Agents must not run git push, deploy, rm, git reset or branch deletion. These are done by a human.
