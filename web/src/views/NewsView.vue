@@ -56,8 +56,7 @@ async function refreshFeedForCurrentTopic(): Promise<void> {
   }
 
   const checkedDate = getLocalDateKey()
-  let refreshPromise!: Promise<void>
-  refreshPromise = (async () => {
+  const refreshPromise: Promise<void> = (async () => {
     await newsStore.loadPreferences(topic)
     await newsStore.loadTodayFeed(topic)
     lastFeedCheckDateByTopic.value = {

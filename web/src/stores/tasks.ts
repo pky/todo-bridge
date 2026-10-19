@@ -1451,7 +1451,7 @@ export const useTasksStore = defineStore('tasks', () => {
           .filter((id) => !listIdsWithListener.includes(id))
 
         // リスナーがないリストのタスクのみサーバーから取得
-        let additionalTasks: Task[] = []
+        const additionalTasks: Task[] = []
         if (listIdsWithoutListener.length > 0) {
           // in演算子は最大10個まで、それ以上は分割して取得
           const chunks = []
@@ -1519,7 +1519,7 @@ export const useTasksStore = defineStore('tasks', () => {
           .filter((id) => !loadedListIds.includes(id))
 
         // リスナーがないリストの完了タスクのみサーバーから取得
-        let additionalCompletedTasks: Task[] = []
+        const additionalCompletedTasks: Task[] = []
         if (listIdsWithoutCompletedTasks.length > 0) {
           // in演算子は最大10個まで、それ以上は分割して取得
           const chunks = []

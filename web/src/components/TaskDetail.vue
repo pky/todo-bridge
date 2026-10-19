@@ -16,7 +16,7 @@ import { isTextDocumentMimeType } from '@/utils/documentMimeTypes'
 import { useToast } from '@/composables/useToast'
 import { getDocumentSuggestionsApi } from '@/services/documentService'
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   showHeader?: boolean
 }>(), {
   showHeader: true
