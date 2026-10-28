@@ -75,8 +75,7 @@ test('締め切りを過ぎていれば呼び出さずに全件 pending', async 
 test('最初の送信後に締め切りを過ぎたら残りは pending', async () => {
   const client = stubClient(echoAll)
   const list = inputs(15)
-  let checks = 0
-  const now = () => (checks++ === 0 ? 0 : 2000)
+  const now = () => (client.calls.length === 0 ? 0 : 2000)
   const out = await classifyMobileArticles(list, { client, config, deadlineAt: 1000, now })
   assert.equal(out.results.size, 10)
   assert.equal(client.calls.length, 1)
@@ -86,8 +85,7 @@ test('最初の送信後に締め切りを過ぎたら残りは pending', async 
 test('締め切りを過ぎたら欠けた記事の再送もしない', async () => {
   const client = stubClient((params) => message(idsOf(params).filter((id) => id !== 'a3').map((id) => item(id))))
   const list = inputs(10)
-  let checks = 0
-  const now = () => (checks++ === 0 ? 0 : 2000)
+  const now = () => (client.calls.length === 0 ? 0 : 2000)
   const out = await classifyMobileArticles(list, { client, config, deadlineAt: 1000, now })
   assert.equal(client.calls.length, 1)
   assert.equal(out.results.size, 9)
