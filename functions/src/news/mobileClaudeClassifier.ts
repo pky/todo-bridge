@@ -1,5 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { RequestOptions } from '@anthropic-ai/sdk/internal/request-options'
+import { runClaudeBatches } from './claudeBatchRunner'
+import { CLAUDE_MAX_RETRIES, CLAUDE_REQUEST_TIMEOUT_MS, createClaudeMessagesClient } from './claudeClient'
+import type { ClaudeMessagesClient, ClaudeRequestParams } from './claudeClient'
+
+export { CLAUDE_MAX_RETRIES, CLAUDE_REQUEST_TIMEOUT_MS, createClaudeMessagesClient }
+export type { ClaudeMessagesClient }
 
 export type MobileCategory = 'security' | 'sdk_requirement' | 'policy' | 'out_of_scope'
 export interface MobileSummary { overview: string; target: string; deadline: string; action: string }
@@ -16,13 +21,8 @@ export interface ClassificationResult {
 }
 export interface ClaudeNewsConfig { model: string; effort: 'low' | 'medium' | 'high'; dailyMaxRequests: number }
 
-export type ClassificationRequestParams = Anthropic.Beta.MessageCreateParamsNonStreaming
-export interface ClaudeMessagesClient {
-  create(params: ClassificationRequestParams, options?: RequestOptions): Promise<Anthropic.Beta.BetaMessage>
-}
+export type ClassificationRequestParams = ClaudeRequestParams
 
-export const CLAUDE_REQUEST_TIMEOUT_MS = 120000
-export const CLAUDE_MAX_RETRIES = 1
 const BATCH_SIZE = 10
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
@@ -197,81 +197,19 @@ export function parseClassificationResponse(
   return { results, missingIds }
 }
 
-export function createClaudeMessagesClient(apiKey: string | undefined): ClaudeMessagesClient | null {
-  if (!apiKey) return null
-  const sdk = new Anthropic({ apiKey, timeout: CLAUDE_REQUEST_TIMEOUT_MS, maxRetries: CLAUDE_MAX_RETRIES })
-  return { create: (params, options) => sdk.beta.messages.create(params, options) }
-}
-
 export async function classifyMobileArticles(
   inputs: ClassificationInput[],
   deps: { client: ClaudeMessagesClient | null; config: ClaudeNewsConfig; deadlineAt?: number; now?: () => number }
 ): Promise<{ results: Map<string, ClassificationResult>; pendingIds: string[]; requestCount: number }> {
-  const { client, config, deadlineAt } = deps
-  const now = deps.now ?? Date.now
-  const expired = (): boolean => deadlineAt !== undefined && now() >= deadlineAt
-  const results = new Map<string, ClassificationResult>()
-  const pending: string[] = []
-  let requestCount = 0
-
-  if (!client) return { results, pendingIds: inputs.map((i) => i.id), requestCount }
-
-  // Returns ids that were not classified. Never throws.
-  const send = async (batch: ClassificationInput[]): Promise<string[]> => {
-    const ids = batch.map((i) => i.id)
-    if (expired()) {
-      pending.push(...ids)
-      return []
-    }
-    const remaining = deadlineAt === undefined ? undefined : deadlineAt - now()
-    const signal = remaining === undefined ? undefined : AbortSignal.timeout(Math.max(remaining, 1))
-    requestCount++
-    try {
-      const message = await client.create(buildClassificationRequest(batch, config), signal ? { signal } : undefined)
-      const usage = message.usage
-      console.log(
-        `[mobileClaude] usage input_tokens=${usage.input_tokens} output_tokens=${usage.output_tokens} cache_read_input_tokens=${usage.cache_read_input_tokens ?? 0} articles=${batch.length}`
-      )
-      const parsed = parseClassificationResponse(message, ids)
-      for (const r of parsed.results) results.set(r.id, r)
-      return parsed.missingIds
-    } catch (err) {
-      if (signal?.aborted || expired()) {
-        console.warn(`[mobileClaude] request aborted by deadline articles=${batch.length}`)
-        pending.push(...ids)
-        return []
-      }
-      const status = err instanceof Anthropic.APIError ? err.status : undefined
-      console.warn(
-        `[mobileClaude] request failed name=${err instanceof Error ? err.name : 'unknown'} status=${status ?? 'n/a'} articles=${batch.length}`
-      )
-      if (status !== undefined && status >= 400 && status < 500 && status !== 429) {
-        pending.push(...ids)
-        return []
-      }
-      return ids
-    }
-  }
-
-  const missing: string[] = []
-  for (let i = 0; i < inputs.length; i += BATCH_SIZE) {
-    const batch = inputs.slice(i, i + BATCH_SIZE)
-    if (requestCount >= config.dailyMaxRequests || expired()) {
-      pending.push(...batch.map((b) => b.id))
-      continue
-    }
-    missing.push(...(await send(batch)))
-  }
-
-  const byId = new Map(inputs.map((i) => [i.id, i]))
-  for (const id of missing) {
-    const article = byId.get(id)
-    if (!article || requestCount >= config.dailyMaxRequests || expired()) {
-      pending.push(id)
-      continue
-    }
-    pending.push(...(await send([article])))
-  }
-
-  return { results, pendingIds: pending, requestCount }
+  const { client, config, deadlineAt, now } = deps
+  return runClaudeBatches(inputs, {
+    client,
+    batchSize: BATCH_SIZE,
+    dailyMaxRequests: config.dailyMaxRequests,
+    deadlineAt,
+    now,
+    logPrefix: 'mobileClaude',
+    buildRequest: (batch) => buildClassificationRequest(batch, config),
+    parseResponse: parseClassificationResponse,
+  })
 }
