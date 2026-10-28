@@ -32,4 +32,40 @@ describe('NewsCard', () => {
     expect(summary?.classes()).not.toContain('xl:line-clamp-3')
     expect(summary?.classes()).not.toContain('xl:line-clamp-4')
   })
+
+  it('mobileSummary があれば4行表示を使い summaryJa の段落を出さない', () => {
+    const wrapper = mount(NewsCard, {
+      props: {
+        article: {
+          ...article,
+          mobileSummary: {
+            overview: '概要文',
+            target: 'iOS 27',
+            deadline: '2026-11-30',
+            action: '更新する',
+          },
+        },
+      },
+    })
+
+    const text = wrapper.text()
+    expect(text).toContain('概要: 概要文')
+    expect(text).toContain('対象: iOS 27')
+    expect(text).toContain('期限: 2026-11-30')
+    expect(text).toContain('やること: 更新する')
+    const summary = wrapper.findAll('p').find((node) => node.text() === article.summaryJa)
+    expect(summary).toBeUndefined()
+  })
+
+  it('mobileSummary がなければ従来どおり summaryJa を表示する', () => {
+    const wrapper = mount(NewsCard, {
+      props: {
+        article,
+      },
+    })
+
+    const summary = wrapper.findAll('p').find((node) => node.text() === article.summaryJa)
+    expect(summary).toBeTruthy()
+    expect(wrapper.text()).not.toContain('概要: ')
+  })
 })
