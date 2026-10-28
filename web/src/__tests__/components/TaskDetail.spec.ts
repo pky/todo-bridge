@@ -221,6 +221,66 @@ describe('TaskDetail', () => {
     }
   })
 
+  it('メモの編集ボタンは編集モードに入り、focusDetail を emit しない', async () => {
+    if (tasksStoreState.selectedTask) {
+      tasksStoreState.selectedTask.notes = ['編集対象のメモ']
+    }
+
+    const wrapper = mount(TaskDetail, {
+      global: {
+        stubs: {
+          DocumentAttachmentPicker: true,
+          TaskItem: {
+            props: ['task'],
+            template: '<div class="task-item-stub">{{ task.name }}</div>',
+          },
+        },
+      },
+    })
+
+    const noteRow = wrapper.get('p.whitespace-pre-wrap').element.parentElement
+    const editButton = Array.from(noteRow?.querySelectorAll('button') ?? [])
+      .find((button) => button.textContent?.trim() === '編集')
+    expect(editButton).toBeDefined()
+    editButton?.click()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('textarea').element.value).toBe('編集対象のメモ')
+    expect(wrapper.emitted('focusDetail')).toBeUndefined()
+  })
+
+  it('メモの削除ボタンはそのメモを除いて更新し、focusDetail を emit しない', async () => {
+    if (tasksStoreState.selectedTask) {
+      tasksStoreState.selectedTask.notes = ['残すメモ', '削除するメモ']
+    }
+    tasksStoreState.updateTask.mockClear()
+
+    const wrapper = mount(TaskDetail, {
+      global: {
+        stubs: {
+          DocumentAttachmentPicker: true,
+          TaskItem: {
+            props: ['task'],
+            template: '<div class="task-item-stub">{{ task.name }}</div>',
+          },
+        },
+      },
+    })
+
+    const noteRow = wrapper.findAll('p.whitespace-pre-wrap')
+      .find((p) => p.text() === '削除するメモ')?.element.parentElement
+    const deleteButton = Array.from(noteRow?.querySelectorAll('button') ?? [])
+      .find((button) => button.textContent?.trim() === '✕')
+    expect(deleteButton).toBeDefined()
+    deleteButton?.click()
+    await wrapper.vm.$nextTick()
+
+    expect(tasksStoreState.updateTask).toHaveBeenCalledTimes(1)
+    const [, update] = tasksStoreState.updateTask.mock.calls[0]!
+    expect(update).toEqual({ notes: ['残すメモ'] })
+    expect(wrapper.emitted('focusDetail')).toBeUndefined()
+  })
+
   it('メモ本文のテキスト選択中のクリックでは focusDetail を emit しない', async () => {
     if (tasksStoreState.selectedTask) {
       tasksStoreState.selectedTask.notes = ['選択中のメモ']
