@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useNewsStore } from '@/stores/news'
 import NewsCard from '@/components/NewsCard.vue'
+import MobileSummary from '@/components/MobileSummary.vue'
 import type { NewsArticle } from '@/types'
 import type { NewsTopic } from '@/types/news'
 
@@ -422,7 +423,12 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
                 </button>
               </div>
 
-              <p v-if="article.summaryJa" class="mt-2 text-xs leading-relaxed text-gray-600">
+              <MobileSummary
+                v-if="article.mobileSummary"
+                :summary="article.mobileSummary"
+                class="mt-2 text-xs leading-relaxed text-gray-600"
+              />
+              <p v-else-if="article.summaryJa" class="mt-2 text-xs leading-relaxed text-gray-600">
                 {{ article.summaryJa }}
               </p>
 

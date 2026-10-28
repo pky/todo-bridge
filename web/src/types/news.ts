@@ -17,6 +17,13 @@ export type ActionType =
 
 export type ImportantLevel = 'urgent' | 'review' | 'reference'
 
+export interface MobileSummary {
+  overview: string
+  target: string
+  deadline: string
+  action: string
+}
+
 export interface NewsArticle {
   id: string
   title: string
@@ -38,6 +45,9 @@ export interface NewsArticle {
   actionType?: ActionType
   importantLevel?: ImportantLevel
   requiredByDate?: string
+  classificationStatus?: 'done' | 'pending'
+  inScope?: boolean
+  mobileSummary?: MobileSummary
   score: number | null
   publishedAt: Timestamp
   fetchedAt: Timestamp

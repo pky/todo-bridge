@@ -1,6 +1,7 @@
 <!-- web/src/components/NewsCard.vue -->
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import MobileSummary from '@/components/MobileSummary.vue'
 import type { NewsArticle } from '@/types'
 
 const props = defineProps<{
@@ -255,7 +256,8 @@ function handleImageError(): void {
         </div>
       </div>
 
-      <p v-if="article.summaryJa" :class="summaryClass">
+      <MobileSummary v-if="article.mobileSummary" :summary="article.mobileSummary" :class="summaryClass" />
+      <p v-else-if="article.summaryJa" :class="summaryClass">
         {{ article.summaryJa }}
       </p>
 
@@ -327,7 +329,12 @@ function handleImageError(): void {
       </div>
     </div>
 
-    <p v-if="!showsHeaderContent && article.summaryJa" :class="summaryClass">
+    <MobileSummary
+      v-if="!showsHeaderContent && article.mobileSummary"
+      :summary="article.mobileSummary"
+      :class="summaryClass"
+    />
+    <p v-else-if="!showsHeaderContent && article.summaryJa" :class="summaryClass">
       {{ article.summaryJa }}
     </p>
 

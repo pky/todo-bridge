@@ -93,16 +93,6 @@ async function saveCurrentPreferences(): Promise<void> {
         </div>
 
         <label class="flex items-center justify-between gap-3 text-sm text-gray-600">
-          <span>公式のみ表示</span>
-          <input v-model="officialOnly" type="checkbox" />
-        </label>
-
-        <label class="flex items-center justify-between gap-3 text-sm text-gray-600">
-          <span>補完RSSを含める</span>
-          <input v-model="includeCommunity" type="checkbox" />
-        </label>
-
-        <label class="flex items-center justify-between gap-3 text-sm text-gray-600">
           <span>要対応のみを優先</span>
           <input v-model="actionRequiredOnly" type="checkbox" />
         </label>
