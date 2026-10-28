@@ -20,6 +20,7 @@ TodoBridge は、RTM代替を目指した、共有対応のタスク管理アプ
 ![Mobile news screen](./img/screenshot-mobile-news.png)
 
 iOS / Android アプリ開発で見逃したくない更新を、確認優先の項目と通常の記事一覧に分けて把握しやすくしています。
+情報源は Apple と Google の公式ページ7本です（Apple Developer News の日本語版と英語版、App Store Connect のリリースノート、Apple のセキュリティアップデート一覧、Android Developers Blog、Play Console のお知らせ、Android Security Bulletin）。Claude（Opus 5.5）がセキュリティ、SDK 要件、ポリシーの記事だけを選び、概要、対象、期限、やることの4項目に日本語でまとめます。
 
 ## このアプリを作った目的
 
@@ -67,10 +68,19 @@ VITE_FIREBASE_APP_ID=
 VITE_FIREBASE_MEASUREMENT_ID=
 ```
 
-Cloud Functions では以下を使用します。
+Cloud Functions では以下を secret として使用します。GEMINI_API_KEY は AI ニュースの要約、ANTHROPIC_API_KEY はモバイルニュースの分類と要約に使います。
 
 ```bash
 GEMINI_API_KEY=
+ANTHROPIC_API_KEY=
+```
+
+モバイルニュースの判定は次の環境変数で調整できます（省略時は既定値）。
+
+```bash
+CLAUDE_NEWS_MODEL=claude-opus-5-5
+CLAUDE_NEWS_EFFORT=low
+CLAUDE_NEWS_DAILY_MAX_REQUESTS=20
 ```
 
 ### 開発コマンド
