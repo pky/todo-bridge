@@ -61,10 +61,11 @@ export function extractMainContent(html: string): string {
 }
 
 // 1回のフェッチで本文とOGP画像を両方取得
-export async function scrapeArticle(url: string): Promise<{ content: string; ogImage: string | null }> {
+export async function scrapeArticle(url: string, options?: { signal?: AbortSignal }): Promise<{ content: string; ogImage: string | null }> {
   try {
     const { data } = await axios.get<string>(url, {
       timeout: TIMEOUT_MS,
+      ...(options?.signal ? { signal: options.signal } : {}),
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; ReRTM-Bot/1.0)',
       },

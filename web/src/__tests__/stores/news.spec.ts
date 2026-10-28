@@ -418,6 +418,54 @@ describe('News Store', () => {
     })
   })
 
+  it.each([
+    ['現行形式', true],
+    ['旧形式', undefined],
+  ])('今日の%sの共有記事キャッシュを個別フィード生成後に置き換える', async (_format, isSharedFallback) => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-03-14T10:00:00+09:00'))
+    localStorage.setItem(
+      'rertm-news-cache-user-1-ai',
+      JSON.stringify({
+        date: '2026-03-14',
+        articles: [{ id: 'shared-article-1', ...articleData, displayScore: undefined }],
+        isSharedFallback,
+      })
+    )
+
+    getDocsFromServerMock.mockImplementation(async (target: {
+      type: string
+      target?: { path: string }
+      path?: string
+      clauses?: Array<{ type: string }>
+    }) => {
+      const path = target.type === 'query' ? target.target?.path : target.path
+      const clauses = target.type === 'query' ? target.clauses ?? [] : []
+
+      if (path === 'users/user-1/newsInteractions') return createDocs([])
+      if (path === 'users/user-1/newsFeed/ai/articles' && clauses.some((clause) => clause.type === 'limit')) {
+        return createDocs([{ id: 'personal-article-1', data: { date: '2026-03-14', displayScore: 10 } }])
+      }
+      if (path === 'users/user-1/newsFeed/ai/articles' && clauses.some((clause) => clause.type === 'where')) {
+        return createDocs([{ id: 'personal-article-1', data: articleData }])
+      }
+      if (path === 'topics/ai/articles' && clauses.some((clause) => clause.type === 'limit')) {
+        return createDocs([{ id: 'shared-article-1', data: { date: '2026-03-14', score: 20 } }])
+      }
+      if (path === 'topics/ai/articles' && clauses.some((clause) => clause.type === 'where')) {
+        return createDocs([{ id: 'shared-article-1', data: articleData }])
+      }
+      return createDocs([])
+    })
+
+    const store = useNewsStore()
+    await store.loadTodayFeed('ai')
+
+    expect(getDocsFromServerMock).toHaveBeenCalled()
+    expect(store.articles.map((article) => article.id)).toEqual(['personal-article-1'])
+    expect(JSON.parse(localStorage.getItem('rertm-news-cache-user-1-ai') ?? '{}').isSharedFallback).toBe(false)
+  })
+
   it('空キャッシュしかなくてもサーバー取得を開始する', async () => {
     localStorage.setItem(
       'rertm-news-cache-user-1-ai',
@@ -472,7 +520,7 @@ describe('News Store', () => {
       }
 
       if (path === 'topics/ai/articles' && clauses.some((clause: any) => clause.type === 'where')) {
-        return createDocs([{ id: 'shared-article-1', data: articleData }])
+        return createDocs([{ id: 'shared-article-1', data: { ...articleData, summaryJa: '架空の日本語概要です', feedEligible: true, sharedScore: 80 } }])
       }
 
       return createDocs([])
@@ -514,7 +562,7 @@ describe('News Store', () => {
       }
 
       if (path === 'topics/ai/articles' && clauses.some((clause: any) => clause.type === 'where')) {
-        return createDocs([{ id: 'shared-article-1', data: articleData }])
+        return createDocs([{ id: 'shared-article-1', data: { ...articleData, summaryJa: '架空の日本語概要です', feedEligible: true, sharedScore: 80 } }])
       }
 
       return createDocs([])

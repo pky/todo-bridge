@@ -31,6 +31,14 @@ export interface NewsArticle {
   content?: string
   titleJa?: string
   summaryJa?: string
+  developerValue?: 'high' | 'normal' | 'low'
+  readReason?: string
+  triageDecision?: 'include' | 'hold' | 'exclude'
+  category?: string
+  feedEligible?: boolean
+  sharedScore?: number
+  summaryStatus?: 'generated' | 'fallback' | 'rejected'
+  summarySource?: 'content' | 'description'
   contentJa?: string
   tags?: string[]
   url: string
@@ -38,6 +46,7 @@ export interface NewsArticle {
   topic?: NewsTopic
   source: NewsSource
   sourceName: string
+  publisherDomain?: string
   sourceTier?: SourceTier
   platform?: MobilePlatform
   isOfficial?: boolean
@@ -49,6 +58,7 @@ export interface NewsArticle {
   inScope?: boolean
   mobileSummary?: MobileSummary
   score: number | null
+  displayScore?: number
   publishedAt: Timestamp
   fetchedAt: Timestamp
   date: string

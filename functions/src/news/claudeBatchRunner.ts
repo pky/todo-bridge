@@ -5,6 +5,7 @@ export interface BatchRunnerDeps<TInput extends { id: string }, TResult extends 
   client: ClaudeMessagesClient | null
   batchSize: number
   dailyMaxRequests: number
+  reserveRequest?: () => Promise<boolean>
   deadlineAt?: number
   now?: () => number
   logPrefix: string
@@ -31,6 +32,29 @@ export async function runClaudeBatches<TInput extends { id: string }, TResult ex
     if (expired()) {
       pending.push(...ids)
       return []
+    }
+    if (deps.reserveRequest) {
+      let reserved = false
+      let reservationTimer: ReturnType<typeof setTimeout> | undefined
+      try {
+        const reservation = deps.reserveRequest()
+        reserved = deadlineAt === undefined
+          ? await reservation
+          : await Promise.race([
+            reservation,
+            new Promise<boolean>(resolve => {
+              reservationTimer = setTimeout(() => resolve(false), Math.max(deadlineAt - now(), 1))
+            }),
+          ])
+      } catch (err) {
+        console.warn(`[${logPrefix}] reservation failed name=${err instanceof Error ? err.name : 'unknown'}`)
+      } finally {
+        if (reservationTimer !== undefined) clearTimeout(reservationTimer)
+      }
+      if (!reserved || expired()) {
+        pending.push(...ids)
+        return []
+      }
     }
     const remaining = deadlineAt === undefined ? undefined : deadlineAt - now()
     const signal = remaining === undefined ? undefined : AbortSignal.timeout(Math.max(remaining, 1))

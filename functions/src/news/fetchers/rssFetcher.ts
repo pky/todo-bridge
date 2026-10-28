@@ -5,40 +5,20 @@ import type { RawArticle } from '../types'
 interface FeedConfig {
   url: string
   name: string
+  generalSource?: boolean
+  aggregator?: boolean
   limit?: number // フィード個別の上限（省略時は fetchRSSArticles の引数を使用）
 }
 
-const DEVELOPERS_IO_AI_KEYWORDS = [
-  'ai',
-  'llm',
-  'gpt',
-  'chatgpt',
-  'openai',
-  'claude',
-  'anthropic',
-  'gemini',
-  'google ai',
-  'copilot',
-  'github copilot',
-  'bedrock',
-  'rag',
-  'agent',
-  'agents',
-  '生成ai',
-  '生成 ai',
-  '機械学習',
-  '大規模言語モデル',
-]
-
-const RSS_FEEDS: FeedConfig[] = [
+export const AI_RSS_FEEDS: FeedConfig[] = [
   // --- 英語メディア ---
   { url: 'https://techcrunch.com/category/artificial-intelligence/feed/', name: 'TechCrunch AI' },
   { url: 'https://www.theverge.com/rss/ai/index.xml', name: 'The Verge AI' },
   { url: 'https://huggingface.co/blog/feed.xml', name: 'Hugging Face Blog' },
-  { url: 'https://www.technologyreview.com/feed/', name: 'MIT Tech Review' },
+  { url: 'https://www.technologyreview.com/feed/', name: 'MIT Tech Review', generalSource: true },
   { url: 'https://venturebeat.com/category/ai/feed/', name: 'VentureBeat AI' },
-  { url: 'https://dev.classmethod.jp/feed/', name: 'DevelopersIO', limit: 8 },
-  { url: 'https://menthas.com/all/rss', name: 'Menthas' },
+  { url: 'https://dev.classmethod.jp/feed/', name: 'DevelopersIO', generalSource: true, limit: 8 },
+  { url: 'https://menthas.com/all/rss', name: 'Menthas', generalSource: true, aggregator: true },
   // Simon Willison's blog（LLM実践知見）
   { url: 'https://simonwillison.net/atom/everything/', name: 'Simon Willison', limit: 10 },
   // dev.to タグ別
@@ -46,7 +26,7 @@ const RSS_FEEDS: FeedConfig[] = [
   { url: 'https://dev.to/feed/tag/llm', name: 'dev.to llm', limit: 5 },
   // --- 日本語メディア ---
   // はてなブックマーク IT ホットエントリー
-  { url: 'https://b.hatena.ne.jp/hotentry/it.rss', name: 'はてなブックマーク IT', limit: 10 },
+  { url: 'https://b.hatena.ne.jp/hotentry/it.rss', name: 'はてなブックマーク IT', generalSource: true, aggregator: true, limit: 10 },
   // Zenn タグ別（モデル名依存を避け概念タグで広く収集）
   { url: 'https://zenn.dev/topics/ai/feed', name: 'Zenn ai', limit: 10 },
   { url: 'https://zenn.dev/topics/llm/feed', name: 'Zenn llm', limit: 8 },
@@ -69,6 +49,7 @@ const RSS_FEEDS: FeedConfig[] = [
 
 // media:content / media:thumbnail をカスタムフィールドとして取得
 const parser = new Parser({
+  timeout: 10000,
   customFields: {
     item: [
       ['media:content', 'mediaContent'],
@@ -107,48 +88,50 @@ function extractThumbnail(item: Record<string, unknown>): string | null {
   return null
 }
 
-function isDevelopersIoAiArticle(title: string, description: string): boolean {
-  const text = `${title} ${description}`.toLowerCase()
-  return DEVELOPERS_IO_AI_KEYWORDS.some(keyword => text.includes(keyword))
-}
-
 export async function fetchRSSArticles(limitPerFeed = 10): Promise<RawArticle[]> {
   const articles: RawArticle[] = []
 
-  for (const feed of RSS_FEEDS) {
-    try {
-      const parsed = await parser.parseURL(feed.url)
-      const limit = feed.limit ?? limitPerFeed
+  for (let i = 0; i < AI_RSS_FEEDS.length; i += 5) {
+    const results = await Promise.all(AI_RSS_FEEDS.slice(i, i + 5).map(async (feed) => {
+      const feedArticles: RawArticle[] = []
+      try {
+        const parsed = await parser.parseURL(feed.url)
+        const limit = feed.limit ?? limitPerFeed
 
-      for (const item of parsed.items.slice(0, limit)) {
-        if (!item.link) continue
+        for (const item of parsed.items.slice(0, limit)) {
+          if (!item.link) continue
 
-        const title = item.title || ''
-        const description = item.contentSnippet || item.content || ''
+          const title = item.title || ''
+          const description = item.contentSnippet || item.content || ''
 
-        if (feed.name === 'DevelopersIO' && !isDevelopersIoAiArticle(title, description)) {
-          continue
+          const thumbnailUrl = extractThumbnail(item as unknown as Record<string, unknown>)
+          let publisherDomain: string | undefined
+          if (feed.aggregator) {
+            try { publisherDomain = new URL(item.link).hostname.replace(/^www\./, '') } catch { /* 不正URLでは掲載元を補わない。 */ }
+          }
+
+          feedArticles.push({
+            title,
+            url: item.link,
+            description,
+            thumbnailUrl,
+            source: 'rss',
+            sourceName: feed.name,
+            ...(publisherDomain ? { publisherDomain } : {}),
+            generalSource: feed.generalSource === true,
+            score: null,
+            publishedAt: item.pubDate ? new Date(item.pubDate) : new Date(),
+          })
         }
 
-        const thumbnailUrl = extractThumbnail(item as unknown as Record<string, unknown>)
-
-        articles.push({
-          title,
-          url: item.link,
-          description,
-          thumbnailUrl,
-          source: 'rss',
-          sourceName: feed.name,
-          score: null,
-          publishedAt: item.pubDate ? new Date(item.pubDate) : new Date(),
-        })
+        const withImg = feedArticles.filter(a => a.thumbnailUrl).length
+        console.log(`[rss] ${feed.name}: fetched ${Math.min(parsed.items.length, limit)} items, ${withImg} with images`)
+      } catch (err) {
+        console.error(`[rss] Failed to fetch ${feed.name}:`, err)
       }
-
-      const withImg = articles.filter(a => a.thumbnailUrl && a.sourceName === feed.name).length
-      console.log(`[rss] ${feed.name}: fetched ${Math.min(parsed.items.length, limit)} items, ${withImg} with images`)
-    } catch (err) {
-      console.error(`[rss] Failed to fetch ${feed.name}:`, err)
-    }
+      return feedArticles
+    }))
+    articles.push(...results.flat())
   }
 
   return articles

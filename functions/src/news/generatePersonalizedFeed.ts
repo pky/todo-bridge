@@ -1,6 +1,19 @@
 // functions/src/news/generatePersonalizedFeed.ts
 import * as admin from 'firebase-admin'
-import { summarizeArticle } from './geminiService'
+import { summarizeAiArticles, getAiSummaryConfig, type SummaryInput } from './aiClaudeSummary'
+import {
+  AI_REUSE_MAX_AGE_MS,
+  AI_SUMMARY_VERSION,
+  calcAiBaseScore,
+  isAiFeedCandidate,
+  isDisplayableAiArticle,
+  isSyntheticGithubDescription,
+  needsAiSummary,
+  selectAiFeed,
+} from './aiSelection'
+import { normalizeUrl } from './collectArticles'
+import { createClaudeMessagesClient } from './claudeClient'
+import { createClaudeDailyRequestReservation } from './claudeDailyBudget'
 import type { NewsArticle, NewsPreferences, NewsTopic } from './types'
 
 type NewsArticleWithId = NewsArticle & { id: string }
@@ -10,15 +23,24 @@ interface RankedFeedItem {
   displayScore: number
 }
 
-const AI_FEED_MAX_ARTICLES = 25
-const AI_FEED_SOURCE_LIMITS = {
-  hn: 6,
-  github: 5,
-  japanese: 7,
-  otherRss: 7,
+export const MOBILE_FEED_MAX_ARTICLES = 15
+export const AI_SUMMARY_DEADLINE_MS = 60000
+const AI_SUMMARY_MAX_ROUNDS = 3
+const AI_SUMMARY_DAILY_LIMIT = 40
+const AI_SUMMARY_TEXT_LIMIT = 2000
+const WRITE_BATCH_LIMIT = 400
+
+export function isEligibleAiFeedArticle(article: Parameters<typeof isAiFeedCandidate>[0]): boolean {
+  return isAiFeedCandidate(article)
 }
 
-export const MOBILE_FEED_MAX_ARTICLES = 15
+export function getImportanceMultiplier(importance: NewsArticle['importance']): number {
+  return importance === 'high' ? 1.3 : importance === 'low' ? 0.6 : 1
+}
+
+export function getDeveloperValueMultiplier(value: NewsArticle['developerValue']): number {
+  return value === 'high' ? 1.5 : value === 'low' ? 0.7 : 1
+}
 
 export function isEligibleMobileFeedArticle(
   article: Pick<NewsArticle, 'inScope' | 'classificationStatus'>
@@ -48,8 +70,8 @@ export function collectSummaryCandidateArticles(
 
   return Array.from(candidates.values())
     .sort((a, b) => {
-      const aNeedsEnglishSummary = needsSharedSummary(a.article) && !shouldSkipGeminiForJapaneseArticle(a.article)
-      const bNeedsEnglishSummary = needsSharedSummary(b.article) && !shouldSkipGeminiForJapaneseArticle(b.article)
+      const aNeedsEnglishSummary = needsSharedSummary(a.article) && (a.article.developerValue !== undefined || !shouldSkipGeminiForJapaneseArticle(a.article))
+      const bNeedsEnglishSummary = needsSharedSummary(b.article) && (b.article.developerValue !== undefined || !shouldSkipGeminiForJapaneseArticle(b.article))
 
       if (aNeedsEnglishSummary !== bNeedsEnglishSummary) {
         return aNeedsEnglishSummary ? -1 : 1
@@ -66,11 +88,6 @@ function isJapanese(text: string): boolean {
 }
 
 const db = admin.firestore()
-const DEFAULT_GEMINI_DAILY_MAX_REQUESTS = 20
-const DEFAULT_GEMINI_DAILY_MAX_ARTICLES = 20
-let geminiUsageDate = ''
-let geminiUsageCount = 0
-
 // 日本語テキストに混在する英語技術用語も含めて抽出（3文字以上、ストップワード除外）
 const STOP_WORDS = new Set([
   'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'her',
@@ -100,7 +117,7 @@ interface ClickData {
 function learnKeywordsFromClicks(clicks: ClickData[]): string[] {
   const freq = new Map<string, number>()
   for (const click of clicks) {
-    // 1. Geminiが抽出したタグがあればそれを最優先で学習
+    // 1. 判定時に抽出したタグがあればそれを最優先で学習
     if (click.tags && click.tags.length > 0) {
       for (const tag of click.tags) {
         const kw = tag.toLowerCase()
@@ -119,26 +136,12 @@ function learnKeywordsFromClicks(clicks: ClickData[]): string[] {
     .map(([word]) => word)
 }
 
-function calcDisplayScore(
+function calcPreferenceMultiplier(
   article: NewsArticle,
   preferences: NewsPreferences,
-  maxHnScore: number,
-  maxGithubScore: number,
   learnedKeywords: string[]
 ): number {
-  // 1. 人気スコア (0-100)
-  let popularityScore: number
-  if (article.source === 'hn' && article.score !== null && maxHnScore > 0) {
-    popularityScore = Math.min((article.score / maxHnScore) * 100, 100)
-  } else if (article.source === 'github' && article.score !== null && maxGithubScore > 0) {
-    // GitHub: 本日のスター獲得数をバッチ内最大値で正規化、50-100 の範囲に
-    popularityScore = 50 + Math.min((article.score / maxGithubScore) * 50, 50)
-  } else {
-    popularityScore = 40 // RSSベースライン
-  }
-
-  // 2. 嗜好マルチプライヤー (1.0 - 2.5)
-  // titleJa/summaryJaはGemini翻訳後に設定されるため、未翻訳時はtitle/descriptionで代用
+  // titleJa/summaryJa は要約後に設定されるため、未設定時は title/description で代用
   const text = `${article.titleJa ?? ''} ${article.summaryJa ?? ''} ${article.title} ${article.description ?? ''}`.toLowerCase()
   let preferenceMultiplier = 1.0
 
@@ -156,7 +159,7 @@ function calcDisplayScore(
     }
   }
 
-  return popularityScore * preferenceMultiplier
+  return preferenceMultiplier
 }
 
 function calcMobileDisplayScore(
@@ -266,7 +269,8 @@ function isInteractionForTopic(topic: NewsTopic, data: FirebaseFirestore.Documen
 }
 
 function needsSharedSummary(article: NewsArticle): boolean {
-  if (!article.titleJa || !article.summaryJa || !article.tags || article.tags.length === 0) {
+  if (article.developerValue && article.summaryStatus !== 'generated') return true
+  if (!article.titleJa || !article.summaryJa) {
     return true
   }
 
@@ -281,202 +285,52 @@ export function shouldSkipGeminiForJapaneseArticle(article: Pick<NewsArticle, 't
   ].join(' '))
 }
 
-function parseNonNegativeInteger(value: string | undefined, fallback: number): number {
-  if (!value) return fallback
-
-  const parsed = Number.parseInt(value, 10)
-  if (!Number.isFinite(parsed) || parsed < 0) return fallback
-
-  return parsed
-}
-
-function getGeminiDailyLimit(): number {
-  const maxRequests = parseNonNegativeInteger(
-    process.env.GEMINI_DAILY_MAX_REQUESTS,
-    DEFAULT_GEMINI_DAILY_MAX_REQUESTS
-  )
-  const maxArticles = parseNonNegativeInteger(
-    process.env.GEMINI_DAILY_MAX_ARTICLES,
-    DEFAULT_GEMINI_DAILY_MAX_ARTICLES
-  )
-
-  return Math.min(maxRequests, maxArticles)
-}
-
-function isGeminiEnabled(): boolean {
-  return process.env.GEMINI_ENABLED !== 'false'
-}
-
-function getJstDateString(): string {
-  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
-}
-
-function reserveGeminiRequest(dailyLimit: number): boolean {
-  const today = getJstDateString()
-  if (geminiUsageDate !== today) {
-    geminiUsageDate = today
-    geminiUsageCount = 0
-  }
-
-  if (geminiUsageCount >= dailyLimit) return false
-
-  geminiUsageCount++
-  return true
-}
-
-function applySummaryFallback(article: NewsArticleWithId): {
-  titleJa: string
-  summaryJa: string
-  tags: string[]
-} {
-  const titleJa = article.titleJa ?? article.title
-  const summaryJa = article.summaryJa ?? (article.description ?? '').slice(0, 300)
-  const tags = article.tags ?? []
-
-  article.titleJa = titleJa
-  article.summaryJa = summaryJa
-  article.tags = tags
-
-  return { titleJa, summaryJa, tags }
-}
-
-function applyReusableSummary(
-  article: NewsArticleWithId,
-  summary: { titleJa: string; summaryJa: string; tags: string[] }
-): { titleJa: string; summaryJa: string; tags: string[] } {
-  article.titleJa = summary.titleJa
-  article.summaryJa = summary.summaryJa
-  article.tags = summary.tags
-
-  return summary
-}
+type ReusableSummary =
+  | { status: 'generated'; titleJa: string; summaryJa: string; summarySource: 'content' | 'description'; summarizedAt: number }
+  | { status: 'rejected'; summarizedAt: number }
 
 async function findReusableSummary(
   topic: NewsTopic,
-  article: NewsArticleWithId
-): Promise<{ titleJa: string; summaryJa: string; tags: string[] } | null> {
+  article: NewsArticleWithId,
+  now: number
+): Promise<ReusableSummary | null> {
   const snap = await db.collection(`topics/${topic}/articles`)
-    .where('url', '==', article.url)
-    .limit(5)
+    .where('normalizedUrl', '==', article.normalizedUrl ?? normalizeUrl(article.url))
     .get()
 
+  // 現行版かつ7日以内の結果のうち、summarizedAt が最も新しいものを使う
+  let best: ReusableSummary | null = null
   for (const doc of snap.docs) {
     if (doc.id === article.id) continue
-
     const data = doc.data() as Partial<NewsArticle>
-    if (
-      typeof data.titleJa !== 'string' ||
-      typeof data.summaryJa !== 'string'
+    if (data.summaryVersion !== AI_SUMMARY_VERSION) continue
+    if (typeof data.summarizedAt !== 'number' || now - data.summarizedAt > AI_REUSE_MAX_AGE_MS) continue
+    if (best && best.summarizedAt >= data.summarizedAt) continue
+    if (data.summaryStatus === 'rejected') {
+      best = { status: 'rejected', summarizedAt: data.summarizedAt }
+    } else if (
+      data.summaryStatus === 'generated'
+      && (data.summarySource === 'content' || data.summarySource === 'description')
+      && typeof data.titleJa === 'string' && data.titleJa.trim() !== ''
+      && typeof data.summaryJa === 'string' && data.summaryJa.trim() !== ''
     ) {
-      continue
-    }
-
-    if (!isJapanese(data.titleJa) && !isJapanese(data.summaryJa)) {
-      continue
-    }
-
-    return {
-      titleJa: data.titleJa,
-      summaryJa: data.summaryJa,
-      tags: Array.isArray(data.tags)
-        ? data.tags.filter((tag): tag is string => typeof tag === 'string')
-        : [],
+      best = {
+        status: 'generated', titleJa: data.titleJa, summaryJa: data.summaryJa,
+        summarySource: data.summarySource, summarizedAt: data.summarizedAt,
+      }
     }
   }
-
-  return null
+  return best
 }
 
-function isReadableArticle(article: NewsArticle): boolean {
-  if (isJapanese(article.title)) return true
-  if (article.titleJa && isJapanese(article.titleJa)) return true
-  if (article.summaryJa && isJapanese(article.summaryJa)) return true
-
-  return false
-}
-
-async function enrichSharedArticles(
-  topic: NewsTopic,
-  articles: NewsArticleWithId[],
-  logPrefix: string
-): Promise<void> {
-  const batch = db.batch()
-  let translatedCount = 0
-  let skippedCount = 0
-  let fallbackCount = 0
-  let reusedCount = 0
-  let limitSkippedCount = 0
-  let hasUpdates = false
-  let geminiRequestCount = 0
-  const geminiEnabled = isGeminiEnabled()
-  const dailyLimit = getGeminiDailyLimit()
-
-  for (const article of articles) {
-    if (!needsSharedSummary(article)) {
-      skippedCount++
-      continue
-    }
-
-    const articleRef = db.doc(`topics/${topic}/articles/${article.id}`)
-
-    const reusableSummary = await findReusableSummary(topic, article)
-    if (reusableSummary) {
-      batch.update(articleRef, applyReusableSummary(article, reusableSummary))
-      reusedCount++
-      hasUpdates = true
-      continue
-    }
-
-    if (shouldSkipGeminiForJapaneseArticle(article) || !geminiEnabled) {
-      const fallback = applySummaryFallback(article)
-      batch.update(articleRef, fallback)
-      fallbackCount++
-      hasUpdates = true
-      continue
-    }
-
-    if (!reserveGeminiRequest(dailyLimit)) {
-      limitSkippedCount++
-      continue
-    }
-
-    try {
-      geminiRequestCount++
-      const { titleJa, summaryJa, tags } = await summarizeArticle(
-        article.title,
-        article.content ?? article.description ?? ''
-      )
-      const nextTitleJa = titleJa || article.title
-      const nextSummaryJa = summaryJa || (article.description ?? '').slice(0, 300)
-      const nextTags = tags ?? []
-
-      batch.update(articleRef, {
-        titleJa: nextTitleJa,
-        summaryJa: nextSummaryJa,
-        tags: nextTags,
-      })
-      article.titleJa = nextTitleJa
-      article.summaryJa = nextSummaryJa
-      article.tags = nextTags
-      translatedCount++
-      hasUpdates = true
-    } catch (err) {
-      console.error(`[${logPrefix}] Shared summary failed for ${article.url}:`, err)
-      batch.update(articleRef, applySummaryFallback(article))
-      fallbackCount++
-      hasUpdates = true
-    }
-  }
-
-  if (hasUpdates) {
-    await batch.commit()
-  }
-
-  console.log(
-    `[${logPrefix}] Shared summaries translated=${translatedCount}, ` +
-    `reused=${reusedCount}, fallback=${fallbackCount}, ` +
-    `limitSkipped=${limitSkippedCount}, skipped=${skippedCount}, geminiRequests=${geminiRequestCount}`
-  )
+function getSummaryEvidence(article: NewsArticle): { text: string; basis: 'content' | 'description' } | null {
+  const content = article.content ?? ''
+  if (content.trim()) return { text: content.slice(0, AI_SUMMARY_TEXT_LIMIT), basis: 'content' }
+  // GitHub は README 本文が根拠で、合成説明文や短い説明だけでは要約しない。
+  if (article.source === 'github') return null
+  const description = article.description ?? ''
+  if (!description.trim() || isSyntheticGithubDescription(description)) return null
+  return { text: description.slice(0, AI_SUMMARY_TEXT_LIMIT), basis: 'description' }
 }
 
 async function saveRankedFeed(
@@ -502,16 +356,23 @@ async function saveRankedFeed(
   await batch.commit()
 }
 
-async function enrichSummaryCandidatesWithoutBlockingFeedSave(
-  topic: NewsTopic,
-  candidates: NewsArticleWithId[],
-  logPrefix: string
-): Promise<void> {
-  try {
-    await enrichSharedArticles(topic, candidates, logPrefix)
-  } catch (err) {
-    console.error(`[${logPrefix}] Summary enrichment failed. Saving feeds with existing article data:`, err)
+async function commitArticleUpdates(topic: NewsTopic, updates: Map<string, Partial<NewsArticle>>): Promise<void> {
+  const entries = Array.from(updates.entries())
+  for (let i = 0; i < entries.length; i += WRITE_BATCH_LIMIT) {
+    const batch = db.batch()
+    for (const [id, value] of entries.slice(i, i + WRITE_BATCH_LIMIT)) {
+      batch.update(db.doc(`topics/${topic}/articles/${id}`), value)
+    }
+    await batch.commit()
   }
+}
+
+interface FeedUser {
+  uid: string
+  preferences: NewsPreferences
+  learnedKeywords: string[]
+  dismissedCount: number
+  articles: NewsArticleWithId[]
 }
 
 export async function runGeneratePersonalizedFeed(): Promise<void> {
@@ -535,6 +396,7 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
     const seenUrls = new Set<string>()
     const articles = articlesSnap.docs
       .map(doc => ({ id: doc.id, ...(doc.data() as NewsArticle) }))
+      .filter(isEligibleAiFeedArticle)
       .filter(a => {
         if (seenUrls.has(a.url)) return false
         seenUrls.add(a.url)
@@ -542,21 +404,14 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
       })
 
     // HN・GitHubの最大スコアを算出（人気スコア正規化用）
-    const maxHnScore = articles
-      .filter(a => a.source === 'hn' && a.score !== null)
-      .reduce((max, a) => Math.max(max, a.score!), 1)
-    const maxGithubScore = articles
-      .filter(a => a.source === 'github' && a.score !== null)
-      .reduce((max, a) => Math.max(max, a.score!), 1)
+    const maxScore = (source: NewsArticle['source']) => articles
+      .filter(a => a.source === source && a.score !== null)
+      .reduce((max, a) => Math.max(max, a.score ?? 0), 0)
+    const scoreLimits = { maxHnScore: maxScore('hn'), maxGithubScore: maxScore('github') }
 
     // 2. 全ユーザーのnewsPreferencesを取得
     const usersSnap = await db.collection('users').get()
-    const pendingFeeds: Array<{
-      uid: string
-      ranked: RankedFeedItem[]
-      dismissedCount: number
-      learnedCount: number
-    }> = []
+    const feedUsers: FeedUser[] = []
 
     for (const userDoc of usersSnap.docs) {
       const uid = userDoc.id
@@ -615,67 +470,146 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
           console.log(`[generatePersonalizedFeed] Learned keywords for ${uid}:`, learnedKeywords.slice(0, 10))
         }
 
-        // 3. 除外済みを取り除いてスコア計算（IDベース + URLベースの両方でフィルタ）
-        const scored = articles
-          .filter(a => !dismissedIds.has(a.id) && !excludedUrls.has(a.url))
-          .map(article => ({
-            article, // 記事オブジェクト全体を保持
-            displayScore: calcDisplayScore(article, preferences, maxHnScore, maxGithubScore, learnedKeywords),
-            source: article.source,
-            sourceName: article.sourceName,
-          }))
-
-        // 読み切れる量に絞り、Gemini要約枠を上位英語記事へ集中させる
-        const sort = (arr: typeof scored) => arr.sort((a, b) => b.displayScore - a.displayScore)
-
-        const hnTop = sort(scored.filter(a => a.source === 'hn')).slice(0, AI_FEED_SOURCE_LIMITS.hn)
-        const githubTop = sort(scored.filter(a => a.source === 'github')).slice(0, AI_FEED_SOURCE_LIMITS.github)
-        const japaneseTop = sort(
-          scored.filter(a => a.sourceName.startsWith('Zenn') || a.sourceName.startsWith('Qiita'))
-        ).slice(0, AI_FEED_SOURCE_LIMITS.japanese)
-        const otherRssTop = sort(
-          scored.filter(a => a.source !== 'hn' && a.source !== 'github'
-            && !a.sourceName.startsWith('Zenn') && !a.sourceName.startsWith('Qiita'))
-        ).slice(0, AI_FEED_SOURCE_LIMITS.otherRss)
-
-        const ranked = [...hnTop, ...githubTop, ...japaneseTop, ...otherRssTop]
-          .sort((a, b) => b.displayScore - a.displayScore)
-          .slice(0, AI_FEED_MAX_ARTICLES)
-
-        pendingFeeds.push({
+        // 3. 除外済みを取り除く（IDベース + URLベースの両方でフィルタ）
+        feedUsers.push({
           uid,
-          ranked,
+          preferences,
+          learnedKeywords,
           dismissedCount: dismissedIds.size,
-          learnedCount: learnedKeywords.length,
+          articles: articles.filter(a => !dismissedIds.has(a.id) && !excludedUrls.has(a.url)),
         })
       } catch (err) {
         console.error(`[generatePersonalizedFeed] Failed for user ${uid}:`, err)
       }
     }
 
-    // Gemini要約は、ユーザー別フィード候補に残った共有記事だけに限定する。
+    // 要約が得られず今日は再送しない記事。保存はせず、翌日に再試行する。
+    const skippedIds = new Set<string>()
+    const rank = (user: FeedUser): RankedFeedItem[] => user.articles
+      .filter(article => !skippedIds.has(article.id))
+      .map(article => ({
+        article,
+        displayScore: calcAiBaseScore(article, scoreLimits)
+          * calcPreferenceMultiplier(article, user.preferences, user.learnedKeywords),
+      }))
+    const select = (user: FeedUser) => selectAiFeed(rank(user))
+
+    // 4. 選ばれた記事のうち未確認のものを確認（2段目）し、不採用が出たら選び直して補充する。
     // 要約に失敗してもフィード保存は止めない。
-    await enrichSummaryCandidatesWithoutBlockingFeedSave(
-      topic,
-      collectSummaryCandidateArticles(pendingFeeds.map(feed => feed.ranked)),
-      'generatePersonalizedFeed'
-    )
+    const updates = new Map<string, Partial<NewsArticle>>()
+    const applyUpdate = (article: NewsArticleWithId, value: Partial<NewsArticle>) => {
+      Object.assign(article, value)
+      updates.set(article.id, { ...updates.get(article.id), ...value })
+    }
+    let sentCount = 0
+    let requestCount = 0
+    try {
+      const summaryConfig = getAiSummaryConfig(process.env)
+      const client = createClaudeMessagesClient(process.env.ANTHROPIC_API_KEY)
+      const reserveRequest = createClaudeDailyRequestReservation(db, 'ai-summary', summaryConfig.dailyMaxRequests)
+      const deadlineAt = Date.now() + AI_SUMMARY_DEADLINE_MS
 
-    for (const pendingFeed of pendingFeeds) {
+      for (let round = 0; round < AI_SUMMARY_MAX_ROUNDS; round++) {
+        const wanted = new Map<string, RankedFeedItem>()
+        for (const user of feedUsers) {
+          for (const item of select(user)) {
+            const existing = wanted.get(item.article.id)
+            if (needsAiSummary(item.article) && (!existing || item.displayScore > existing.displayScore)) {
+              wanted.set(item.article.id, item)
+            }
+          }
+        }
+        if (wanted.size === 0) break
+
+        const inputs: SummaryInput[] = []
+        const inputArticles = new Map<string, NewsArticleWithId>()
+        const ordered = Array.from(wanted.values()).sort((a, b) => b.displayScore - a.displayScore)
+        for (const { article } of ordered) {
+          const now = Date.now()
+          const reusable = await findReusableSummary(topic, article, now)
+          if (reusable?.status === 'generated') {
+            applyUpdate(article, {
+              titleJa: reusable.titleJa, summaryJa: reusable.summaryJa, summaryVersion: AI_SUMMARY_VERSION,
+              summaryStatus: 'generated', summarySource: reusable.summarySource, summarizedAt: reusable.summarizedAt,
+            })
+            continue
+          }
+          if (reusable?.status === 'rejected') {
+            applyUpdate(article, { summaryVersion: AI_SUMMARY_VERSION, summaryStatus: 'rejected', summarizedAt: reusable.summarizedAt })
+            continue
+          }
+          const evidence = getSummaryEvidence(article)
+          if (!evidence) {
+            // 取得失敗と根拠なしを区別できないため rejected で固定せず、今回だけ飛ばす
+            skippedIds.add(article.id)
+            continue
+          }
+          inputs.push({ id: article.id, title: article.title, sourceName: article.sourceName, text: evidence.text, basis: evidence.basis })
+          inputArticles.set(article.id, article)
+        }
+
+        const sendable = inputs.slice(0, Math.max(AI_SUMMARY_DAILY_LIMIT - sentCount, 0))
+        if (sendable.length === 0) {
+          if (inputs.length === 0) continue
+          break
+        }
+        sentCount += sendable.length
+        const outcome = await summarizeAiArticles(sendable, {
+          client, config: summaryConfig, verify: true, reserveRequest, deadlineAt,
+        })
+        requestCount += outcome.requestCount
+        for (const input of sendable) {
+          const article = inputArticles.get(input.id)
+          const summary = outcome.results.get(input.id)
+          if (!article) continue
+          if (summary?.include === false) {
+            applyUpdate(article, { summaryVersion: AI_SUMMARY_VERSION, summaryStatus: 'rejected', summarizedAt: Date.now() })
+          } else if (summary && summary.summaryJa.trim() !== '') {
+            applyUpdate(article, {
+              titleJa: summary.titleJa, summaryJa: summary.summaryJa, summaryVersion: AI_SUMMARY_VERSION,
+              summaryStatus: 'generated', summarySource: input.basis ?? 'description', summarizedAt: Date.now(),
+            })
+          } else {
+            skippedIds.add(article.id)
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[generatePersonalizedFeed] Summary verification failed. Saving feeds with existing article data:', err)
+    }
+    try {
+      await commitArticleUpdates(topic, updates)
+    } catch (err) {
+      console.error('[generatePersonalizedFeed] Failed to save summary results:', err)
+    }
+    console.log(`[generatePersonalizedFeed] Summaries sent=${sentCount}, updated=${updates.size}, skipped=${skippedIds.size}, claudeRequests=${requestCount}`)
+
+    // 5. 利用者ごとに、表示できる記事だけを保存する
+    const savedArticles = new Map<string, NewsArticleWithId>()
+    for (const user of feedUsers) {
       try {
-        const readableRanked = pendingFeed.ranked
-          .filter(item => isReadableArticle(item.article))
-          .slice(0, AI_FEED_MAX_ARTICLES)
-
-        await saveRankedFeed(topic, pendingFeed.uid, today, readableRanked)
+        const displayable = select(user).filter(item => isDisplayableAiArticle(item.article))
+        await saveRankedFeed(topic, user.uid, today, displayable)
+        for (const item of displayable) savedArticles.set(item.article.id, item.article)
         console.log(
-          `[generatePersonalizedFeed] Saved feed for user ${pendingFeed.uid} ` +
-          `(${readableRanked.length} articles, dismissed: ${pendingFeed.dismissedCount}, ` +
-          `learned: ${pendingFeed.learnedCount})`
+          `[generatePersonalizedFeed] Saved feed for user ${user.uid} ` +
+          `(${displayable.length} articles, dismissed: ${user.dismissedCount}, ` +
+          `learned: ${user.learnedKeywords.length})`
         )
       } catch (err) {
-        console.error(`[generatePersonalizedFeed] Failed to save feed for user ${pendingFeed.uid}:`, err)
+        console.error(`[generatePersonalizedFeed] Failed to save feed for user ${user.uid}:`, err)
       }
+    }
+
+    // 共有記事側に、表示対象であること（feedEligible）と嗜好倍率なしの点数を書く
+    try {
+      const eligibility = new Map<string, Partial<NewsArticle>>()
+      for (const article of savedArticles.values()) {
+        eligibility.set(article.id, { feedEligible: true, sharedScore: calcAiBaseScore(article, scoreLimits) })
+      }
+      await commitArticleUpdates(topic, eligibility)
+    } catch (err) {
+      console.error('[generatePersonalizedFeed] Failed to mark shared articles as feed eligible:', err)
     }
 }
 

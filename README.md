@@ -68,10 +68,9 @@ VITE_FIREBASE_APP_ID=
 VITE_FIREBASE_MEASUREMENT_ID=
 ```
 
-Cloud Functions では以下を secret として使用します。GEMINI_API_KEY は AI ニュースの要約、ANTHROPIC_API_KEY はモバイルニュースの分類と要約に使います。
+Cloud Functions では ANTHROPIC_API_KEY を secret として使用し、AI ニュースの判定と要約、モバイルニュースの分類と要約に使います。
 
 ```bash
-GEMINI_API_KEY=
 ANTHROPIC_API_KEY=
 ```
 
@@ -82,6 +81,21 @@ CLAUDE_NEWS_MODEL=claude-opus-5-5
 CLAUDE_NEWS_EFFORT=low
 CLAUDE_NEWS_DAILY_MAX_REQUESTS=20
 ```
+
+AI ニュースは技術記事だけを1日最大20件表示します。対象は AI コーディングツールの使い方と検証、LLM アプリの実装・評価・運用、AI のセキュリティ、新しいモデルや API の能力と制約、機械学習の実装、AI 開発用のツールです。企業動向、政治や訴訟、宣伝、業務アプリの操作方法、AI が道具として登場するだけの記事は表示しません。
+
+選別は2段階です。Claude（Haiku 5.5）がタイトルと説明文から主題の分類と採用・保留・除外を判定し、明らかな対象外だけを外します。採用と保留の候補は本文（GitHub は README）を取得し、上位の候補だけを Claude（Sonnet 5.5）が本文で技術内容を確認したうえで日本語の概要を作ります。確認できなかった記事と概要のない記事は表示せず、次の候補で補います。20件に満たない日は埋めません。順位は開発者への有用性を主に、世間での重要度、人気、既存の設定やクリック履歴を加えて決めます。集約サイト経由の記事は実際の掲載元を主に表示し、紹介元を併記します。判定と確認の結果は判定基準の版ごとに7日間再利用し、それを過ぎた記事やタイトルが変わった記事は判定し直します。次の環境変数で調整できます（省略時は既定値）。
+
+```bash
+CLAUDE_AI_TRIAGE_MODEL=claude-haiku-5-5
+CLAUDE_AI_TRIAGE_EFFORT=low
+CLAUDE_AI_TRIAGE_DAILY_MAX_REQUESTS=10
+CLAUDE_AI_SUMMARY_MODEL=claude-sonnet-5-5
+CLAUDE_AI_SUMMARY_EFFORT=low
+CLAUDE_AI_SUMMARY_DAILY_MAX_REQUESTS=10
+```
+
+AI ニュースの呼び出し上限は日本時間の日付ごとに判定と要約を別々に数えます。API の再試行は同じ呼び出しとして数えます。
 
 ### 開発コマンド
 

@@ -22,6 +22,7 @@ import { useAuthStore } from './auth'
 import { useListsStore } from './lists'
 import { useTasksStore } from './tasks'
 import { useSpaceStore, buildPersonalSpaceId } from './space'
+import { selectDisplayableAiNews } from '@/utils/aiNewsDisplay'
 import type {
   NewsArticle,
   NewsPreferences,
@@ -89,29 +90,38 @@ export const useNewsStore = defineStore('news', () => {
     return `${year}-${month}-${day}`
   }
 
-  function readCachedFeed(uid: string, topic: NewsTopic): { date: string; articles: NewsArticle[] } | null {
+  function readCachedFeed(uid: string, topic: NewsTopic): { date: string; articles: NewsArticle[]; isSharedFallback: boolean } | null {
     try {
       const raw = localStorage.getItem(getNewsCacheKey(uid, topic))
       if (!raw) return null
-      const parsed = JSON.parse(raw) as { date?: string; articles?: NewsArticle[] }
+      const parsed = JSON.parse(raw) as { date?: string; articles?: NewsArticle[]; isSharedFallback?: boolean }
       if (!parsed.date || !Array.isArray(parsed.articles)) return null
-      return { date: parsed.date, articles: parsed.articles }
+      // 旧形式には出所の印がない。個別フィードだけが持つ表示スコアで判別する。
+      const legacySharedFallback = parsed.isSharedFallback == null
+        && parsed.articles.some(article => typeof article.displayScore !== 'number')
+      const isSharedFallback = parsed.isSharedFallback === true || legacySharedFallback
+      return {
+        date: parsed.date,
+        // 旧形式のキャッシュ（20件超、feedEligible なし）も読み出し時に同じ条件で絞る。
+        articles: topic === 'ai' ? selectDisplayableAiNews(parsed.articles, { shared: isSharedFallback }) : parsed.articles,
+        isSharedFallback,
+      }
     } catch {
       return null
     }
   }
 
-  function writeCachedFeed(uid: string, topic: NewsTopic, date: string, nextArticles: NewsArticle[]) {
+  function writeCachedFeed(uid: string, topic: NewsTopic, date: string, nextArticles: NewsArticle[], isSharedFallback = false) {
     localStorage.setItem(
       getNewsCacheKey(uid, topic),
-      JSON.stringify({ date, articles: nextArticles })
+      JSON.stringify({ date, articles: nextArticles, isSharedFallback })
     )
   }
 
   function updateCachedFeedArticleList(uid: string, topic: NewsTopic, articleId: string) {
     const cached = readCachedFeed(uid, topic)
     if (!cached) return
-    writeCachedFeed(uid, topic, cached.date, cached.articles.filter((article) => article.id !== articleId))
+    writeCachedFeed(uid, topic, cached.date, cached.articles.filter((article) => article.id !== articleId), cached.isSharedFallback)
   }
 
   async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -222,7 +232,20 @@ export const useNewsStore = defineStore('news', () => {
       return bScore - aScore
     })
 
-    return { latestDate, articleDocs: sortedArticleDocs }
+    if (topic !== 'ai') return { latestDate, articleDocs: sortedArticleDocs }
+
+    // 最新日の記事は問い合わせではなくクライアント側で絞る（feedEligible の where は複合インデックスが要る）。
+    const docsById = new Map(sortedArticleDocs.map((articleDoc) => [articleDoc.id, articleDoc]))
+    const displayable = selectDisplayableAiNews(
+      sortedArticleDocs.map((articleDoc) => ({ id: articleDoc.id, ...(articleDoc.data() as Record<string, unknown>) }) as NewsArticle),
+      { shared: true }
+    )
+    // 表示できる記事がない日は、共有記事の最新日として扱わない。
+    if (displayable.length === 0) return { latestDate: null, articleDocs: [] as typeof sortedArticleDocs }
+    return {
+      latestDate,
+      articleDocs: displayable.flatMap((article) => docsById.get(article.id) ?? []),
+    }
   }
 
   async function resolveArticleDocs(feedDocs: Array<{ id: string; data: () => unknown }>): Promise<NewsArticle[]> {
@@ -327,7 +350,7 @@ export const useNewsStore = defineStore('news', () => {
       error.value = null
 
       if (cachedFeed.articles.length > 0) {
-        if (cachedFeed.date === today) {
+        if (cachedFeed.date === today && !cachedFeed.isSharedFallback) {
           loading.value = false
           feedDiagnosticsByTopic.value = {
             ...feedDiagnosticsByTopic.value,
@@ -344,7 +367,9 @@ export const useNewsStore = defineStore('news', () => {
           ...feedDiagnosticsByTopic.value,
           [topic]: {
             state: 'showing',
-            message: '保存済みの記事を表示しつつ、サーバーの更新を確認しています',
+            message: cachedFeed.isSharedFallback
+              ? '個別フィード生成前のため、共有記事を表示しています'
+              : '保存済みの記事を表示しつつ、サーバーの更新を確認しています',
           },
         }
       } else {
@@ -400,7 +425,7 @@ export const useNewsStore = defineStore('news', () => {
                 message: '個別フィード生成前のため、共有記事を表示しています',
               },
             }
-            writeCachedFeed(uid, topic, sharedFeed.latestDate, sharedArticles)
+            writeCachedFeed(uid, topic, sharedFeed.latestDate, sharedArticles, true)
           })
           .catch((sharedError) => {
             console.warn('[news] shared feed early fallback failed:', sharedError)
@@ -415,10 +440,30 @@ export const useNewsStore = defineStore('news', () => {
             sharedFeedPromise,
           ])
 
-          const shouldUseSharedFallback = (
+          let shouldUseSharedFallback = (
             !!sharedFeed.latestDate &&
             (!personalizedFeed.latestDate || sharedFeed.latestDate > personalizedFeed.latestDate)
           )
+
+          // 共有記事が日付で新しくても、利用者の除外条件を当てた後に0件で、
+          // 個別フィードに除外後1件以上あれば個別フィードを表示する。
+          if (shouldUseSharedFallback && personalizedFeed.latestDate) {
+            const isExcluded = (id: string, url: unknown) =>
+              dismissedArticleIds.has(id) || (typeof url === 'string' && excludedUrls.has(url))
+            const sharedRemaining = sharedFeed.articleDocs.filter((articleDoc) => {
+              const data = articleDoc.data() as { url?: unknown } | undefined
+              return !isExcluded(articleDoc.id, data?.url)
+            })
+            if (sharedRemaining.length === 0) {
+              const personalizedArticles = (await resolveArticleDocs(
+                personalizedFeed.feedDocs.filter((feedDoc) => !dismissedArticleIds.has(feedDoc.id))
+              )).filter((article) => !excludedUrls.has(article.url) || shouldKeepVisibleAfterClick(article, topic))
+              const personalizedRemaining = topic === 'ai'
+                ? selectDisplayableAiNews(personalizedArticles, { shared: false })
+                : personalizedArticles
+              if (personalizedRemaining.length > 0) shouldUseSharedFallback = false
+            }
+          }
 
           return {
             excludedUrls,
@@ -452,8 +497,11 @@ export const useNewsStore = defineStore('news', () => {
       }
 
       const results = await resolveArticleDocs(sortedFeedDocs.filter(feedDoc => !dismissedIds.value.has(feedDoc.id)))
-      const visibleArticles = results
+      const unfilteredArticles = results
         .filter(article => !excludedUrls.has(article.url) || shouldKeepVisibleAfterClick(article, topic))
+      const visibleArticles = topic === 'ai'
+        ? selectDisplayableAiNews(unfilteredArticles, { shared: isSharedFallback })
+        : unfilteredArticles
 
       if (loadSequence !== activeLoadSequence) return
       articles.value = visibleArticles
@@ -477,7 +525,7 @@ export const useNewsStore = defineStore('news', () => {
                 : '取得は成功しましたが、既読・非表示条件により表示対象がありません',
             },
       }
-      writeCachedFeed(uid, topic, latestDate, visibleArticles)
+      writeCachedFeed(uid, topic, latestDate, visibleArticles, isSharedFallback)
       void trackDisplayedArticles(uid, topic, latestDate, visibleArticles).catch((trackError) => {
         console.error('[news] trackDisplayedArticles error:', trackError)
       })
