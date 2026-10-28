@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import type { RequestOptions } from '@anthropic-ai/sdk/internal/request-options'
 
 export type MobileCategory = 'security' | 'sdk_requirement' | 'policy' | 'out_of_scope'
 export interface MobileSummary { overview: string; target: string; deadline: string; action: string }
@@ -17,7 +18,7 @@ export interface ClaudeNewsConfig { model: string; effort: 'low' | 'medium' | 'h
 
 export type ClassificationRequestParams = Anthropic.Beta.MessageCreateParamsNonStreaming
 export interface ClaudeMessagesClient {
-  create(params: ClassificationRequestParams): Promise<Anthropic.Beta.BetaMessage>
+  create(params: ClassificationRequestParams, options?: RequestOptions): Promise<Anthropic.Beta.BetaMessage>
 }
 
 export const CLAUDE_REQUEST_TIMEOUT_MS = 120000
@@ -199,7 +200,7 @@ export function parseClassificationResponse(
 export function createClaudeMessagesClient(apiKey: string | undefined): ClaudeMessagesClient | null {
   if (!apiKey) return null
   const sdk = new Anthropic({ apiKey, timeout: CLAUDE_REQUEST_TIMEOUT_MS, maxRetries: CLAUDE_MAX_RETRIES })
-  return { create: (params) => sdk.beta.messages.create(params) }
+  return { create: (params, options) => sdk.beta.messages.create(params, options) }
 }
 
 export async function classifyMobileArticles(
@@ -222,9 +223,11 @@ export async function classifyMobileArticles(
       pending.push(...ids)
       return []
     }
+    const remaining = deadlineAt === undefined ? undefined : deadlineAt - now()
+    const signal = remaining === undefined ? undefined : AbortSignal.timeout(Math.max(remaining, 1))
     requestCount++
     try {
-      const message = await client.create(buildClassificationRequest(batch, config))
+      const message = await client.create(buildClassificationRequest(batch, config), signal ? { signal } : undefined)
       const usage = message.usage
       console.log(
         `[mobileClaude] usage input_tokens=${usage.input_tokens} output_tokens=${usage.output_tokens} cache_read_input_tokens=${usage.cache_read_input_tokens ?? 0} articles=${batch.length}`
@@ -233,6 +236,11 @@ export async function classifyMobileArticles(
       for (const r of parsed.results) results.set(r.id, r)
       return parsed.missingIds
     } catch (err) {
+      if (signal?.aborted || expired()) {
+        console.warn(`[mobileClaude] request aborted by deadline articles=${batch.length}`)
+        pending.push(...ids)
+        return []
+      }
       const status = err instanceof Anthropic.APIError ? err.status : undefined
       console.warn(
         `[mobileClaude] request failed name=${err instanceof Error ? err.name : 'unknown'} status=${status ?? 'n/a'} articles=${batch.length}`
