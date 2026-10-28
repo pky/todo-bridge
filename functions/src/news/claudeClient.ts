@@ -6,6 +6,10 @@ export interface ClaudeMessagesClient {
   create(params: ClaudeRequestParams, options?: RequestOptions): Promise<Anthropic.Beta.BetaMessage>
 }
 
+export function escapePromptText(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
 export const CLAUDE_REQUEST_TIMEOUT_MS = 120000
 export const CLAUDE_MAX_RETRIES = 1
 

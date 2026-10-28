@@ -25,6 +25,7 @@ export const MOBILE_CLASSIFICATION_DEADLINE_MS = 240000
 export const AI_TRIAGE_DEADLINE_MS = 120000
 export const AI_SCRAPE_DEADLINE_MS = 60000
 const AI_README_MAX_LENGTH = 5000
+export const AI_README_SOURCE_MAX_LENGTH = 20000
 const CLEANUP_BATCH_SIZE = 500
 const CLEANUP_MAX_ROUNDS = 20
 const OFFICIAL_MOBILE_MAX_AGE_DAYS = 14
@@ -255,6 +256,7 @@ export function buildReusedAiArticle(
 
 export function cleanReadmeText(markdown: string): string {
   return markdown
+    .slice(0, AI_README_SOURCE_MAX_LENGTH)
     .replace(/\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)/g, ' ')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
     .replace(/<[^>]*>/g, ' ')
