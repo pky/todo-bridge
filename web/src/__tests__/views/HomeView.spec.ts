@@ -198,3 +198,53 @@ describe('HomeView', () => {
     expect(tasksStoreState.selectedTaskId).toBe('task-1')
   })
 })
+
+describe('HomeViewの画面幅変更', () => {
+  it('768pxを往復してもタスク追加の未送信ドラフトとコンポーネントを保持する', async () => {
+    const originalWidth = window.innerWidth
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 768 })
+    tasksStoreState.selectedTaskId = null
+    tasksStoreState.selectedTask = null
+    // 子のローカル状態を使い、一覧の複製や再マウントによる下書き消失を検出する。
+    const draftList = {
+      name: 'DraftTaskList',
+      data: () => ({ draft: '' }),
+      template: '<input data-testid="task-draft" v-model="draft" />',
+    }
+    const wrapper = mount(HomeView, {
+      attachTo: document.body,
+      global: {
+        stubs: {
+          TaskList: draftList,
+          RouterLink: { props: ['to'], template: '<a><slot /></a>' },
+        },
+      },
+    })
+    try {
+      await wrapper.vm.$nextTick()
+      const initialInstance = wrapper.findComponent(draftList).vm
+      expect(wrapper.findAllComponents(draftList)).toHaveLength(1)
+      await wrapper.get('#desktop-task-list [data-testid="task-draft"]').setValue('送信前の架空タスク')
+
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 767 })
+      window.dispatchEvent(new Event('resize'))
+      await wrapper.vm.$nextTick()
+      expect(wrapper.findAllComponents(draftList)).toHaveLength(1)
+      expect(wrapper.findComponent(draftList).vm).toBe(initialInstance)
+      expect(wrapper.get<HTMLInputElement>('#mobile-task-list [data-testid="task-draft"]').element.value)
+        .toBe('送信前の架空タスク')
+
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 768 })
+      window.dispatchEvent(new Event('resize'))
+      await wrapper.vm.$nextTick()
+      expect(wrapper.findAllComponents(draftList)).toHaveLength(1)
+      expect(wrapper.findComponent(draftList).vm).toBe(initialInstance)
+      expect(wrapper.get<HTMLInputElement>('#desktop-task-list [data-testid="task-draft"]').element.value)
+        .toBe('送信前の架空タスク')
+    } finally {
+      wrapper.unmount()
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth })
+      window.dispatchEvent(new Event('resize'))
+    }
+  })
+})

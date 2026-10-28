@@ -539,6 +539,25 @@ export const useTasksStore = defineStore('tasks', () => {
       return
     }
 
+    // E2E用データでは、先行するリスト購読もFirestoreへ接続しない。
+    const mockTasksData = localStorage.getItem('mock-tasks-data')
+    if (mockTasksData) {
+      try {
+        const parsed = JSON.parse(mockTasksData)
+        if (Array.isArray(parsed)) {
+          const listTasks = parsed.filter((task: Task) => task.listId === listId && isActiveTask(task))
+          tasksByList.set(listId, listTasks)
+          tasks.value = listTasks
+          allTasksCache.value = parsed
+          loading.value = false
+          isInitialLoadComplete.value = true
+          return
+        }
+      } catch {
+        // モック状態のパースに失敗した場合は通常のFirestoreへ
+      }
+    }
+
     // キャッシュがあれば即座に表示（ローディング不要）
     // onSnapshotは常に設定してリアルタイム同期を維持する
     const cachedTasks = tasksByList.get(listId)

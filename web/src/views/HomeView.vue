@@ -46,6 +46,10 @@ function handleSearchInput(value: string) {
 // モバイル用の状態管理
 const isSidebarOpen = ref(false)
 const isMobile = ref(false)
+const desktopTaskListTarget = ref<HTMLElement | null>(null)
+const mobileTaskListTarget = ref<HTMLElement | null>(null)
+const taskListTarget = computed(() => isMobile.value || isDesktopDetailExpanded.value
+  ? mobileTaskListTarget.value : desktopTaskListTarget.value)
 const isSearchOpen = ref(false)
 
 // 画面サイズの検出
@@ -352,11 +356,11 @@ function expandTaskDetail() {
         <!-- Task List -->
         <div
           v-if="!isDesktopDetailExpanded"
+          ref="desktopTaskListTarget"
+          id="desktop-task-list"
           data-testid="desktop-task-list"
           class="md:col-span-4 lg:col-span-4 bg-white rounded-lg shadow p-4 overflow-y-auto"
-        >
-          <TaskList />
-        </div>
+        />
 
         <!-- Task Detail -->
         <div
@@ -381,9 +385,7 @@ function expandTaskDetail() {
       <!-- モバイル: シングルカラム -->
       <div class="md:hidden flex-1 flex flex-col min-h-0 overflow-x-hidden">
         <!-- タスクリスト（常に表示） -->
-        <div class="flex-1 bg-white m-2 sm:m-4 rounded-lg shadow p-3 sm:p-4 overflow-y-auto overflow-x-hidden">
-          <TaskList />
-        </div>
+        <div ref="mobileTaskListTarget" id="mobile-task-list" class="flex-1 bg-white m-2 sm:m-4 rounded-lg shadow p-3 sm:p-4 overflow-y-auto overflow-x-hidden" />
       </div>
 
       <!-- モバイル: サイドバーオーバーレイ -->
@@ -467,6 +469,9 @@ function expandTaskDetail() {
           </div>
         </div>
       </Transition>
+      <Teleport :to="taskListTarget || 'body'" :disabled="!taskListTarget">
+        <TaskList />
+      </Teleport>
     </main>
   </div>
 </template>

@@ -140,13 +140,6 @@ export const useListsStore = defineStore('lists', () => {
     const authStore = useAuthStore()
     const spaceStore = useSpaceStore()
     if (!authStore.user) return
-    await spaceStore.initSpace()
-
-    // 既に読み込み済みで、リストが存在する場合は何もしない（重複防止）
-    // リストが空の場合は再取得を試みる（オフライン復帰時対策）
-    if (listsLoaded && lists.value.length > 0) {
-      return
-    }
 
     // E2Eテスト用のモックリストチェック
     const mockListsData = localStorage.getItem('mock-lists-data')
@@ -166,6 +159,14 @@ export const useListsStore = defineStore('lists', () => {
       } catch {
         // モック状態のパースに失敗した場合は通常のFirestoreへ
       }
+    }
+
+    await spaceStore.initSpace()
+
+    // 既に読み込み済みで、リストが存在する場合は何もしない（重複防止）
+    // リストが空の場合は再取得を試みる（オフライン復帰時対策）
+    if (listsLoaded && lists.value.length > 0) {
+      return
     }
 
     loading.value = true
@@ -257,6 +258,16 @@ export const useListsStore = defineStore('lists', () => {
       listsUnsubscribe = null
     }
 
+    // E2E用リストを、Firestoreの空スナップショットで上書きしない。
+    const mockListsData = localStorage.getItem('mock-lists-data')
+    if (mockListsData) {
+      try {
+        if (Array.isArray(JSON.parse(mockListsData))) return
+      } catch {
+        // モック状態のパースに失敗した場合は通常のFirestoreへ
+      }
+    }
+
     const targetQuery = spaceStore.useLegacyPath
       ? getListsCollection()
       : query(
@@ -345,6 +356,18 @@ export const useListsStore = defineStore('lists', () => {
   }
 
   async function subscribe() {
+    // E2E用リストの取得は、実認証を伴うスペース初期化を待たない。
+    const mockListsData = localStorage.getItem('mock-lists-data')
+    if (mockListsData) {
+      try {
+        if (Array.isArray(JSON.parse(mockListsData))) {
+          await fetchLists()
+          return
+        }
+      } catch {
+        // モック状態のパースに失敗した場合は通常のFirestoreへ
+      }
+    }
     const spaceStore = useSpaceStore()
     await spaceStore.initSpace()
     await Promise.all([fetchLists(), fetchTags()])
