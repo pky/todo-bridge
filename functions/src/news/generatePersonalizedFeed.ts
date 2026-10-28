@@ -18,6 +18,14 @@ const AI_FEED_SOURCE_LIMITS = {
   otherRss: 7,
 }
 
+export const MOBILE_FEED_MAX_ARTICLES = 15
+
+export function isEligibleMobileFeedArticle(
+  article: Pick<NewsArticle, 'inScope' | 'classificationStatus'>
+): boolean {
+  return article.inScope === true && article.classificationStatus === 'done'
+}
+
 export function collectSummaryCandidateArticles(
   rankedFeeds: RankedFeedItem[][]
 ): NewsArticleWithId[] {
@@ -688,6 +696,7 @@ export async function runGenerateMobilePersonalizedFeed(): Promise<void> {
     const seenUrls = new Set<string>()
     const articles = articlesSnap.docs
       .map(doc => ({ id: doc.id, ...(doc.data() as NewsArticle) }))
+      .filter(a => isEligibleMobileFeedArticle(a))
       .filter(a => {
         if (seenUrls.has(a.url)) return false
         seenUrls.add(a.url)
@@ -758,21 +767,13 @@ export async function runGenerateMobilePersonalizedFeed(): Promise<void> {
           }))
           .filter(item => item.displayScore >= 0)
           .sort((a, b) => b.displayScore - a.displayScore)
-          .slice(0, 40)
+          .slice(0, MOBILE_FEED_MAX_ARTICLES)
 
         pendingFeeds.push({ uid, scored })
       } catch (err) {
         console.error(`[generateMobilePersonalizedFeed] Failed for user ${uid}:`, err)
       }
     }
-
-    // Gemini要約は、ユーザー別フィード候補に残った共有記事だけに限定する。
-    // 要約に失敗してもフィード保存は止めない。
-    await enrichSummaryCandidatesWithoutBlockingFeedSave(
-      topic,
-      collectSummaryCandidateArticles(pendingFeeds.map(feed => feed.scored)),
-      'generateMobilePersonalizedFeed'
-    )
 
     for (const pendingFeed of pendingFeeds) {
       try {
