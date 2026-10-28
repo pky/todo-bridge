@@ -8,6 +8,8 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     exclude: ['node_modules', 'dist', 'e2e'],
+    // Node 25 以降の組み込み localStorage が happy-dom の実装を隠すため無効にする
+    execArgv: ['--no-experimental-webstorage'],
   },
   resolve: {
     alias: {
