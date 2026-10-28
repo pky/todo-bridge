@@ -980,7 +980,7 @@ const priorityOptions = [
                   {{ note }}
                 </p>
                 <button
-                  @click="handleStartEditNote(index)"
+                  @click.stop="handleStartEditNote(index)"
                   class="text-xs text-gray-500 hover:text-gray-800 flex-shrink-0"
                 >
                   編集
@@ -992,7 +992,7 @@ const priorityOptions = [
                   コピー
                 </button>
                 <button
-                  @click="handleDeleteNote(index)"
+                  @click.stop="handleDeleteNote(index)"
                   class="text-gray-400 hover:text-red-500 flex-shrink-0"
                 >
                   ✕
