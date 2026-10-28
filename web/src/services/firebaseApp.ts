@@ -12,6 +12,9 @@ const firebaseConfig = {
 
 export const isEmulator = import.meta.env.VITE_USE_EMULATOR === 'true'
 export const emulatorHost = import.meta.env.VITE_EMULATOR_HOST || 'localhost'
+export const authEmulatorPort = Number(import.meta.env.VITE_AUTH_EMULATOR_PORT) || 9099
+export const firestoreEmulatorPort = Number(import.meta.env.VITE_FIRESTORE_EMULATOR_PORT) || 8080
+export const functionsEmulatorPort = Number(import.meta.env.VITE_FUNCTIONS_EMULATOR_PORT) || 5001
 
 const app = initializeApp(firebaseConfig)
 
