@@ -187,6 +187,70 @@ describe('TaskDetail', () => {
     expect(wrapper.get('textarea').element.value).toBe('選択してコピーしたいメモ')
   })
 
+  it('メモのコピーボタンはクリップボードに本文を渡し、focusDetail を emit しない', async () => {
+    if (tasksStoreState.selectedTask) {
+      tasksStoreState.selectedTask.notes = ['コピー対象のメモ']
+    }
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+
+    try {
+      const wrapper = mount(TaskDetail, {
+        global: {
+          stubs: {
+            DocumentAttachmentPicker: true,
+            TaskItem: {
+              props: ['task'],
+              template: '<div class="task-item-stub">{{ task.name }}</div>',
+            },
+          },
+        },
+      })
+
+      const noteRow = wrapper.get('p.whitespace-pre-wrap').element.parentElement
+      const copyButton = Array.from(noteRow?.querySelectorAll('button') ?? [])
+        .find((button) => button.textContent?.trim() === 'コピー')
+      expect(copyButton).toBeDefined()
+      copyButton?.click()
+      await wrapper.vm.$nextTick()
+
+      expect(writeText).toHaveBeenCalledWith('コピー対象のメモ')
+      expect(wrapper.emitted('focusDetail')).toBeUndefined()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('メモ本文のテキスト選択中のクリックでは focusDetail を emit しない', async () => {
+    if (tasksStoreState.selectedTask) {
+      tasksStoreState.selectedTask.notes = ['選択中のメモ']
+    }
+    const getSelectionSpy = vi.spyOn(window, 'getSelection').mockReturnValue({
+      isCollapsed: false,
+      toString: () => '選択中',
+    } as unknown as Selection)
+
+    try {
+      const wrapper = mount(TaskDetail, {
+        global: {
+          stubs: {
+            DocumentAttachmentPicker: true,
+            TaskItem: {
+              props: ['task'],
+              template: '<div class="task-item-stub">{{ task.name }}</div>',
+            },
+          },
+        },
+      })
+
+      await wrapper.get('p.whitespace-pre-wrap').trigger('click')
+
+      expect(wrapper.emitted('focusDetail')).toBeUndefined()
+    } finally {
+      getSelectionSpy.mockRestore()
+    }
+  })
+
   it('サブタスク選択時に詳細表示イベントを通知する', async () => {
     const wrapper = mount(TaskDetail, {
       global: {
