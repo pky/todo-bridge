@@ -1,119 +1,78 @@
-# JavaScript Project Codex Rules
+# TodoBridge エージェント向けガイド
 
-## Goal
-- Optimize for reliable bug fixing in a JavaScript / TypeScript codebase.
-- Prefer minimal, localized fixes.
-- Do not refactor unrelated code unless explicitly requested.
+Codex と Claude Code の共通ルール。CLAUDE.md はこのファイルを読み込む。README の説明や一般的なコーディング作法は書かず、このリポジトリ固有の判断基準だけを置く。
 
-## Debugging priorities
-When debugging, inspect in this order when relevant:
-1. async timing
-2. stale closures
-3. state synchronization
-4. effect dependencies
-5. event ordering
-6. API contract mismatches
-7. type boundary or runtime validation issues
+## 構成
+- `web/`: Vue / Vite / Pinia / Firebase のフロントエンド
+- `functions/`: Firebase Cloud Functions（TypeScript）
+- `doc/`: テンプレート2件以外は .gitignore 対象のローカル専用資料
+- `progress.txt`、`internal_docs/`: ローカル専用。コミットしない
+- パッケージマネージャは npm。pnpm / yarn は使わない
 
-## Frontend rules
-- Check state ownership before changing component structure.
-- Check effect dependencies before rewriting logic.
-- Check memoization boundaries only when there is evidence they matter.
-- Prefer fixing source-of-truth problems over patching symptoms in leaf components.
-- Avoid broad component rewrites for bug-fix tasks.
+## 実装上の制約
+- 未完了タスクの取得に `limit()` を使わない。パフォーマンス最適化でも全件表示を優先する
+- 型エラーを `as any` などのキャストで消さない。データフローか型境界を直す
+- 依存は必要性が明確な場合だけ追加する
+- 重要な挙動変更では、該当するドキュメントも更新する
 
-## Async / API rules
-- Check request timing, race conditions, and stale responses first.
-- Check server/client payload assumptions before changing UI logic.
-- If the issue may be backend or contract-related, state that clearly before editing multiple layers.
-- Prefer root-cause fixes over adding retries or defensive conditionals everywhere.
+## Firebase と秘密情報
+- テストは Firebase Emulator を使う。ルールテストはデモ用プロジェクト `demo-rertm` で動く（`test:rules` に設定済み）
+- Firebase / GCP / Gemini / Google Calendar のキー、トークン、secret、環境変数の値をコードやファイルに書かない
+- Google Calendar の refresh token はサーバー側だけで扱い、ログやテスト出力に出さない
+- エージェントは git push、デプロイ、rm、git reset、ブランチ削除、本番データに触れる操作を実行しない。人が行う
 
-## Node / backend JS rules
-- Check async sequencing and error propagation first.
-- Check input/output contract boundaries before changing business logic.
-- Prefer localized fixes over broad restructuring.
-- Avoid swallowing errors unless there is a clear handling strategy.
+## 公開安全性
+このリポジトリは公開されている。
+- コミットしない: `.env`、`.env.*`、`*.local`、`.firebaserc`、`web/.firebaserc`、`.firebase/`、`functions/lib/`、ビルド成果物、テスト成果物、エクスポートデータ。`web/.env.test` はダミー値だけなら例外
+- 実ユーザーのタスク、RTM エクスポート、カレンダー予定、実環境のプロジェクト ID、個人名、個人メール、実 URL、ローカル絶対パスをコード、テスト、ドキュメント、ログ例に入れない
+- 公開ドキュメントに内輪の変更経緯や作業途中の事情を書かない
+- 秘密情報らしき文字列を見つけたら値を表示せず、種類と場所だけを伝える
+- 公開安全性や検証漏れを指摘されたら、同種のミスを防ぐ一般ルールをこのファイルに追加する。例に実名、実キー、実 URL、絶対パスを使わない
 
-## TypeScript rules
-- Use types to confirm assumptions, not to hide runtime issues.
-- Avoid papering over bugs with casts like `as any`.
-- Prefer fixing incorrect data flow or type boundaries over weakening types.
-
-## Editing rules
-- Keep changes small and consistent with the existing style.
-- Avoid broad formatting-only edits.
-- Avoid unrelated lint cleanup in bug-fix tasks.
-- Do not add dependencies unless clearly necessary.
-- Do not modify generated files unless required.
-
-## Verification strategy
-Use the narrowest relevant verification first:
-1. narrow test file or test pattern
-2. targeted typecheck or lint for the affected package
-3. affected package build
-4. monorepo-wide verification only if necessary
-
-## Preferred commands
-- Prefer the smallest relevant npm / pnpm / yarn command.
-- If package-scoped scripts exist, use those first.
-- Do not run the largest available workspace-wide verification first unless explicitly requested.
-
-## Response requirements
-For every bug-fix task, end with:
-- confirmed or suspected root cause
-- exact files changed
-- exact commands run
-- what was verified
-- what remains unverified
-- any remaining regression risk
-
-## If the issue is unclear
-When the issue is ambiguous:
-1. identify the user-visible symptom or failing endpoint,
-2. find the owning package/module,
-3. inspect async/state boundaries,
-4. then inspect API contracts and type boundaries if needed.
-
-## Avoid
-- broad component rewrites
-- weakening types to make errors disappear
-- adding retries, timeouts, or guards without root-cause reasoning
-- editing multiple packages without evidence of a shared cause
-
-## Project commands
-Package manager is npm (lockfiles are package-lock.json). Do not use pnpm or yarn.
-
-web/ (Vue / Vite / Pinia / Firebase):
-- Test: `cd web && npm run test:run`
+## 検証
+web/:
 - Lint: `cd web && npm run lint`
-- Typecheck: `cd web && npm run type-check`
-- Build: `cd web && npm run build` (runs test:auth, vue-tsc -b, vite build)
-- Firestore rules (needs Java for the emulator): `cd web && npm run test:rules`
-- Responsive UI: `cd web && npm run test:responsive`
+- 型チェック: `cd web && npm run type-check`
+- テスト: `cd web && npm run test:run`
+- ビルド: `cd web && npm run build`（test:auth、vue-tsc -b、vite build を実行）
+- Firestore ルール（emulator に Java が必要）: `cd web && npm run test:rules`
+- レスポンシブ UI: `cd web && npm run test:responsive`
 
-functions/ (Firebase Cloud Functions):
+functions/:
 - Lint: `cd functions && npm run lint`
-- Test: `cd functions && npm test` (builds, then runs node --test)
+- テスト: `cd functions && npm test`（ビルド後に node --test）
 
-Before reporting a task as done, run lint, typecheck, test and build for every package you touched. All must pass without editing tests to make them pass. `npm run verify` at the repository root runs every gate above except test:rules and test:responsive.
+完了と報告する前に、触ったパッケージの lint、型チェック、テスト、ビルドをすべて通す。テストを書き換えて通すのは禁止。リポジトリ直下の `npm run verify` が test:rules と test:responsive 以外の全ゲートを実行する。firestore.rules を変えたら test:rules、レスポンシブ UI を変えたら test:responsive も実行する。
 
-## Code Review Rules
-レビューの優先順。上から順に見る。指摘には必ず失敗シナリオ（どの入力でどう壊れるか）を付ける。
+コミット前に `git status --short` と `git diff --check` で、意図しない差分、未追跡ファイル、公開に向かない内容がないか確認する。
+
+## バグ修正の報告
+最後に次を書く。
+- 根本原因（確定か推測か）
+- 変更したファイル
+- 実行したコマンド
+- 検証できたこと、未検証のこと
+- 残る回帰リスク
+
+## Git と PR
+- `feature/<topic>` ブランチで作業し、PR 経由で `main` にマージする。`main` に直接コミットしない。開発者は1人で、PR の作成、レビュー、マージも本人が行う
+- コミットメッセージは簡潔な1行の日本語。`Co-Authored-By` は入れない。author / email は GitHub の公開用 noreply に統一する
+- force push と履歴の書き換えはしない
+- push 前のローカルゲート: リポジトリ直下の `npm run verify` と、差分を書いていないレビュアー（Claude の fresh-reviewer エージェントまたは Codex CLI review）によるレビュー。両方通ってから人が push する
+- PR のゲート: GitHub Actions（.github/workflows/ci.yml）が web の lint / type-check / test:run / build、functions の lint / test、Firestore ルールテストを実行する。PR 作成時に Codex の自動レビューが走る。CI が green で、Codex の指摘がすべて修正済みか理由付きで回答済みのときだけマージする
+- ローカル専用ファイル（web/.env.local、.firebaserc、doc/、progress.txt など）は .worktreeinclude に列挙してあり、git worktree にコピーされる
+
+## コードレビュー
+上から順に見る。指摘には必ず失敗シナリオ（どの入力でどう壊れるか）を付ける。
 1. データ破壊: 上書き、削除、移動、マイグレーション、永続化の変更（Firestore のドキュメント構造、firestore.rules、storage.rules の変更を含む）
 2. 認証と権限: 認可の抜け、権限チェックの緩和、セキュリティルールの緩和
 3. 秘密情報の混入: 鍵、トークン、個人情報、実環境 ID、内部 URL のハードコード
 4. テストの改変: 既存テストの削除、期待値の書き換え、スキップの追加
 5. 頼んでいない変更: 依頼範囲外のリファクタ、整形、依存の追加
-スタイルだけの指摘は出さない。失敗シナリオが書けない指摘は出さない。
 
-このリポジトリ固有の観点:
-- 未完了タスクの取得に limit() を付ける変更は、全件表示の要件を壊すので blocker
-- firestore.rules と storage.rules の allow 条件を広げる変更は、理由と対応するルールテストが無ければ blocker
-- 実環境のプロジェクト ID、実ユーザーのデータ、ローカル絶対パスがテストやドキュメントに入ったら blocker
+スタイルだけの指摘と、失敗シナリオが書けない指摘は出さない。
 
-## Current State
-- Branch: work on `feature/<topic>` branches and merge into `main` through a pull request. Nothing is committed directly to `main`. Single developer, so the developer opens, reviews and merges their own PRs. Small single-line Japanese commit messages. No force push, no history rewrite.
-- Gates before push (local): `npm run verify` at the repository root, then a review of the diff by a reviewer that did not write it (Claude fresh-reviewer agent or Codex CLI review). Both must pass before the human pushes.
-- Gates on the pull request: GitHub Actions (.github/workflows/ci.yml) runs web lint / type-check / test:run / build, functions lint / test, and the Firestore rules test. Codex automatic code review runs when the PR is opened. The PR is merged only when CI is green and every Codex finding is either fixed or answered with a reason.
-- Local-only files (web/.env.local, .firebaserc, doc/, progress.txt) are listed in .worktreeinclude so that git worktrees get a copy.
-- Agents must not run git push, deploy, rm, git reset or branch deletion. These are done by a human.
+このリポジトリで blocker として扱うもの:
+- 未完了タスクの取得に `limit()` を付ける変更（全件表示の要件を壊す）
+- firestore.rules と storage.rules の allow 条件を広げる変更で、理由と対応するルールテストが無いもの
+- 実環境のプロジェクト ID、実ユーザーのデータ、ローカル絶対パスがテストやドキュメントに入ったもの
