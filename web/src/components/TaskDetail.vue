@@ -107,6 +107,9 @@ function handleSelectSubtask(taskId: string) {
 }
 
 function handleFocusDetail() {
+  // テキストを選択してコピーする操作ではレイアウトを切り替えない
+  const selection = window.getSelection()
+  if (selection && !selection.isCollapsed && selection.toString() !== '') return
   emit('focusDetail')
 }
 
@@ -977,19 +980,19 @@ const priorityOptions = [
                   {{ note }}
                 </p>
                 <button
-                  @click="handleStartEditNote(index)"
+                  @click.stop="handleStartEditNote(index)"
                   class="text-xs text-gray-500 hover:text-gray-800 flex-shrink-0"
                 >
                   編集
                 </button>
                 <button
-                  @click="handleCopyNote(note)"
+                  @click.stop="handleCopyNote(note)"
                   class="text-xs text-blue-600 hover:text-blue-800 flex-shrink-0"
                 >
                   コピー
                 </button>
                 <button
-                  @click="handleDeleteNote(index)"
+                  @click.stop="handleDeleteNote(index)"
                   class="text-gray-400 hover:text-red-500 flex-shrink-0"
                 >
                   ✕
