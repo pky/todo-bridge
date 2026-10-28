@@ -20,6 +20,8 @@ export interface ClaudeMessagesClient {
   create(params: ClassificationRequestParams): Promise<Anthropic.Beta.BetaMessage>
 }
 
+export const CLAUDE_REQUEST_TIMEOUT_MS = 120000
+export const CLAUDE_MAX_RETRIES = 1
 const BATCH_SIZE = 10
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
@@ -196,15 +198,17 @@ export function parseClassificationResponse(
 
 export function createClaudeMessagesClient(apiKey: string | undefined): ClaudeMessagesClient | null {
   if (!apiKey) return null
-  const sdk = new Anthropic({ apiKey })
+  const sdk = new Anthropic({ apiKey, timeout: CLAUDE_REQUEST_TIMEOUT_MS, maxRetries: CLAUDE_MAX_RETRIES })
   return { create: (params) => sdk.beta.messages.create(params) }
 }
 
 export async function classifyMobileArticles(
   inputs: ClassificationInput[],
-  deps: { client: ClaudeMessagesClient | null; config: ClaudeNewsConfig }
+  deps: { client: ClaudeMessagesClient | null; config: ClaudeNewsConfig; deadlineAt?: number; now?: () => number }
 ): Promise<{ results: Map<string, ClassificationResult>; pendingIds: string[]; requestCount: number }> {
-  const { client, config } = deps
+  const { client, config, deadlineAt } = deps
+  const now = deps.now ?? Date.now
+  const expired = (): boolean => deadlineAt !== undefined && now() >= deadlineAt
   const results = new Map<string, ClassificationResult>()
   const pending: string[] = []
   let requestCount = 0
@@ -214,6 +218,10 @@ export async function classifyMobileArticles(
   // Returns ids that were not classified. Never throws.
   const send = async (batch: ClassificationInput[]): Promise<string[]> => {
     const ids = batch.map((i) => i.id)
+    if (expired()) {
+      pending.push(...ids)
+      return []
+    }
     requestCount++
     try {
       const message = await client.create(buildClassificationRequest(batch, config))
@@ -229,6 +237,10 @@ export async function classifyMobileArticles(
       console.warn(
         `[mobileClaude] request failed name=${err instanceof Error ? err.name : 'unknown'} status=${status ?? 'n/a'} articles=${batch.length}`
       )
+      if (status !== undefined && status >= 400 && status < 500 && status !== 429) {
+        pending.push(...ids)
+        return []
+      }
       return ids
     }
   }
@@ -236,7 +248,7 @@ export async function classifyMobileArticles(
   const missing: string[] = []
   for (let i = 0; i < inputs.length; i += BATCH_SIZE) {
     const batch = inputs.slice(i, i + BATCH_SIZE)
-    if (requestCount >= config.dailyMaxRequests) {
+    if (requestCount >= config.dailyMaxRequests || expired()) {
       pending.push(...batch.map((b) => b.id))
       continue
     }
@@ -246,7 +258,7 @@ export async function classifyMobileArticles(
   const byId = new Map(inputs.map((i) => [i.id, i]))
   for (const id of missing) {
     const article = byId.get(id)
-    if (!article || requestCount >= config.dailyMaxRequests) {
+    if (!article || requestCount >= config.dailyMaxRequests || expired()) {
       pending.push(id)
       continue
     }

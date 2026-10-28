@@ -16,6 +16,7 @@ import {
 import type { RawArticle, NewsArticle, NewsTopic, SourceTier } from './types'
 
 const db = admin.firestore()
+export const MOBILE_CLASSIFICATION_DEADLINE_MS = 240000
 const OFFICIAL_MOBILE_MAX_AGE_DAYS = 14
 const COMMUNITY_MOBILE_MAX_AGE_DAYS = 30
 
@@ -444,6 +445,11 @@ export async function runCollectMobileArticles(): Promise<void> {
   ])
 
   console.log(`[collectMobileArticles] Sources: officialHtml=${officialHtmlArticles.length}, rss=${rssArticles.length}`)
+  const sourceCounts: Record<string, number> = {}
+  for (const a of [...officialHtmlArticles, ...rssArticles]) {
+    sourceCounts[a.sourceName] = (sourceCounts[a.sourceName] ?? 0) + 1
+  }
+  console.log('[collectMobileArticles] source counts', sourceCounts)
   const freshArticles = filterMobileArticlesByFreshness([...officialHtmlArticles, ...rssArticles])
   const allRaw = preferJapaneseAppleNews(deduplicateArticlesByPriority(freshArticles))
   console.log(`[collectMobileArticles] Collected ${allRaw.length} articles after freshness filter + dedup`)
@@ -459,10 +465,11 @@ export async function runCollectMobileArticles(): Promise<void> {
   const { reuse, fresh } = planMobileArticleProcessing(toProcess, existing)
 
   const fetchedAt = admin.firestore.Timestamp.now()
-  const toSave: Array<{ ref: admin.firestore.DocumentReference; data: NewsArticle }> = []
+  const reusedToSave: Array<{ ref: admin.firestore.DocumentReference; data: NewsArticle }> = []
   for (const { raw, source } of reuse) {
-    toSave.push({ ref: collectionRef.doc(), data: buildReusedMobileArticle(raw, source, today, fetchedAt) })
+    reusedToSave.push({ ref: collectionRef.doc(), data: buildReusedMobileArticle(raw, source, today, fetchedAt) })
   }
+  await commitInBatches(reusedToSave)
 
   const CONCURRENCY = 5
   const scraped: Array<{ id: string; raw: RawArticle; content: string }> = []
@@ -486,8 +493,16 @@ export async function runCollectMobileArticles(): Promise<void> {
   if (!client) console.error('[collectMobileArticles] ANTHROPIC_API_KEY is not set')
   const config = getClaudeNewsConfig(process.env)
   const inputs = scraped.map(s => buildClassificationInput(s.id, s.raw, s.content))
-  const { results, requestCount } = await classifyMobileArticles(inputs, { client, config })
+  const { results, pendingIds, requestCount } = await classifyMobileArticles(inputs, {
+    client,
+    config,
+    deadlineAt: Date.now() + MOBILE_CLASSIFICATION_DEADLINE_MS,
+  })
+  if (pendingIds.length > 0) {
+    console.error(`[collectMobileArticles] classification pending count=${pendingIds.length}`)
+  }
 
+  const toSave: Array<{ ref: admin.firestore.DocumentReference; data: NewsArticle }> = []
   for (const s of scraped) {
     toSave.push({
       ref: collectionRef.doc(s.id),
