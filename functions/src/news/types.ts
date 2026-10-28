@@ -1,5 +1,6 @@
 // functions/src/news/types.ts
 import * as admin from 'firebase-admin'
+import type { MobileSummary } from './mobileClaudeClassifier'
 
 export type NewsTopic = 'ai' | 'mobile'
 export type NewsSource = 'hn' | 'reddit' | 'rss' | 'github' | 'official'
@@ -37,6 +38,9 @@ export interface NewsArticle {
   actionType?: ActionType
   importantLevel?: ImportantLevel
   requiredByDate?: string
+  classificationStatus?: 'done' | 'pending'
+  inScope?: boolean
+  mobileSummary?: MobileSummary
   score: number | null
   publishedAt: admin.firestore.Timestamp
   fetchedAt: admin.firestore.Timestamp

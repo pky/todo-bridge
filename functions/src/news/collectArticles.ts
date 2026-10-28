@@ -6,6 +6,13 @@ import { fetchGitHubTrending } from './fetchers/githubTrendingFetcher'
 import { fetchOfficialMobileHtmlArticles } from './fetchers/mobileOfficialFetcher'
 import { fetchMobileRssArticles } from './fetchers/mobileRssFetcher'
 import { scrapeArticle } from './scraper'
+import {
+  classifyMobileArticles,
+  createClaudeMessagesClient,
+  getClaudeNewsConfig,
+  type ClassificationInput,
+  type ClassificationResult,
+} from './mobileClaudeClassifier'
 import type { RawArticle, NewsArticle, NewsTopic, SourceTier } from './types'
 
 const db = admin.firestore()
@@ -200,6 +207,11 @@ async function saveArticlesForTopic(topic: NewsTopic, rawArticles: RawArticle[])
 
   console.log(`[collectArticles:${topic}] Saved ${newCount} new articles, skipped ${skippedCount} already saved`)
 
+  await cleanupOldArticles(topic)
+}
+
+async function cleanupOldArticles(topic: NewsTopic): Promise<void> {
+  const collectionRef = db.collection(`topics/${topic}/articles`)
   try {
     const retentionDays = 14
     const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000)
@@ -247,6 +259,182 @@ export async function runCollectArticles(): Promise<void> {
   await saveArticlesForTopic('ai', allRaw)
 }
 
+const APPLE_NEWS_HOST = 'developer.apple.com'
+const CLASSIFICATION_TEXT_LIMIT = 5000
+const FIRESTORE_IN_LIMIT = 30
+const BATCH_LIMIT = 500
+
+function parseAppleNewsUrl(url: string): { id: string; isJapanese: boolean } | null {
+  try {
+    const u = new URL(url)
+    if (u.hostname !== APPLE_NEWS_HOST) return null
+    const isJapanese = u.pathname.startsWith('/jp/news')
+    if (!isJapanese && !u.pathname.startsWith('/news')) return null
+    const id = u.searchParams.get('id')
+    return id ? { id, isJapanese } : null
+  } catch {
+    return null
+  }
+}
+
+export function getAppleNewsId(url: string): string | null {
+  return parseAppleNewsUrl(url)?.id ?? null
+}
+
+export function getAppleNewsAlternateUrls(url: string): string[] {
+  const id = getAppleNewsId(url)
+  if (!id) return [url]
+  const query = `?id=${encodeURIComponent(id)}`
+  return [
+    `https://${APPLE_NEWS_HOST}/jp/news/${query}`,
+    `https://${APPLE_NEWS_HOST}/news/${query}`,
+  ]
+}
+
+export function preferJapaneseAppleNews(articles: RawArticle[]): RawArticle[] {
+  const japaneseIds = new Set<string>()
+  for (const a of articles) {
+    const parsed = parseAppleNewsUrl(a.url)
+    if (parsed?.isJapanese) japaneseIds.add(parsed.id)
+  }
+  return articles.filter((a) => {
+    const parsed = parseAppleNewsUrl(a.url)
+    return !(parsed && !parsed.isJapanese && japaneseIds.has(parsed.id))
+  })
+}
+
+function getMobileMatchKey(url: string): string {
+  const id = getAppleNewsId(url)
+  return id ? `apple:${id}` : normalizeUrl(url)
+}
+
+export function planMobileArticleProcessing(
+  raws: RawArticle[],
+  existing: NewsArticle[]
+): { reuse: Array<{ raw: RawArticle; source: NewsArticle }>; fresh: RawArticle[] } {
+  const doneByKey = new Map<string, NewsArticle>()
+  for (const a of existing) {
+    if (a.classificationStatus !== 'done') continue
+    const key = getMobileMatchKey(a.url)
+    if (!doneByKey.has(key)) doneByKey.set(key, a)
+  }
+  const reuse: Array<{ raw: RawArticle; source: NewsArticle }> = []
+  const fresh: RawArticle[] = []
+  for (const raw of raws) {
+    const source = doneByKey.get(getMobileMatchKey(raw.url))
+    if (source) reuse.push({ raw, source })
+    else fresh.push(raw)
+  }
+  return { reuse, fresh }
+}
+
+export function buildClassificationInput(id: string, raw: RawArticle, content: string): ClassificationInput {
+  return {
+    id,
+    title: raw.title,
+    sourceName: raw.sourceName,
+    publishedDate: raw.publishedAt.toISOString().slice(0, 10),
+    text: (content || raw.description).slice(0, CLASSIFICATION_TEXT_LIMIT),
+  }
+}
+
+function buildMobileBase(raw: RawArticle, today: string, fetchedAt: admin.firestore.Timestamp) {
+  return {
+    title: raw.title,
+    description: raw.description,
+    url: raw.url,
+    thumbnailUrl: raw.thumbnailUrl,
+    topic: 'mobile' as const,
+    source: raw.source,
+    sourceName: raw.sourceName,
+    ...(raw.sourceTier ? { sourceTier: raw.sourceTier } : {}),
+    ...(typeof raw.isOfficial === 'boolean' ? { isOfficial: raw.isOfficial } : {}),
+    score: raw.score,
+    publishedAt: admin.firestore.Timestamp.fromDate(raw.publishedAt),
+    fetchedAt,
+    date: today,
+  }
+}
+
+export function buildClassifiedMobileArticle(
+  raw: RawArticle,
+  content: string,
+  result: ClassificationResult | null,
+  today: string,
+  fetchedAt: admin.firestore.Timestamp
+): NewsArticle {
+  const base = buildMobileBase(raw, today, fetchedAt)
+  const contentField = content ? { content } : {}
+  const platform = result?.platform ?? raw.platform
+  const platformField = platform ? { platform } : {}
+  if (!result) {
+    return { ...base, ...contentField, ...platformField, tags: [], classificationStatus: 'pending' }
+  }
+  const inScope = result.category !== 'out_of_scope'
+  return {
+    ...base,
+    ...contentField,
+    ...platformField,
+    titleJa: result.titleJa,
+    summaryJa: result.summary.overview,
+    tags: [],
+    actionRequired: result.actionRequired,
+    actionType: result.category === 'out_of_scope' ? 'other' : result.category,
+    importantLevel: result.importantLevel,
+    ...(result.requiredByDate ? { requiredByDate: result.requiredByDate } : {}),
+    classificationStatus: 'done',
+    inScope,
+    mobileSummary: result.summary,
+  }
+}
+
+export function buildReusedMobileArticle(
+  raw: RawArticle,
+  source: NewsArticle,
+  today: string,
+  fetchedAt: admin.firestore.Timestamp
+): NewsArticle {
+  const base = buildMobileBase(raw, today, fetchedAt)
+  return {
+    ...base,
+    thumbnailUrl: raw.thumbnailUrl ?? source.thumbnailUrl,
+    ...(source.content ? { content: source.content } : {}),
+    ...(source.titleJa !== undefined ? { titleJa: source.titleJa } : {}),
+    ...(source.summaryJa !== undefined ? { summaryJa: source.summaryJa } : {}),
+    tags: source.tags ?? [],
+    ...(source.platform ? { platform: source.platform } : {}),
+    ...(typeof source.actionRequired === 'boolean' ? { actionRequired: source.actionRequired } : {}),
+    ...(source.actionType ? { actionType: source.actionType } : {}),
+    ...(source.importantLevel ? { importantLevel: source.importantLevel } : {}),
+    ...(source.requiredByDate ? { requiredByDate: source.requiredByDate } : {}),
+    classificationStatus: 'done',
+    ...(typeof source.inScope === 'boolean' ? { inScope: source.inScope } : {}),
+    ...(source.mobileSummary ? { mobileSummary: source.mobileSummary } : {}),
+  }
+}
+
+async function fetchExistingMobileArticles(urls: string[]): Promise<NewsArticle[]> {
+  const collectionRef = db.collection('topics/mobile/articles')
+  const unique = Array.from(new Set(urls))
+  const found: NewsArticle[] = []
+  for (let i = 0; i < unique.length; i += FIRESTORE_IN_LIMIT) {
+    const chunk = unique.slice(i, i + FIRESTORE_IN_LIMIT)
+    const snap = await collectionRef.where('url', 'in', chunk).get()
+    for (const d of snap.docs) found.push(d.data() as NewsArticle)
+  }
+  return found
+}
+
+async function commitInBatches(
+  items: Array<{ ref: admin.firestore.DocumentReference; data: NewsArticle }>
+): Promise<void> {
+  for (let i = 0; i < items.length; i += BATCH_LIMIT) {
+    const batch = db.batch()
+    for (const { ref, data } of items.slice(i, i + BATCH_LIMIT)) batch.set(ref, data)
+    await batch.commit()
+  }
+}
+
 export async function runCollectMobileArticles(): Promise<void> {
   console.log('[collectMobileArticles] Starting...')
 
@@ -257,8 +445,60 @@ export async function runCollectMobileArticles(): Promise<void> {
 
   console.log(`[collectMobileArticles] Sources: officialHtml=${officialHtmlArticles.length}, rss=${rssArticles.length}`)
   const freshArticles = filterMobileArticlesByFreshness([...officialHtmlArticles, ...rssArticles])
-  const allRaw = deduplicateArticlesByPriority(freshArticles)
+  const allRaw = preferJapaneseAppleNews(deduplicateArticlesByPriority(freshArticles))
   console.log(`[collectMobileArticles] Collected ${allRaw.length} articles after freshness filter + dedup`)
 
-  await saveArticlesForTopic('mobile', allRaw)
+  const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const collectionRef = db.collection('topics/mobile/articles')
+  const todaySnap = await collectionRef.where('date', '==', today).get()
+  const processedUrls = new Set(todaySnap.docs.map(d => (d.data() as NewsArticle).url))
+  const toProcess = allRaw.filter(raw => !processedUrls.has(raw.url))
+
+  const lookupUrls = toProcess.flatMap(raw => [raw.url, ...getAppleNewsAlternateUrls(raw.url)])
+  const existing = await fetchExistingMobileArticles(lookupUrls)
+  const { reuse, fresh } = planMobileArticleProcessing(toProcess, existing)
+
+  const fetchedAt = admin.firestore.Timestamp.now()
+  const toSave: Array<{ ref: admin.firestore.DocumentReference; data: NewsArticle }> = []
+  for (const { raw, source } of reuse) {
+    toSave.push({ ref: collectionRef.doc(), data: buildReusedMobileArticle(raw, source, today, fetchedAt) })
+  }
+
+  const CONCURRENCY = 5
+  const scraped: Array<{ id: string; raw: RawArticle; content: string }> = []
+  for (let i = 0; i < fresh.length; i += CONCURRENCY) {
+    const chunk = fresh.slice(i, i + CONCURRENCY)
+    const done = await Promise.all(chunk.map(async (raw) => {
+      const { ogImage, content } = await scrapeArticle(raw.url).catch(err => {
+        console.warn(`[collectArticles:mobile] Scrape warning for ${raw.url}:`, err.message)
+        return { ogImage: null, content: '' }
+      })
+      return {
+        id: collectionRef.doc().id,
+        raw: { ...raw, thumbnailUrl: raw.thumbnailUrl ?? ogImage },
+        content,
+      }
+    }))
+    scraped.push(...done)
+  }
+
+  const client = createClaudeMessagesClient(process.env.ANTHROPIC_API_KEY)
+  if (!client) console.error('[collectMobileArticles] ANTHROPIC_API_KEY is not set')
+  const config = getClaudeNewsConfig(process.env)
+  const inputs = scraped.map(s => buildClassificationInput(s.id, s.raw, s.content))
+  const { results, requestCount } = await classifyMobileArticles(inputs, { client, config })
+
+  for (const s of scraped) {
+    toSave.push({
+      ref: collectionRef.doc(s.id),
+      data: buildClassifiedMobileArticle(s.raw, s.content, results.get(s.id) ?? null, today, fetchedAt),
+    })
+  }
+  await commitInBatches(toSave)
+
+  console.log(
+    `[collectMobileArticles] reused=${reuse.length} fresh=${fresh.length} classified=${results.size} pending=${fresh.length - results.size} requestCount=${requestCount}`
+  )
+
+  await cleanupOldArticles('mobile')
 }
