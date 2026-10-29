@@ -22,8 +22,8 @@ import { useAuthStore } from './auth'
 import { useListsStore } from './lists'
 import { useTasksStore } from './tasks'
 import { useSpaceStore, buildPersonalSpaceId } from './space'
-import { selectDisplayableAiNews } from '@/utils/aiNewsDisplay'
-import { selectDisplayableMobileNews } from '@/utils/mobileNewsDisplay'
+import { filterEligibleAiNews, selectDisplayableAiNews } from '@/utils/aiNewsDisplay'
+import { filterEligibleMobileNews, selectDisplayableMobileNews } from '@/utils/mobileNewsDisplay'
 import type {
   NewsArticle,
   NewsPreferences,
@@ -236,9 +236,9 @@ export const useNewsStore = defineStore('news', () => {
     })
 
     if (topic === 'mobile') {
-      // 対象外と分類待ちの記事は共有記事でも表示しない。
+      // 対象外と分類待ちの記事は共有記事でも表示しない。件数の上限は利用者の除外条件を当てた後に掛ける。
       const mobileDocsById = new Map(sortedArticleDocs.map((articleDoc) => [articleDoc.id, articleDoc]))
-      const displayableMobile = selectDisplayableMobileNews(
+      const displayableMobile = filterEligibleMobileNews(
         sortedArticleDocs.map((articleDoc) => ({ id: articleDoc.id, ...(articleDoc.data() as Record<string, unknown>) }) as NewsArticle)
       )
       if (displayableMobile.length === 0) return { latestDate: null, articleDocs: [] as typeof sortedArticleDocs }
@@ -250,8 +250,9 @@ export const useNewsStore = defineStore('news', () => {
     if (topic !== 'ai') return { latestDate, articleDocs: sortedArticleDocs }
 
     // 最新日の記事は問い合わせではなくクライアント側で絞る（feedEligible の where は複合インデックスが要る）。
+    // 件数の上限は利用者の除外条件を当てた後に掛ける。
     const docsById = new Map(sortedArticleDocs.map((articleDoc) => [articleDoc.id, articleDoc]))
-    const displayable = selectDisplayableAiNews(
+    const displayable = filterEligibleAiNews(
       sortedArticleDocs.map((articleDoc) => ({ id: articleDoc.id, ...(articleDoc.data() as Record<string, unknown>) }) as NewsArticle),
       { shared: true }
     )
@@ -423,7 +424,10 @@ export const useNewsStore = defineStore('news', () => {
             }
             if (articles.value.length > 0) return
 
-            const sharedArticles = await resolveArticleDocs(sharedFeed.articleDocs)
+            const resolvedSharedArticles = await resolveArticleDocs(sharedFeed.articleDocs)
+            const sharedArticles = topic === 'ai'
+              ? selectDisplayableAiNews(resolvedSharedArticles, { shared: true })
+              : topic === 'mobile' ? selectDisplayableMobileNews(resolvedSharedArticles) : resolvedSharedArticles
             if (loadSequence !== activeLoadSequence || articles.value.length > 0 || sharedArticles.length === 0) {
               return
             }
@@ -516,7 +520,7 @@ export const useNewsStore = defineStore('news', () => {
         .filter(article => !excludedUrls.has(article.url) || shouldKeepVisibleAfterClick(article, topic))
       const visibleArticles = topic === 'ai'
         ? selectDisplayableAiNews(unfilteredArticles, { shared: isSharedFallback })
-        : unfilteredArticles
+        : topic === 'mobile' && isSharedFallback ? selectDisplayableMobileNews(unfilteredArticles) : unfilteredArticles
 
       if (loadSequence !== activeLoadSequence) return
       articles.value = visibleArticles

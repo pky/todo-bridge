@@ -452,7 +452,12 @@ export function preferJapaneseAppleNews(articles: RawArticle[]): RawArticle[] {
 
 function getMobileMatchKey(url: string): string {
   const id = getAppleNewsId(url)
-  return id ? `apple:${id}` : normalizeUrl(url)
+  if (id) return `apple:${id}`
+  // リリースノートは同じページの版をフラグメントで区別するため、キーに残す
+  const hashIndex = url.indexOf('#')
+  return hashIndex >= 0 && hashIndex < url.length - 1
+    ? `${normalizeUrl(url)}${url.slice(hashIndex)}`
+    : normalizeUrl(url)
 }
 
 export function planMobileArticleProcessing(
