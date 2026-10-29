@@ -38,7 +38,12 @@ export function toWidgetArticleDto(doc: FeedDoc): WidgetArticleDto {
   }
   const summary = typeof doc.summaryJa === 'string' ? doc.summaryJa.trim() : ''
   if (summary) article.summary = summary
-  if (typeof doc.url === 'string') {
+  if (
+    typeof doc.url === 'string'
+    && /^https:\/\//i.test(doc.url)
+    && !/[\s\p{White_Space}]/u.test(doc.url)
+    && !Array.from(doc.url).some((char) => char.charCodeAt(0) <= 0x20 || char.charCodeAt(0) === 0x7f)
+  ) {
     try {
       const url = new URL(doc.url)
       if (url.protocol === 'https:') article.url = doc.url
