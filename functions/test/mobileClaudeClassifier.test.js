@@ -49,7 +49,7 @@ const echoAll = (params) => message(idsOf(params).map((id) => item(id)))
 
 test('getClaudeNewsConfig は既定値を返す', () => {
   assert.deepEqual(getClaudeNewsConfig({}), {
-    model: 'claude-opus-5-5', effort: 'low', dailyMaxRequests: 20,
+    model: 'claude-sonnet-5-5', effort: 'low', dailyMaxRequests: 5,
   })
 })
 
@@ -62,7 +62,7 @@ test('getClaudeNewsConfig は環境変数で上書きできる', () => {
     }),
     { model: 'claude-sonnet-5-5', effort: 'medium', dailyMaxRequests: 5 }
   )
-  assert.equal(getClaudeNewsConfig({ CLAUDE_NEWS_DAILY_MAX_REQUESTS: 'abc' }).dailyMaxRequests, 20)
+  assert.equal(getClaudeNewsConfig({ CLAUDE_NEWS_DAILY_MAX_REQUESTS: 'abc' }).dailyMaxRequests, 5)
 })
 
 test('buildClassificationRequest はモデル、effort、フォールバック、JSON schema を設定する', () => {

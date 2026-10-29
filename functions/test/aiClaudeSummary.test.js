@@ -42,7 +42,7 @@ const echoAll = (params) => message(idsOf(params).map((id) => item(id)))
 
 test('getAiSummaryConfig は既定値を返す', () => {
   assert.deepEqual(getAiSummaryConfig({}), {
-    model: 'claude-sonnet-5-5', effort: 'low', dailyMaxRequests: 10,
+    model: 'claude-sonnet-5-5', effort: 'low', dailyMaxRequests: 6,
   })
 })
 
