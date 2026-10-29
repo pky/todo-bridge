@@ -57,7 +57,12 @@ export async function runClaudeBatches<TInput extends { id: string }, TResult ex
       }
     }
     const remaining = deadlineAt === undefined ? undefined : deadlineAt - now()
-    const signal = remaining === undefined ? undefined : AbortSignal.timeout(Math.max(remaining, 1))
+    // AbortSignal.timeout のタイマーはイベントループを維持しないため、締め切りまで確実に発火するタイマーを自前で持つ
+    const controller = remaining === undefined ? undefined : new AbortController()
+    const abortTimer = controller === undefined || remaining === undefined
+      ? undefined
+      : setTimeout(() => controller.abort(new DOMException('deadline exceeded', 'TimeoutError')), Math.max(remaining, 1))
+    const signal = controller?.signal
     requestCount++
     try {
       const message = await client.create(deps.buildRequest(batch), signal ? { signal } : undefined)
@@ -83,6 +88,8 @@ export async function runClaudeBatches<TInput extends { id: string }, TResult ex
         return []
       }
       return ids
+    } finally {
+      if (abortTimer !== undefined) clearTimeout(abortTimer)
     }
   }
 
