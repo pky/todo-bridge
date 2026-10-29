@@ -186,3 +186,38 @@ test('url追加後もdtoVersionは1、revisionは記事IDだけで決まり、�
     imageUrl: 'https://example.com/a1.png',
   })
 })
+
+test('urlに前後の空白・制御文字、途中の改行、不正な形式が含まれるときはurlキーを返さず他の項目は従来どおり', () => {
+  const { toWidgetArticleDto } = mod()
+  const malformedUrls = [
+    ['先頭の空白', ' https://example.com/a'],
+    ['末尾の空白', 'https://example.com/a '],
+    ['先頭のTAB', '\thttps://example.com/a'],
+    ['末尾の改行', 'https://example.com/a\n'],
+    ['先頭のNUL', '\u0000https://example.com/a'],
+    ['先頭のU+0001', '\u0001https://example.com/a'],
+    ['スキーム途中の改行', 'ht\ntps://example.com/a'],
+    ['ホスト途中の改行', 'https://exa\nmple.com/a'],
+    ['スラッシュの欠落', 'https:example.com/a'],
+    ['バックスラッシュ形式', 'https:\\\\example.com/a'],
+    ['URL中の空白', 'https://example.com/a b'],
+  ]
+  for (const [label, url] of malformedUrls) {
+    const result = toWidgetArticleDto(doc({ url }))
+    assert.equal('url' in result, false, `url=${label}`)
+    assert.equal(result.id, 'a1', `url=${label}`)
+    assert.equal(result.title, '架空の記事', `url=${label}`)
+    assert.equal(result.sourceName, '架空のフィード', `url=${label}`)
+  }
+})
+
+test('大文字スキームのHTTPS URLは制御文字や空白が無ければそのままurlに入る', () => {
+  const { toWidgetArticleDto } = mod()
+  assert.equal(toWidgetArticleDto(doc({ url: 'HTTPS://example.com/a' })).url, 'HTTPS://example.com/a')
+})
+
+test('非ASCII文字を含むhttps URLは過剰に除外せずそのままurlに入る', () => {
+  const { toWidgetArticleDto } = mod()
+  const url = 'https://example.com/記事?q=日本語'
+  assert.equal(toWidgetArticleDto(doc({ url })).url, url)
+})
