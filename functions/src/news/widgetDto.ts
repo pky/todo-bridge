@@ -10,6 +10,7 @@ export interface WidgetArticleDto {
   publishedAt: string | null
   summary?: string
   imageUrl?: string
+  url?: string
 }
 
 export interface WidgetNewsResponse {
@@ -37,6 +38,14 @@ export function toWidgetArticleDto(doc: FeedDoc): WidgetArticleDto {
   }
   const summary = typeof doc.summaryJa === 'string' ? doc.summaryJa.trim() : ''
   if (summary) article.summary = summary
+  if (typeof doc.url === 'string') {
+    try {
+      const url = new URL(doc.url)
+      if (url.protocol === 'https:') article.url = doc.url
+    } catch {
+      // 不正な原文URLは返さない。
+    }
+  }
   if (doc.source !== 'github' && typeof doc.thumbnailUrl === 'string') {
     try {
       const url = new URL(doc.thumbnailUrl)
