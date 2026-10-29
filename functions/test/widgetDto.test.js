@@ -221,3 +221,21 @@ test('非ASCII文字を含むhttps URLは過剰に除外せずそのままurlに
   const url = 'https://example.com/記事?q=日本語'
   assert.equal(toWidgetArticleDto(doc({ url })).url, url)
 })
+
+const c1ControlUrls = [
+  ['パス途中のU+0080', 'https://example.com/a\u0080b'],
+  ['パス途中のU+0090', 'https://example.com/a\u0090b'],
+  ['パス途中のU+009F', 'https://example.com/a\u009fb'],
+  ['ホスト途中のU+0090', 'https://exa\u0090mple.com/a'],
+  ['末尾のU+009F', 'https://example.com/a\u009f'],
+]
+for (const [label, url] of c1ControlUrls) {
+  test(`C1制御文字を含むurlはurlキーを返さず他の項目は従来どおり: ${label}`, () => {
+    const { toWidgetArticleDto } = mod()
+    const result = toWidgetArticleDto(doc({ url }))
+    assert.equal('url' in result, false, `url=${label}`)
+    assert.equal(result.id, 'a1', `url=${label}`)
+    assert.equal(result.title, '架空の記事', `url=${label}`)
+    assert.equal(result.sourceName, '架空のフィード', `url=${label}`)
+  })
+}
