@@ -420,7 +420,7 @@ test('同じURLの v2 生成結果があればClaudeを呼ばずに再利用す�
   const current = article('reuse', { title: 'Fictional English article' })
   const result = await generate([current], {
     reusable: [confirmed('previous', {
-      url: current.url, titleJa: '再利用するタイトル', summaryJa: '再利用する要約です', summarySource: 'description',
+      url: current.url, title: current.title, titleJa: '再利用するタイトル', summaryJa: '再利用する要約です', summarySource: 'description',
       summarizedAt: Date.now() - 2 * DAY_MS,
     })],
   })
