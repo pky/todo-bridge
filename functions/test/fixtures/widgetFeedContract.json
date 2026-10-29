@@ -1,0 +1,1653 @@
+{
+  "scenarios": [
+    {
+      "name": "個別フィードが共有より新しい日は displayScore 降順で、非表示とクリック済みURLを除く",
+      "topic": "ai",
+      "personalDate": "2026-03-15",
+      "personalDocs": [
+        {
+          "id": "p1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p1",
+          "date": "2026-03-14",
+          "displayScore": 30
+        },
+        {
+          "id": "p2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p2",
+          "date": "2026-03-14",
+          "displayScore": 90
+        },
+        {
+          "id": "p3",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p3",
+          "date": "2026-03-14",
+          "displayScore": 60
+        },
+        {
+          "id": "p4",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p4",
+          "date": "2026-03-14",
+          "displayScore": 80
+        },
+        {
+          "id": "p5",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p5",
+          "date": "2026-03-14",
+          "displayScore": 70
+        }
+      ],
+      "sharedDate": "2026-03-14",
+      "sharedDocs": [
+        {
+          "id": "s1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/s1",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 99
+        },
+        {
+          "id": "s2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/s2",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 98
+        }
+      ],
+      "interactions": [
+        {
+          "id": "ai_p4",
+          "articleId": "p4",
+          "url": "https://example.com/p4",
+          "dismissed": true,
+          "topic": "ai"
+        },
+        {
+          "id": "ai_p5",
+          "articleId": "p5",
+          "topic": "ai",
+          "url": "https://example.com/p5",
+          "clickedAt": {
+            "seconds": 1
+          }
+        }
+      ],
+      "expected": {
+        "feedDate": "2026-03-15",
+        "isSharedFallback": false,
+        "articleIds": [
+          "p2",
+          "p3",
+          "p1"
+        ]
+      }
+    },
+    {
+      "name": "aiの共有が新しい日は feedEligible の記事だけを sharedScore 降順で、除外後に20件までにする",
+      "topic": "ai",
+      "personalDate": "2026-03-14",
+      "personalDocs": [
+        {
+          "id": "p1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p1",
+          "date": "2026-03-14",
+          "displayScore": 50
+        },
+        {
+          "id": "p2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p2",
+          "date": "2026-03-14",
+          "displayScore": 50
+        }
+      ],
+      "sharedDate": "2026-03-15",
+      "sharedDocs": [
+        {
+          "id": "e0",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e0",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 0
+        },
+        {
+          "id": "e1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e1",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 1
+        },
+        {
+          "id": "e2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e2",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 2
+        },
+        {
+          "id": "e3",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e3",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 3
+        },
+        {
+          "id": "e4",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e4",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 4
+        },
+        {
+          "id": "e5",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e5",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 5
+        },
+        {
+          "id": "e6",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e6",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 6
+        },
+        {
+          "id": "e7",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e7",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 7
+        },
+        {
+          "id": "e8",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e8",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 8
+        },
+        {
+          "id": "e9",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e9",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 9
+        },
+        {
+          "id": "e10",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e10",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 10
+        },
+        {
+          "id": "e11",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e11",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 11
+        },
+        {
+          "id": "e12",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e12",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 12
+        },
+        {
+          "id": "e13",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e13",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 13
+        },
+        {
+          "id": "e14",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e14",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 14
+        },
+        {
+          "id": "e15",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e15",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 15
+        },
+        {
+          "id": "e16",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e16",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 16
+        },
+        {
+          "id": "e17",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e17",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 17
+        },
+        {
+          "id": "e18",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e18",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 18
+        },
+        {
+          "id": "e19",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e19",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 19
+        },
+        {
+          "id": "e20",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/e20",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 20
+        },
+        {
+          "id": "plain-high",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/plain-high",
+          "date": "2026-03-14",
+          "sharedScore": 999
+        },
+        {
+          "id": "flag-false",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/flag-false",
+          "date": "2026-03-14",
+          "feedEligible": false,
+          "sharedScore": 998
+        },
+        {
+          "id": "empty-summary",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/empty-summary",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 500
+        }
+      ],
+      "interactions": [
+        {
+          "id": "ai_e20",
+          "articleId": "e20",
+          "url": "https://example.com/e20",
+          "dismissed": true,
+          "topic": "ai"
+        }
+      ],
+      "expected": {
+        "feedDate": "2026-03-15",
+        "isSharedFallback": true,
+        "articleIds": [
+          "e19",
+          "e18",
+          "e17",
+          "e16",
+          "e15",
+          "e14",
+          "e13",
+          "e12",
+          "e11",
+          "e10",
+          "e9",
+          "e8",
+          "e7",
+          "e6",
+          "e5",
+          "e4",
+          "e3",
+          "e2",
+          "e1",
+          "e0"
+        ]
+      }
+    },
+    {
+      "name": "共有が新しくても除外後に0件で個別フィードに残りがあれば個別フィードを表示する",
+      "topic": "ai",
+      "personalDate": "2026-03-14",
+      "personalDocs": [
+        {
+          "id": "p1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p1",
+          "date": "2026-03-14",
+          "displayScore": 20
+        },
+        {
+          "id": "p2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p2",
+          "date": "2026-03-14",
+          "displayScore": 10
+        },
+        {
+          "id": "p3",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p3",
+          "date": "2026-03-14",
+          "displayScore": 50
+        }
+      ],
+      "sharedDate": "2026-03-15",
+      "sharedDocs": [
+        {
+          "id": "s1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/s1",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 90
+        },
+        {
+          "id": "s2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/s2",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 80
+        }
+      ],
+      "interactions": [
+        {
+          "id": "ai_s1",
+          "articleId": "s1",
+          "url": "https://example.com/s1",
+          "dismissed": true,
+          "topic": "ai"
+        },
+        {
+          "id": "ai_s2",
+          "articleId": "s2",
+          "url": "https://example.com/s2",
+          "dismissed": true,
+          "topic": "ai"
+        },
+        {
+          "id": "ai_p3",
+          "articleId": "p3",
+          "url": "https://example.com/p3",
+          "dismissed": true,
+          "topic": "ai"
+        }
+      ],
+      "expected": {
+        "feedDate": "2026-03-14",
+        "isSharedFallback": false,
+        "articleIds": [
+          "p1",
+          "p2"
+        ]
+      }
+    },
+    {
+      "name": "共有も個別フィードも除外後に0件なら共有を表示扱いのまま空にする",
+      "topic": "ai",
+      "personalDate": "2026-03-14",
+      "personalDocs": [
+        {
+          "id": "p1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p1",
+          "date": "2026-03-14",
+          "displayScore": 50
+        },
+        {
+          "id": "p2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p2",
+          "date": "2026-03-14",
+          "displayScore": 50
+        }
+      ],
+      "sharedDate": "2026-03-15",
+      "sharedDocs": [
+        {
+          "id": "s1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/s1",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 90
+        },
+        {
+          "id": "s2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/s2",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 80
+        }
+      ],
+      "interactions": [
+        {
+          "id": "ai_s1",
+          "articleId": "s1",
+          "url": "https://example.com/s1",
+          "dismissed": true,
+          "topic": "ai"
+        },
+        {
+          "id": "ai_s2",
+          "articleId": "s2",
+          "url": "https://example.com/s2",
+          "dismissed": true,
+          "topic": "ai"
+        },
+        {
+          "id": "ai_p2",
+          "articleId": "p2",
+          "url": "https://example.com/p2",
+          "dismissed": true,
+          "topic": "ai"
+        },
+        {
+          "id": "ai_p1",
+          "articleId": "p1",
+          "topic": "ai",
+          "url": "https://example.com/p1",
+          "clickedAt": {
+            "seconds": 1
+          }
+        }
+      ],
+      "expected": {
+        "feedDate": "2026-03-15",
+        "isSharedFallback": true,
+        "articleIds": []
+      }
+    },
+    {
+      "name": "shownCount が2以上の記録のURLは除き、1回の記録は残す",
+      "topic": "ai",
+      "personalDate": "2026-03-15",
+      "personalDocs": [
+        {
+          "id": "p1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p1",
+          "date": "2026-03-14",
+          "displayScore": 80
+        },
+        {
+          "id": "p2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p2",
+          "date": "2026-03-14",
+          "displayScore": 70
+        },
+        {
+          "id": "p3",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p3",
+          "date": "2026-03-14",
+          "displayScore": 60
+        }
+      ],
+      "sharedDate": null,
+      "sharedDocs": [],
+      "interactions": [
+        {
+          "id": "ai_p2",
+          "articleId": "p2",
+          "topic": "ai",
+          "url": "https://example.com/p2",
+          "shownCount": 2
+        },
+        {
+          "id": "ai_p3",
+          "articleId": "p3",
+          "topic": "ai",
+          "url": "https://example.com/p3",
+          "shownCount": 1
+        }
+      ],
+      "expected": {
+        "feedDate": "2026-03-15",
+        "isSharedFallback": false,
+        "articleIds": [
+          "p1",
+          "p3"
+        ]
+      }
+    },
+    {
+      "name": "topic の無い記録は ai の個別フィードに効く",
+      "topic": "ai",
+      "personalDate": "2026-03-15",
+      "personalDocs": [
+        {
+          "id": "x1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/x1",
+          "date": "2026-03-14",
+          "displayScore": 60
+        },
+        {
+          "id": "x2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/x2",
+          "date": "2026-03-14",
+          "displayScore": 50
+        }
+      ],
+      "sharedDate": null,
+      "sharedDocs": [],
+      "interactions": [
+        {
+          "id": "x_x1",
+          "articleId": "x1",
+          "url": "https://example.com/x1",
+          "dismissed": true
+        }
+      ],
+      "expected": {
+        "feedDate": "2026-03-15",
+        "isSharedFallback": false,
+        "articleIds": [
+          "x2"
+        ]
+      }
+    },
+    {
+      "name": "topic の無い記録は mobile の個別フィードに効かない",
+      "topic": "mobile",
+      "personalDate": "2026-03-15",
+      "personalDocs": [
+        {
+          "id": "x1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/x1",
+          "date": "2026-03-14",
+          "displayScore": 60,
+          "topic": "mobile"
+        },
+        {
+          "id": "x2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/x2",
+          "date": "2026-03-14",
+          "displayScore": 50,
+          "topic": "mobile"
+        }
+      ],
+      "sharedDate": null,
+      "sharedDocs": [],
+      "interactions": [
+        {
+          "id": "x_x1",
+          "articleId": "x1",
+          "url": "https://example.com/x1",
+          "dismissed": true
+        }
+      ],
+      "expected": {
+        "feedDate": "2026-03-15",
+        "isSharedFallback": false,
+        "articleIds": [
+          "x1",
+          "x2"
+        ]
+      }
+    },
+    {
+      "name": "aiの個別フィードは summaryJa が空の記事を除く",
+      "topic": "ai",
+      "personalDate": "2026-03-15",
+      "personalDocs": [
+        {
+          "id": "p1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p1",
+          "date": "2026-03-14",
+          "displayScore": 90
+        },
+        {
+          "id": "p2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p2",
+          "date": "2026-03-14",
+          "displayScore": 80
+        },
+        {
+          "id": "p3",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "  ",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p3",
+          "date": "2026-03-14",
+          "displayScore": 70
+        },
+        {
+          "id": "p4",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p4",
+          "date": "2026-03-14",
+          "displayScore": 60
+        }
+      ],
+      "sharedDate": null,
+      "sharedDocs": [],
+      "interactions": [],
+      "expected": {
+        "feedDate": "2026-03-15",
+        "isSharedFallback": false,
+        "articleIds": [
+          "p2",
+          "p4"
+        ]
+      }
+    },
+    {
+      "name": "mobileの個別フィードはフィルタ無しで、クリック済みでも urgent は残す",
+      "topic": "mobile",
+      "personalDate": "2026-03-15",
+      "personalDocs": [
+        {
+          "id": "m1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/m1",
+          "date": "2026-03-14",
+          "displayScore": 90,
+          "topic": "mobile",
+          "inScope": false
+        },
+        {
+          "id": "m2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/m2",
+          "date": "2026-03-14",
+          "displayScore": 80,
+          "topic": "mobile"
+        },
+        {
+          "id": "m3",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/m3",
+          "date": "2026-03-14",
+          "displayScore": 70,
+          "topic": "mobile",
+          "importantLevel": "urgent"
+        },
+        {
+          "id": "m4",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/m4",
+          "date": "2026-03-14",
+          "displayScore": 60,
+          "topic": "mobile",
+          "importantLevel": "urgent"
+        }
+      ],
+      "sharedDate": null,
+      "sharedDocs": [],
+      "interactions": [
+        {
+          "id": "mobile_m2",
+          "articleId": "m2",
+          "topic": "mobile",
+          "url": "https://example.com/m2",
+          "clickedAt": {
+            "seconds": 1
+          }
+        },
+        {
+          "id": "mobile_m3",
+          "articleId": "m3",
+          "topic": "mobile",
+          "url": "https://example.com/m3",
+          "clickedAt": {
+            "seconds": 1
+          }
+        }
+      ],
+      "expected": {
+        "feedDate": "2026-03-15",
+        "isSharedFallback": false,
+        "articleIds": [
+          "m1",
+          "m3",
+          "m4"
+        ]
+      }
+    },
+    {
+      "name": "mobileの共有は inScope かつ分類済みだけを除外後に15件までにする",
+      "topic": "mobile",
+      "personalDate": "2026-03-14",
+      "personalDocs": [
+        {
+          "id": "m1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/m1",
+          "date": "2026-03-14",
+          "displayScore": 50,
+          "topic": "mobile"
+        }
+      ],
+      "sharedDate": "2026-03-15",
+      "sharedDocs": [
+        {
+          "id": "ms0",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 100,
+          "url": "https://example.com/ms0",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 99,
+          "url": "https://example.com/ms1",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done",
+          "importantLevel": "urgent"
+        },
+        {
+          "id": "ms2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 98,
+          "url": "https://example.com/ms2",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms3",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 97,
+          "url": "https://example.com/ms3",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms4",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 96,
+          "url": "https://example.com/ms4",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms5",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 95,
+          "url": "https://example.com/ms5",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms6",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 94,
+          "url": "https://example.com/ms6",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms7",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 93,
+          "url": "https://example.com/ms7",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms8",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 92,
+          "url": "https://example.com/ms8",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms9",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 91,
+          "url": "https://example.com/ms9",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms10",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 90,
+          "url": "https://example.com/ms10",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms11",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 89,
+          "url": "https://example.com/ms11",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms12",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 88,
+          "url": "https://example.com/ms12",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms13",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 87,
+          "url": "https://example.com/ms13",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms14",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 86,
+          "url": "https://example.com/ms14",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms15",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 85,
+          "url": "https://example.com/ms15",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms16",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 84,
+          "url": "https://example.com/ms16",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms17",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 83,
+          "url": "https://example.com/ms17",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms-out",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 500,
+          "url": "https://example.com/ms-out",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": false,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms-pending",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 400,
+          "url": "https://example.com/ms-pending",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "pending"
+        },
+        {
+          "id": "ms-legacy",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 300,
+          "url": "https://example.com/ms-legacy",
+          "date": "2026-03-14",
+          "topic": "mobile"
+        }
+      ],
+      "interactions": [
+        {
+          "id": "mobile_ms0",
+          "articleId": "ms0",
+          "url": "https://example.com/ms0",
+          "dismissed": true,
+          "topic": "mobile"
+        },
+        {
+          "id": "mobile_ms1",
+          "articleId": "ms1",
+          "topic": "mobile",
+          "url": "https://example.com/ms1",
+          "clickedAt": {
+            "seconds": 1
+          }
+        },
+        {
+          "id": "mobile_ms2",
+          "articleId": "ms2",
+          "topic": "mobile",
+          "url": "https://example.com/ms2",
+          "clickedAt": {
+            "seconds": 1
+          }
+        }
+      ],
+      "expected": {
+        "feedDate": "2026-03-15",
+        "isSharedFallback": true,
+        "articleIds": [
+          "ms1",
+          "ms3",
+          "ms4",
+          "ms5",
+          "ms6",
+          "ms7",
+          "ms8",
+          "ms9",
+          "ms10",
+          "ms11",
+          "ms12",
+          "ms13",
+          "ms14",
+          "ms15",
+          "ms16"
+        ]
+      }
+    },
+    {
+      "name": "個別も共有もデータが無ければ feedDate は null で空にする",
+      "topic": "ai",
+      "personalDate": null,
+      "personalDocs": [],
+      "sharedDate": null,
+      "sharedDocs": [],
+      "interactions": [],
+      "expected": {
+        "feedDate": null,
+        "isSharedFallback": false,
+        "articleIds": []
+      }
+    },
+    {
+      "name": "aiの共有に表示できる記事が無い日は共有が無いものとして個別フィードを表示する",
+      "topic": "ai",
+      "personalDate": "2026-03-14",
+      "personalDocs": [
+        {
+          "id": "p1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p1",
+          "date": "2026-03-14",
+          "displayScore": 20
+        },
+        {
+          "id": "p2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/p2",
+          "date": "2026-03-14",
+          "displayScore": 10
+        }
+      ],
+      "sharedDate": "2026-03-15",
+      "sharedDocs": [
+        {
+          "id": "plain-1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/plain-1",
+          "date": "2026-03-14"
+        },
+        {
+          "id": "plain-2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/plain-2",
+          "date": "2026-03-14",
+          "feedEligible": false,
+          "sharedScore": 80
+        },
+        {
+          "id": "blank",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/blank",
+          "date": "2026-03-14",
+          "feedEligible": true,
+          "sharedScore": 70
+        }
+      ],
+      "interactions": [],
+      "expected": {
+        "feedDate": "2026-03-14",
+        "isSharedFallback": false,
+        "articleIds": [
+          "p1",
+          "p2"
+        ]
+      }
+    },
+    {
+      "name": "mobileの共有に表示できる記事が無い日は共有が無いものとして個別フィードを表示する",
+      "topic": "mobile",
+      "personalDate": "2026-03-14",
+      "personalDocs": [
+        {
+          "id": "m1",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/m1",
+          "date": "2026-03-14",
+          "displayScore": 20,
+          "topic": "mobile"
+        },
+        {
+          "id": "m2",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": null,
+          "url": "https://example.com/m2",
+          "date": "2026-03-14",
+          "displayScore": 10,
+          "topic": "mobile"
+        }
+      ],
+      "sharedDate": "2026-03-15",
+      "sharedDocs": [
+        {
+          "id": "ms-out",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 5,
+          "url": "https://example.com/ms-out",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": false,
+          "classificationStatus": "done"
+        },
+        {
+          "id": "ms-pending",
+          "title": "Fictional development article",
+          "titleJa": "架空の開発記事",
+          "summaryJa": "架空の概要です",
+          "thumbnailUrl": null,
+          "source": "rss",
+          "sourceName": "架空の技術フィード",
+          "score": 4,
+          "url": "https://example.com/ms-pending",
+          "date": "2026-03-14",
+          "topic": "mobile",
+          "inScope": true,
+          "classificationStatus": "pending"
+        }
+      ],
+      "interactions": [],
+      "expected": {
+        "feedDate": "2026-03-14",
+        "isSharedFallback": false,
+        "articleIds": [
+          "m1",
+          "m2"
+        ]
+      }
+    }
+  ]
+}
