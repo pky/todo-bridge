@@ -58,7 +58,7 @@ functions/:
 - `feature/<topic>` ブランチで作業し、PR 経由で `main` にマージする。`main` に直接コミットしない。開発者は1人で、PR の作成、レビュー、マージも本人が行う
 - コミットメッセージは簡潔な1行の日本語。`Co-Authored-By` は入れない。author / email は GitHub の公開用 noreply に統一する
 - force push と履歴の書き換えはしない
-- push 前のローカルゲート: リポジトリ直下の `npm run verify` と、差分を書いていないレビュアー（Claude の fresh-reviewer エージェントまたは Codex CLI review）によるレビュー。両方通ってから人が push する
+- push 前のローカルゲート: リポジトリ直下の `npm run verify` は毎回通す。PR を開く前の push では、差分を書いていないレビュアー（Claude の fresh-reviewer エージェントまたは Codex CLI review）のレビューも通す。PR を開いた後、Codex の指摘を直すだけの push は `npm run verify` だけでよい。通ってから人が push する
 - PR のゲート: GitHub Actions（.github/workflows/ci.yml）が web の lint / type-check / test:run / build、functions の lint / test、Firestore ルールテストを実行する。PR 作成時に Codex の自動レビューが走る。CI が green で、Codex の指摘がすべて修正済みか理由付きで回答済みのときだけマージする
 - ローカル専用ファイル（web/.env.local、.firebaserc、doc/、progress.txt など）は .worktreeinclude に列挙してあり、git worktree にコピーされる
 

@@ -5,5 +5,5 @@
 @AGENTS.md
 
 ## Claude Code 固有
-- push 前の差分レビューは fresh-reviewer エージェントに任せる。実装したコンテキストで自己採点しない
+- PR を開く前の差分レビューは fresh-reviewer エージェントに任せる。実装したコンテキストで自己採点しない
 - `claude --worktree <name>` で作った worktree には .worktreeinclude のローカル専用ファイルがコピーされる
