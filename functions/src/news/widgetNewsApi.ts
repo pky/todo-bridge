@@ -15,6 +15,7 @@ export function createWidgetNewsHandler(deps: WidgetNewsDeps): (
   req: functions.https.Request, res: functions.Response
 ) => Promise<void> {
   return async (req, res) => {
+    res.set('Cache-Control', 'private, no-store')
     if (req.method !== 'GET') {
       res.status(405).json({ error: 'method-not-allowed' })
       return
@@ -45,7 +46,7 @@ export function createWidgetNewsHandler(deps: WidgetNewsDeps): (
       const input = await deps.loadInputs(uid, topic)
       const result = selectWidgetFeed(input)
       const response = buildWidgetNewsResponse(topic, result, deps.now())
-      res.status(200).set('Cache-Control', 'private, no-store').json(response)
+      res.status(200).json(response)
     } catch {
       console.error('ニュースウィジェットの応答生成に失敗しました')
       res.status(500).json({ error: 'internal' })
