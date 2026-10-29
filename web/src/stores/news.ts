@@ -23,6 +23,7 @@ import { useListsStore } from './lists'
 import { useTasksStore } from './tasks'
 import { useSpaceStore, buildPersonalSpaceId } from './space'
 import { selectDisplayableAiNews } from '@/utils/aiNewsDisplay'
+import { selectDisplayableMobileNews } from '@/utils/mobileNewsDisplay'
 import type {
   NewsArticle,
   NewsPreferences,
@@ -103,7 +104,9 @@ export const useNewsStore = defineStore('news', () => {
       return {
         date: parsed.date,
         // 旧形式のキャッシュ（20件超、feedEligible なし）も読み出し時に同じ条件で絞る。
-        articles: topic === 'ai' ? selectDisplayableAiNews(parsed.articles, { shared: isSharedFallback }) : parsed.articles,
+        articles: topic === 'ai'
+          ? selectDisplayableAiNews(parsed.articles, { shared: isSharedFallback })
+          : topic === 'mobile' && isSharedFallback ? selectDisplayableMobileNews(parsed.articles) : parsed.articles,
         isSharedFallback,
       }
     } catch {
@@ -232,6 +235,18 @@ export const useNewsStore = defineStore('news', () => {
       return bScore - aScore
     })
 
+    if (topic === 'mobile') {
+      // 対象外と分類待ちの記事は共有記事でも表示しない。
+      const mobileDocsById = new Map(sortedArticleDocs.map((articleDoc) => [articleDoc.id, articleDoc]))
+      const displayableMobile = selectDisplayableMobileNews(
+        sortedArticleDocs.map((articleDoc) => ({ id: articleDoc.id, ...(articleDoc.data() as Record<string, unknown>) }) as NewsArticle)
+      )
+      if (displayableMobile.length === 0) return { latestDate: null, articleDocs: [] as typeof sortedArticleDocs }
+      return {
+        latestDate,
+        articleDocs: displayableMobile.flatMap((article) => mobileDocsById.get(article.id) ?? []),
+      }
+    }
     if (topic !== 'ai') return { latestDate, articleDocs: sortedArticleDocs }
 
     // 最新日の記事は問い合わせではなくクライアント側で絞る（feedEligible の where は複合インデックスが要る）。

@@ -11,7 +11,7 @@ import {
   needsAiSummary,
   selectAiFeed,
 } from './aiSelection'
-import { normalizeUrl } from './collectArticles'
+import { normalizeTitle, normalizeUrl } from './collectArticles'
 import { createClaudeMessagesClient } from './claudeClient'
 import { createClaudeDailyRequestReservation } from './claudeDailyBudget'
 import type { NewsArticle, NewsPreferences, NewsTopic } from './types'
@@ -299,10 +299,13 @@ async function findReusableSummary(
     .get()
 
   // 現行版かつ7日以内の結果のうち、summarizedAt が最も新しいものを使う
+  // 選別の再利用と同じく、タイトルが変わった記事は判定し直す
+  const title = normalizeTitle(article.title)
   let best: ReusableSummary | null = null
   for (const doc of snap.docs) {
     if (doc.id === article.id) continue
     const data = doc.data() as Partial<NewsArticle>
+    if (typeof data.title !== 'string' || normalizeTitle(data.title) !== title) continue
     if (data.summaryVersion !== AI_SUMMARY_VERSION) continue
     if (typeof data.summarizedAt !== 'number' || now - data.summarizedAt > AI_REUSE_MAX_AGE_MS) continue
     if (best && best.summarizedAt >= data.summarizedAt) continue
