@@ -126,3 +126,116 @@ test('buildWidgetNewsResponseは記事0件でもfeedDateがnullでも成立す�
   assert.equal(response.revision, computeRevision(null, []))
   assert.match(response.revision, /^[0-9a-f]{64}$/)
 })
+
+test('urlはhttpsの有効なURL文字列ならそのまま入る', () => {
+  const { toWidgetArticleDto } = mod()
+  const result = toWidgetArticleDto(doc({ url: 'https://example.com/articles/a1?ref=widget#top' }))
+  assert.equal(result.url, 'https://example.com/articles/a1?ref=widget#top')
+})
+
+test('urlが無い、文字列でない、解釈できない、https以外のときはurlキーを返さず他の項目は従来どおり', () => {
+  const { toWidgetArticleDto } = mod()
+  const date = new Date('2026-03-14T01:02:03.000Z')
+  const invalidUrls = [
+    ['未指定', undefined],
+    ['null', null],
+    ['空文字', ''],
+    ['数値', 123],
+    ['相対パス', '/path'],
+    ['http', 'http://example.com/a'],
+    ['javascript', 'javascript:alert(1)'],
+    ['不正な文字列', 'not a url'],
+  ]
+  for (const [label, url] of invalidUrls) {
+    const result = toWidgetArticleDto(doc({ url, publishedAt: { toDate: () => date } }))
+    assert.equal('url' in result, false, `url=${label}`)
+    assert.equal(result.id, 'a1', `url=${label}`)
+    assert.equal(result.title, '架空の記事', `url=${label}`)
+    assert.equal(result.sourceName, '架空のフィード', `url=${label}`)
+    assert.equal(result.publishedAt, '2026-03-14T01:02:03.000Z', `url=${label}`)
+  }
+})
+
+test('GitHub記事でも有効なhttps URLならurlを返す（画像とは違い除外しない）', () => {
+  const { toWidgetArticleDto } = mod()
+  const result = toWidgetArticleDto(doc({ source: 'github', url: 'https://example.com/sample-owner/sample-repo' }))
+  assert.equal(result.url, 'https://example.com/sample-owner/sample-repo')
+  assert.equal('imageUrl' in result, false)
+})
+
+test('url追加後もdtoVersionは1、revisionは記事IDだけで決まり、既存フィールドは変わらない', () => {
+  const { buildWidgetNewsResponse, computeRevision, toWidgetArticleDto, WIDGET_DTO_VERSION } = mod()
+  assert.equal(WIDGET_DTO_VERSION, 1)
+  const now = new Date('2026-03-15T09:00:00.000Z')
+  const withUrl = [doc({ id: 'a1', url: 'https://example.com/a1' }), doc({ id: 'a2', url: 'https://example.com/a2' })]
+  const withoutUrl = [doc({ id: 'a1', url: undefined }), doc({ id: 'a2', url: 'http://example.com/a2' })]
+  const a = buildWidgetNewsResponse('ai', { feedDate: '2026-03-15', isSharedFallback: false, articles: withUrl }, now)
+  const b = buildWidgetNewsResponse('ai', { feedDate: '2026-03-15', isSharedFallback: false, articles: withoutUrl }, now)
+  assert.equal(a.dtoVersion, 1)
+  assert.equal(a.revision, computeRevision('2026-03-15', ['a1', 'a2']))
+  assert.equal(a.revision, b.revision)
+  assert.equal(a.totalCount, 2)
+  const { url, ...rest } = toWidgetArticleDto(doc())
+  assert.equal(url, 'https://example.com/a1')
+  assert.deepEqual(rest, {
+    id: 'a1',
+    title: '架空の記事',
+    sourceName: '架空のフィード',
+    publishedAt: null,
+    summary: '架空の概要です',
+    imageUrl: 'https://example.com/a1.png',
+  })
+})
+
+test('urlに前後の空白・制御文字、途中の改行、不正な形式が含まれるときはurlキーを返さず他の項目は従来どおり', () => {
+  const { toWidgetArticleDto } = mod()
+  const malformedUrls = [
+    ['先頭の空白', ' https://example.com/a'],
+    ['末尾の空白', 'https://example.com/a '],
+    ['先頭のTAB', '\thttps://example.com/a'],
+    ['末尾の改行', 'https://example.com/a\n'],
+    ['先頭のNUL', '\u0000https://example.com/a'],
+    ['先頭のU+0001', '\u0001https://example.com/a'],
+    ['スキーム途中の改行', 'ht\ntps://example.com/a'],
+    ['ホスト途中の改行', 'https://exa\nmple.com/a'],
+    ['スラッシュの欠落', 'https:example.com/a'],
+    ['バックスラッシュ形式', 'https:\\\\example.com/a'],
+    ['URL中の空白', 'https://example.com/a b'],
+  ]
+  for (const [label, url] of malformedUrls) {
+    const result = toWidgetArticleDto(doc({ url }))
+    assert.equal('url' in result, false, `url=${label}`)
+    assert.equal(result.id, 'a1', `url=${label}`)
+    assert.equal(result.title, '架空の記事', `url=${label}`)
+    assert.equal(result.sourceName, '架空のフィード', `url=${label}`)
+  }
+})
+
+test('大文字スキームのHTTPS URLは制御文字や空白が無ければそのままurlに入る', () => {
+  const { toWidgetArticleDto } = mod()
+  assert.equal(toWidgetArticleDto(doc({ url: 'HTTPS://example.com/a' })).url, 'HTTPS://example.com/a')
+})
+
+test('非ASCII文字を含むhttps URLは過剰に除外せずそのままurlに入る', () => {
+  const { toWidgetArticleDto } = mod()
+  const url = 'https://example.com/記事?q=日本語'
+  assert.equal(toWidgetArticleDto(doc({ url })).url, url)
+})
+
+const c1ControlUrls = [
+  ['パス途中のU+0080', 'https://example.com/a\u0080b'],
+  ['パス途中のU+0090', 'https://example.com/a\u0090b'],
+  ['パス途中のU+009F', 'https://example.com/a\u009fb'],
+  ['ホスト途中のU+0090', 'https://exa\u0090mple.com/a'],
+  ['末尾のU+009F', 'https://example.com/a\u009f'],
+]
+for (const [label, url] of c1ControlUrls) {
+  test(`C1制御文字を含むurlはurlキーを返さず他の項目は従来どおり: ${label}`, () => {
+    const { toWidgetArticleDto } = mod()
+    const result = toWidgetArticleDto(doc({ url }))
+    assert.equal('url' in result, false, `url=${label}`)
+    assert.equal(result.id, 'a1', `url=${label}`)
+    assert.equal(result.title, '架空の記事', `url=${label}`)
+    assert.equal(result.sourceName, '架空のフィード', `url=${label}`)
+  })
+}
