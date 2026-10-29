@@ -145,6 +145,27 @@ test('planMobileArticleProcessing は英語版で判定済みの記事に日本�
   assert.equal(plan.reuse[0].source, source)
 })
 
+test('planMobileArticleProcessing はフラグメントが違う版の判定を再利用せず fresh に回す', () => {
+  const raw = makeRaw({ url: 'https://example.com/release-notes/#2026-10-28-new-release' })
+  const source = makeExisting({
+    url: 'https://example.com/release-notes/#2026-10-01-old-release',
+    classificationStatus: 'done',
+  })
+  const plan = planMobileArticleProcessing([raw], [source])
+  assert.equal(plan.reuse.length, 0)
+  assert.deepEqual(plan.fresh, [raw])
+})
+
+test('planMobileArticleProcessing はフラグメントまで同じ URL なら再利用に回す', () => {
+  const url = 'https://example.com/release-notes/#2026-10-28-new-release'
+  const raw = makeRaw({ url })
+  const source = makeExisting({ url, classificationStatus: 'done' })
+  const plan = planMobileArticleProcessing([raw], [source])
+  assert.equal(plan.reuse.length, 1)
+  assert.equal(plan.fresh.length, 0)
+  assert.equal(plan.reuse[0].source, source)
+})
+
 test('buildReusedMobileArticle は URL とタイトルを新しい記事のものにし、判定と要約をコピーする', () => {
   const raw = makeRaw({ url: JP_URL, title: '日本語版タイトル', description: '日本語版の説明' })
   const source = makeExisting({ url: EN_URL })

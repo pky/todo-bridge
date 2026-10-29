@@ -435,4 +435,91 @@ describe('AI ニュースの表示条件', () => {
     expect(store.articles).toEqual([])
     expect(store.latestFeedDateByTopic.mobile).toBeNull()
   })
+
+  const dismissedInteraction = (id: string, topic: 'ai' | 'mobile' = 'mobile'): DocFixture =>
+    ({ id, data: { articleId: id, topic, url: `https://example.com/${id}`, dismissed: true } })
+  const shownTwiceInteraction = (id: string, topic: 'ai' | 'mobile' = 'mobile'): DocFixture =>
+    ({ id: `i-${id}`, data: { articleId: `i-${id}`, topic, url: `https://example.com/${id}`, shownCount: 2 } })
+  const mobileShared = (id: string, overrides: Record<string, unknown> = {}) =>
+    shared(id, { topic: 'mobile', inScope: true, classificationStatus: 'done', ...overrides })
+  const mobileSharedDocs = (count: number) => Array.from({ length: count }, (_, index) => mobileShared(`ms${index}`))
+  const aiSharedDocs = (count: number) => Array.from({ length: count }, (_, index) => eligible(`e${index}`, 1000 - index))
+
+  it.each([
+    ['dismissed', dismissedInteraction],
+    ['表示回数2回のURL', shownTwiceInteraction],
+  ])('モバイルの共有記事は上位15件を%sで除外済みでも、残りの対象記事5件を表示する', async (_label, exclude) => {
+    const docs = mobileSharedDocs(20)
+    installServer({ topic: 'mobile', shared: docs, interactions: docs.slice(0, 15).map((item) => exclude(item.id)) })
+
+    const store = useNewsStore()
+    await store.loadTodayFeed('mobile')
+
+    expect(ids(store.articles)).toEqual(docs.slice(15).map((item) => item.id))
+    expect(store.feedDiagnosticsByTopic.mobile.state).toBe('showing')
+  })
+
+  it('モバイルの共有記事は対象20件で除外が無ければ15件だけ表示する', async () => {
+    const docs = mobileSharedDocs(20)
+    installServer({ topic: 'mobile', shared: docs })
+
+    const store = useNewsStore()
+    await store.loadTodayFeed('mobile')
+
+    expect(ids(store.articles)).toEqual(docs.slice(0, 15).map((item) => item.id))
+  })
+
+  it('モバイルの共有記事は除外後に残る対象記事だけを表示し、対象外と分類待ちを混ぜない', async () => {
+    const docs = [
+      ...mobileSharedDocs(16),
+      mobileShared('ms-out', { inScope: false }),
+      mobileShared('ms-pending', { classificationStatus: 'pending' }),
+    ]
+    installServer({ topic: 'mobile', shared: docs, interactions: docs.slice(0, 15).map((item) => dismissedInteraction(item.id)) })
+
+    const store = useNewsStore()
+    await store.loadTodayFeed('mobile')
+
+    expect(ids(store.articles)).toEqual(['ms15'])
+    expect(store.feedDiagnosticsByTopic.mobile.state).toBe('showing')
+  })
+
+  it('AI の共有記事は sharedScore 上位20件を除外済みでも、残りの表示対象5件を表示する', async () => {
+    const docs = aiSharedDocs(25)
+    installServer({ shared: docs, interactions: docs.slice(0, 20).map((item) => dismissedInteraction(item.id, 'ai')) })
+
+    const store = useNewsStore()
+    await store.loadTodayFeed('ai')
+
+    expect(ids(store.articles)).toEqual(docs.slice(20).map((item) => item.id))
+    expect(store.feedDiagnosticsByTopic.ai.state).toBe('showing')
+  })
+
+  it('AI の共有記事は表示対象25件で除外が無ければ20件だけ表示する', async () => {
+    const docs = aiSharedDocs(25)
+    installServer({ shared: docs })
+
+    const store = useNewsStore()
+    await store.loadTodayFeed('ai')
+
+    expect(ids(store.articles)).toEqual(docs.slice(0, 20).map((item) => item.id))
+  })
+
+  it('共有のほうが新しく個別フィードもある日に、共有の上位15件が除外済みでも残りがあれば共有モバイル記事を表示する', async () => {
+    const docs = mobileSharedDocs(20)
+    installServer({
+      topic: 'mobile',
+      personal: [personal('personal-1', { topic: 'mobile' }), personal('personal-2', { topic: 'mobile' })],
+      personalDate: '2026-03-14',
+      shared: docs,
+      sharedDate: '2026-03-15',
+      interactions: docs.slice(0, 15).map((item) => dismissedInteraction(item.id)),
+    })
+
+    const store = useNewsStore()
+    await store.loadTodayFeed('mobile')
+
+    expect(ids(store.articles)).toEqual(docs.slice(15).map((item) => item.id))
+    expect(store.latestFeedDateByTopic.mobile).toBe('2026-03-15')
+  })
 })
