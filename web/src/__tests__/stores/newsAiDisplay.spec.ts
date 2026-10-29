@@ -393,12 +393,46 @@ describe('AI ニュースの表示条件', () => {
   it('モバイルの共有記事代替表示は feedEligible を要求しない', async () => {
     installServer({
       topic: 'mobile',
-      shared: Array.from({ length: 3 }, (_, index) => shared(`ms${index}`, { topic: 'mobile' })),
+      shared: Array.from({ length: 3 }, (_, index) => shared(`ms${index}`, { topic: 'mobile', inScope: true, classificationStatus: 'done' })),
     })
 
     const store = useNewsStore()
     await store.loadTodayFeed('mobile')
 
     expect(ids(store.articles).sort()).toEqual(['ms0', 'ms1', 'ms2'])
+  })
+
+  it('モバイルの共有記事代替表示は inScope が true で分類済みの記事だけを出す', async () => {
+    installServer({
+      topic: 'mobile',
+      shared: [
+        shared('ms-ok', { topic: 'mobile', inScope: true, classificationStatus: 'done' }),
+        shared('ms-out', { topic: 'mobile', inScope: false, classificationStatus: 'done' }),
+        shared('ms-pending', { topic: 'mobile', inScope: true, classificationStatus: 'pending' }),
+        shared('ms-legacy', { topic: 'mobile' }),
+      ],
+    })
+
+    const store = useNewsStore()
+    await store.loadTodayFeed('mobile')
+
+    expect(ids(store.articles)).toEqual(['ms-ok'])
+  })
+
+  it('モバイルの共有記事の最新日に表示できる記事がなければ配信データなしとして扱う', async () => {
+    installServer({
+      topic: 'mobile',
+      shared: [
+        shared('ms-out', { topic: 'mobile', inScope: false, classificationStatus: 'done' }),
+        shared('ms-pending', { topic: 'mobile', inScope: true, classificationStatus: 'pending' }),
+      ],
+      sharedDate: '2026-03-15',
+    })
+
+    const store = useNewsStore()
+    await store.loadTodayFeed('mobile')
+
+    expect(store.articles).toEqual([])
+    expect(store.latestFeedDateByTopic.mobile).toBeNull()
   })
 })

@@ -573,6 +573,52 @@ test('同じ正規化URLの文書が6件以上あり古いものが先に返っ�
   assert.equal(result.saved[0].summaryJa, '有効で最新の要約です')
 })
 
+test('同じURLでもタイトルが違う過去の rejected は再利用せず、記事をClaudeに送る', async () => {
+  const current = article('title-differs-rejected', { title: 'Fictional AI tool article' })
+  const result = await generate([current], {
+    reusable: [rejectedBefore('previous-rejected-other-title', { url: current.url, title: 'Completely different headline' })],
+  })
+  assert.deepEqual(result.sentIds, ['title-differs-rejected'])
+  assert.deepEqual(idsOf(result.saved), ['title-differs-rejected'])
+})
+
+test('同じURLでもタイトルが違う過去の generated の titleJa と summaryJa は使わない', async () => {
+  const current = article('title-differs-generated', { title: 'Fictional AI tool article' })
+  const result = await generate([current], {
+    reusable: [confirmed('previous-generated-other-title', {
+      url: current.url, title: 'Completely different headline', titleJa: '別記事のタイトル', summaryJa: '別記事の要約です',
+    })],
+  })
+  assert.deepEqual(result.sentIds, ['title-differs-generated'])
+  assert.equal(result.saved.length, 1)
+  assert.notEqual(result.saved[0].titleJa, '別記事のタイトル')
+  assert.notEqual(result.saved[0].summaryJa, '別記事の要約です')
+  assert.equal(result.saved[0].summaryJa, '架空の日本語要約です')
+})
+
+test('同じURLでタイトルが正規化後に一致する過去の generated は従来どおり再利用し、Claudeに送らない', async () => {
+  const current = article('title-same-generated', { title: 'Fictional AI tool article' })
+  const result = await generate([current], {
+    reusable: [confirmed('previous-generated-same-title', {
+      url: current.url, title: '  FICTIONAL  ai Tool   Article ', titleJa: '再利用するタイトル', summaryJa: '再利用する要約です',
+    })],
+  })
+  assert.equal(result.sentIds.length, 0)
+  assert.equal(result.saved.length, 1)
+  assert.equal(result.saved[0].titleJa, '再利用するタイトル')
+  assert.equal(result.saved[0].summaryJa, '再利用する要約です')
+})
+
+test('同じURLでタイトルが正規化後に一致する過去の rejected は従来どおり再利用し、Claudeに送らない', async () => {
+  const skipped = article('title-same-rejected', { title: 'Fictional AI tool article', developerValue: 'high' })
+  const alternative = article('title-same-alternative', { title: 'Another fictional article' })
+  const result = await generate([skipped, alternative], {
+    reusable: [rejectedBefore('previous-rejected-same-title', { url: skipped.url, title: 'FICTIONAL AI TOOL ARTICLE' })],
+  })
+  assert.deepEqual(result.sentIds, ['title-same-alternative'])
+  assert.deepEqual(idsOf(result.saved), ['title-same-alternative'])
+})
+
 test('2段目の再利用は正規化URLで引く', async () => {
   const current = article('lookup', { url: 'https://example.com/lookup' })
   const queried = []
