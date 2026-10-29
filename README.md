@@ -20,7 +20,7 @@ TodoBridge は、RTM代替を目指した、共有対応のタスク管理アプ
 ![Mobile news screen](./img/screenshot-mobile-news.png)
 
 iOS / Android アプリ開発で見逃したくない更新を、確認優先の項目と通常の記事一覧に分けて把握しやすくしています。
-情報源は Apple と Google の公式ページ7本です（Apple Developer News の日本語版と英語版、App Store Connect のリリースノート、Apple のセキュリティアップデート一覧、Android Developers Blog、Play Console のお知らせ、Android Security Bulletin）。Claude（Opus 5.5）がセキュリティ、SDK 要件、ポリシーの記事だけを選び、概要、対象、期限、やることの4項目に日本語でまとめます。
+情報源は Apple と Google の公式ページ7本です（Apple Developer News の日本語版と英語版、App Store Connect のリリースノート、Apple のセキュリティアップデート一覧、Android Developers Blog、Play Console のお知らせ、Android Security Bulletin）。Claude（Sonnet 5.5）がセキュリティ、SDK 要件、ポリシーの記事だけを選び、概要、対象、期限、やることの4項目に日本語でまとめます。
 
 ## このアプリを作った目的
 
@@ -77,9 +77,9 @@ ANTHROPIC_API_KEY=
 モバイルニュースの判定は次の環境変数で調整できます（省略時は既定値）。
 
 ```bash
-CLAUDE_NEWS_MODEL=claude-opus-5-5
+CLAUDE_NEWS_MODEL=claude-sonnet-5-5
 CLAUDE_NEWS_EFFORT=low
-CLAUDE_NEWS_DAILY_MAX_REQUESTS=20
+CLAUDE_NEWS_DAILY_MAX_REQUESTS=5
 ```
 
 AI ニュースは技術記事だけを1日最大20件表示します。対象は AI コーディングツールの使い方と検証、LLM アプリの実装・評価・運用、AI のセキュリティ、新しいモデルや API の能力と制約、機械学習の実装、AI 開発用のツールです。企業動向、政治や訴訟、宣伝、業務アプリの操作方法、AI が道具として登場するだけの記事は表示しません。
@@ -92,7 +92,7 @@ CLAUDE_AI_TRIAGE_EFFORT=low
 CLAUDE_AI_TRIAGE_DAILY_MAX_REQUESTS=10
 CLAUDE_AI_SUMMARY_MODEL=claude-sonnet-5-5
 CLAUDE_AI_SUMMARY_EFFORT=low
-CLAUDE_AI_SUMMARY_DAILY_MAX_REQUESTS=10
+CLAUDE_AI_SUMMARY_DAILY_MAX_REQUESTS=6
 ```
 
 AI ニュースの呼び出し上限は日本時間の日付ごとに判定と要約を別々に数えます。API の再試行は同じ呼び出しとして数えます。

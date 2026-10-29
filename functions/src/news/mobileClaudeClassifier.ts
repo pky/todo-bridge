@@ -95,9 +95,9 @@ export function getClaudeNewsConfig(env: Record<string, string | undefined>): Cl
   const effort = effortRaw === 'low' || effortRaw === 'medium' || effortRaw === 'high' ? effortRaw : 'low'
   const max = Number.parseInt(env.CLAUDE_NEWS_DAILY_MAX_REQUESTS ?? '', 10)
   return {
-    model: env.CLAUDE_NEWS_MODEL || 'claude-opus-5-5',
+    model: env.CLAUDE_NEWS_MODEL || 'claude-sonnet-5-5',
     effort,
-    dailyMaxRequests: Number.isFinite(max) && max >= 0 ? max : 20,
+    dailyMaxRequests: Number.isFinite(max) && max >= 0 ? max : 5,
   }
 }
 

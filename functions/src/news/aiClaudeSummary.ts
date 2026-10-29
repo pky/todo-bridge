@@ -84,7 +84,7 @@ export function getAiSummaryConfig(env: Record<string, string | undefined>): AiS
   return {
     model: env.CLAUDE_AI_SUMMARY_MODEL || 'claude-sonnet-5-5',
     effort,
-    dailyMaxRequests: Number.isFinite(max) && max >= 0 ? max : 10,
+    dailyMaxRequests: Number.isFinite(max) && max >= 0 ? max : 6,
   }
 }
 
