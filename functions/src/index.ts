@@ -14,6 +14,7 @@ export {
 // AIニュース収集・パーソナライズ関数をエクスポート
 export {
   saveMobileNotificationPreferences,
+  widgetNews,
 } from './news'
 
 // 日次処理は Scheduler 無料枠に収めるため3本に集約する

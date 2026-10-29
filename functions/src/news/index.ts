@@ -2,3 +2,4 @@
 export {
   saveMobileNotificationPreferences,
 } from './mobileNotifications'
+export { widgetNews } from './widgetNewsApi'
