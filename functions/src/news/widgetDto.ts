@@ -42,7 +42,7 @@ export function toWidgetArticleDto(doc: FeedDoc): WidgetArticleDto {
     typeof doc.url === 'string'
     && /^https:\/\//i.test(doc.url)
     && !/[\s\p{White_Space}]/u.test(doc.url)
-    && !Array.from(doc.url).some((char) => char.charCodeAt(0) <= 0x20 || char.charCodeAt(0) === 0x7f)
+    && !/\p{Cc}/u.test(doc.url)
   ) {
     try {
       const url = new URL(doc.url)
