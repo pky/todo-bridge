@@ -232,3 +232,59 @@ test('200のレスポンスでもトークン検証前の失敗でも、res.json
   await handler(createReq({ authorization: `Bearer ${TOKEN}` }), res)
   assert.equal(calls, 1)
 })
+
+// エラー応答にも共有キャッシュへ残らないよう Cache-Control を付ける。
+async function runRecordingSet(deps, req) {
+  const handler = mod().createWidgetNewsHandler(deps)
+  const res = createRes()
+  const setCalls = []
+  const set = res.set
+  res.set = (name, value) => { setCalls.push([name, value]); return set(name, value) }
+  await handler(req, res)
+  return { res, setCalls }
+}
+
+function assertNoStore(setCalls) {
+  assert.ok(
+    setCalls.some(([name, value]) => name === 'Cache-Control' && value === 'private, no-store'),
+    `res.set('Cache-Control', 'private, no-store') が呼ばれていない: ${JSON.stringify(setCalls)}`,
+  )
+}
+
+test('エラー応答にもCache-Controlのprivate, no-storeを付ける（405）', async () => {
+  const { res, setCalls } = await runRecordingSet(createDeps(), createReq({ method: 'POST', authorization: `Bearer ${TOKEN}` }))
+  assert.equal(res.statusCode, 405)
+  assertNoStore(setCalls)
+})
+
+test('エラー応答にもCache-Controlのprivate, no-storeを付ける（401: Authorization無し）', async () => {
+  const { res, setCalls } = await runRecordingSet(createDeps(), createReq({}))
+  assert.equal(res.statusCode, 401)
+  assertNoStore(setCalls)
+})
+
+test('エラー応答にもCache-Controlのprivate, no-storeを付ける（401: verifyIdToken拒否）', async () => {
+  const deps = createDeps({ async verifyIdToken() { throw new Error('token revoked') } })
+  const { res, setCalls } = await runRecordingSet(deps, createReq({ authorization: `Bearer ${TOKEN}` }))
+  assert.equal(res.statusCode, 401)
+  assertNoStore(setCalls)
+})
+
+test('エラー応答にもCache-Controlのprivate, no-storeを付ける（400: topic不正）', async () => {
+  const { res, setCalls } = await runRecordingSet(createDeps(), createReq({ authorization: `Bearer ${TOKEN}`, query: { topic: 'other' } }))
+  assert.equal(res.statusCode, 400)
+  assertNoStore(setCalls)
+})
+
+test('エラー応答にもCache-Controlのprivate, no-storeを付ける（500: loadInputs例外）', async () => {
+  const original = console.error
+  console.error = () => {}
+  try {
+    const deps = createDeps({ async loadInputs() { throw new Error('boom') } })
+    const { res, setCalls } = await runRecordingSet(deps, createReq({ authorization: `Bearer ${TOKEN}` }))
+    assert.equal(res.statusCode, 500)
+    assertNoStore(setCalls)
+  } finally {
+    console.error = original
+  }
+})
