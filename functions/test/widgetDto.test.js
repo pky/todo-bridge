@@ -126,3 +126,63 @@ test('buildWidgetNewsResponseは記事0件でもfeedDateがnullでも成立す�
   assert.equal(response.revision, computeRevision(null, []))
   assert.match(response.revision, /^[0-9a-f]{64}$/)
 })
+
+test('urlはhttpsの有効なURL文字列ならそのまま入る', () => {
+  const { toWidgetArticleDto } = mod()
+  const result = toWidgetArticleDto(doc({ url: 'https://example.com/articles/a1?ref=widget#top' }))
+  assert.equal(result.url, 'https://example.com/articles/a1?ref=widget#top')
+})
+
+test('urlが無い、文字列でない、解釈できない、https以外のときはurlキーを返さず他の項目は従来どおり', () => {
+  const { toWidgetArticleDto } = mod()
+  const date = new Date('2026-03-14T01:02:03.000Z')
+  const invalidUrls = [
+    ['未指定', undefined],
+    ['null', null],
+    ['空文字', ''],
+    ['数値', 123],
+    ['相対パス', '/path'],
+    ['http', 'http://example.com/a'],
+    ['javascript', 'javascript:alert(1)'],
+    ['不正な文字列', 'not a url'],
+  ]
+  for (const [label, url] of invalidUrls) {
+    const result = toWidgetArticleDto(doc({ url, publishedAt: { toDate: () => date } }))
+    assert.equal('url' in result, false, `url=${label}`)
+    assert.equal(result.id, 'a1', `url=${label}`)
+    assert.equal(result.title, '架空の記事', `url=${label}`)
+    assert.equal(result.sourceName, '架空のフィード', `url=${label}`)
+    assert.equal(result.publishedAt, '2026-03-14T01:02:03.000Z', `url=${label}`)
+  }
+})
+
+test('GitHub記事でも有効なhttps URLならurlを返す（画像とは違い除外しない）', () => {
+  const { toWidgetArticleDto } = mod()
+  const result = toWidgetArticleDto(doc({ source: 'github', url: 'https://example.com/sample-owner/sample-repo' }))
+  assert.equal(result.url, 'https://example.com/sample-owner/sample-repo')
+  assert.equal('imageUrl' in result, false)
+})
+
+test('url追加後もdtoVersionは1、revisionは記事IDだけで決まり、既存フィールドは変わらない', () => {
+  const { buildWidgetNewsResponse, computeRevision, toWidgetArticleDto, WIDGET_DTO_VERSION } = mod()
+  assert.equal(WIDGET_DTO_VERSION, 1)
+  const now = new Date('2026-03-15T09:00:00.000Z')
+  const withUrl = [doc({ id: 'a1', url: 'https://example.com/a1' }), doc({ id: 'a2', url: 'https://example.com/a2' })]
+  const withoutUrl = [doc({ id: 'a1', url: undefined }), doc({ id: 'a2', url: 'http://example.com/a2' })]
+  const a = buildWidgetNewsResponse('ai', { feedDate: '2026-03-15', isSharedFallback: false, articles: withUrl }, now)
+  const b = buildWidgetNewsResponse('ai', { feedDate: '2026-03-15', isSharedFallback: false, articles: withoutUrl }, now)
+  assert.equal(a.dtoVersion, 1)
+  assert.equal(a.revision, computeRevision('2026-03-15', ['a1', 'a2']))
+  assert.equal(a.revision, b.revision)
+  assert.equal(a.totalCount, 2)
+  const { url, ...rest } = toWidgetArticleDto(doc())
+  assert.equal(url, 'https://example.com/a1')
+  assert.deepEqual(rest, {
+    id: 'a1',
+    title: '架空の記事',
+    sourceName: '架空のフィード',
+    publishedAt: null,
+    summary: '架空の概要です',
+    imageUrl: 'https://example.com/a1.png',
+  })
+})
