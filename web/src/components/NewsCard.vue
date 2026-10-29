@@ -1,6 +1,7 @@
 <!-- web/src/components/NewsCard.vue -->
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import MobileSummary from '@/components/MobileSummary.vue'
 import type { NewsArticle } from '@/types'
 
 const props = defineProps<{
@@ -15,6 +16,13 @@ const emit = defineEmits<{
 }>()
 
 const imageLoadFailed = ref(false)
+const displayedSource = computed(() => {
+  if (props.article.publisherDomain) return props.article.publisherDomain
+  if (['はてなブックマーク IT', 'Menthas', 'Hacker News'].includes(props.article.sourceName)) {
+    try { return new URL(props.article.url).hostname.replace(/^www\./, '') } catch { /* 不正URLでは既存の表示名を使う。 */ }
+  }
+  return props.article.sourceName
+})
 const BRAND_ACCENT_COLORS = {
   openai: '#93c5fd',
   anthropic: '#fdba74',
@@ -170,7 +178,7 @@ function handleImageError(): void {
           @error="handleImageError"
         />
         <div v-else class="flex h-full w-full items-center justify-center p-4 text-center text-xs text-gray-400">
-          {{ article.sourceName }}
+          {{ displayedSource }}
         </div>
       </div>
 
@@ -184,7 +192,7 @@ function handleImageError(): void {
             @error="handleImageError"
           />
           <div v-else class="flex h-full w-full items-center justify-center p-1 text-center text-xs text-gray-400">
-            {{ article.sourceName }}
+            {{ displayedSource }}
           </div>
         </div>
 
@@ -193,7 +201,8 @@ function handleImageError(): void {
             {{ article.titleJa || article.title }}
           </p>
           <div :class="metaClass">
-            <span>{{ article.sourceName }}</span>
+            <span>{{ displayedSource }}</span>
+            <span v-if="displayedSource !== article.sourceName">紹介元: {{ article.sourceName }}</span>
             <span v-if="formatScore(article)">{{ formatScore(article) }}</span>
             <span>{{ formatDate(article) }}</span>
           </div>
@@ -227,7 +236,8 @@ function handleImageError(): void {
             {{ article.titleJa || article.title }}
           </p>
           <div :class="metaClass">
-            <span>{{ article.sourceName }}</span>
+            <span>{{ displayedSource }}</span>
+            <span v-if="displayedSource !== article.sourceName">紹介元: {{ article.sourceName }}</span>
             <span v-if="formatScore(article)">{{ formatScore(article) }}</span>
             <span>{{ formatDate(article) }}</span>
           </div>
@@ -255,7 +265,8 @@ function handleImageError(): void {
         </div>
       </div>
 
-      <p v-if="article.summaryJa" :class="summaryClass">
+      <MobileSummary v-if="article.mobileSummary" :summary="article.mobileSummary" :class="summaryClass" />
+      <p v-else-if="article.summaryJa" :class="summaryClass">
         {{ article.summaryJa }}
       </p>
 
@@ -290,7 +301,7 @@ function handleImageError(): void {
           @error="handleImageError"
         />
         <div v-else class="flex h-full w-full items-center justify-center p-1 text-center text-xs text-gray-400">
-          {{ article.sourceName }}
+          {{ displayedSource }}
         </div>
       </div>
 
@@ -299,7 +310,8 @@ function handleImageError(): void {
           {{ article.titleJa || article.title }}
         </p>
         <div :class="metaClass">
-          <span>{{ article.sourceName }}</span>
+          <span>{{ displayedSource }}</span>
+          <span v-if="displayedSource !== article.sourceName">紹介元: {{ article.sourceName }}</span>
           <span v-if="formatScore(article)">{{ formatScore(article) }}</span>
           <span>{{ formatDate(article) }}</span>
         </div>
@@ -327,8 +339,24 @@ function handleImageError(): void {
       </div>
     </div>
 
-    <p v-if="!showsHeaderContent && article.summaryJa" :class="summaryClass">
+    <MobileSummary
+      v-if="!showsHeaderContent && article.mobileSummary"
+      :summary="article.mobileSummary"
+      :class="summaryClass"
+    />
+    <p v-else-if="!showsHeaderContent && article.summaryJa" :class="summaryClass">
       {{ article.summaryJa }}
+    </p>
+
+    <p v-if="article.topic === 'ai' && article.summaryStatus === 'fallback'" class="mt-2 text-xs text-gray-500">
+      元の説明文
+    </p>
+    <p v-else-if="article.topic === 'ai' && article.summarySource === 'description'" class="mt-2 text-xs text-gray-500">
+      説明文をもとに作成
+    </p>
+
+    <p v-if="article.topic === 'ai' && article.readReason" class="mt-2 break-words text-xs leading-relaxed text-teal-700">
+      読む理由: {{ article.readReason }}
     </p>
 
     <div v-if="!showsHeaderContent && mobileBadges.length > 0" class="mt-2 flex flex-wrap gap-1">

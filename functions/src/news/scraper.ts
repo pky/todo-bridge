@@ -31,11 +31,41 @@ function extractCandidateText($: ReturnType<typeof cheerio.load>, selector: stri
   return texts.sort((a, b) => b.length - a.length)[0] ?? ''
 }
 
+function extractMainContentFromDom($: ReturnType<typeof cheerio.load>): string {
+  // ナビ・フッター・広告を除去して本文を取得
+  $('nav, footer, aside, script, style, noscript, form, .ad, .advertisement, .sidebar, .comments, #comments').remove()
+  const candidates = [
+    'article',
+    'main',
+    '.crayons-article__main',
+    '#article-body',
+    '.article-body',
+    '.post-content',
+    '.entry-content',
+    '.markdown-body',
+    '[data-testid="article-content"]',
+    'body',
+  ]
+  for (const selector of candidates) {
+    const text = extractCandidateText($, selector)
+    if (text.length >= MIN_CONTENT_LENGTH) {
+      return text.slice(0, MAX_CONTENT_LENGTH)
+    }
+  }
+  return ''
+}
+
+// HTML 文字列から本文を取り出す
+export function extractMainContent(html: string): string {
+  return extractMainContentFromDom(cheerio.load(html))
+}
+
 // 1回のフェッチで本文とOGP画像を両方取得
-export async function scrapeArticle(url: string): Promise<{ content: string; ogImage: string | null }> {
+export async function scrapeArticle(url: string, options?: { signal?: AbortSignal }): Promise<{ content: string; ogImage: string | null }> {
   try {
     const { data } = await axios.get<string>(url, {
       timeout: TIMEOUT_MS,
+      ...(options?.signal ? { signal: options.signal } : {}),
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; ReRTM-Bot/1.0)',
       },
@@ -51,28 +81,7 @@ export async function scrapeArticle(url: string): Promise<{ content: string; ogI
       $('meta[name="twitter:image:src"]').attr('content') ||
       null
 
-    // ナビ・フッター・広告を除去して本文を取得
-    $('nav, footer, aside, script, style, noscript, form, .ad, .advertisement, .sidebar, .comments, #comments').remove()
-    const candidates = [
-      'article',
-      'main',
-      '.crayons-article__main',
-      '#article-body',
-      '.article-body',
-      '.post-content',
-      '.entry-content',
-      '.markdown-body',
-      '[data-testid="article-content"]',
-      'body',
-    ]
-    let content = ''
-    for (const selector of candidates) {
-      const text = extractCandidateText($, selector)
-      if (text.length >= MIN_CONTENT_LENGTH) {
-        content = text.slice(0, MAX_CONTENT_LENGTH)
-        break
-      }
-    }
+    const content = extractMainContentFromDom($)
 
     return { content, ogImage }
   } catch {

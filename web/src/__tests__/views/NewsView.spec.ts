@@ -454,4 +454,61 @@ describe('NewsView', () => {
     const allTitles = wrapper.findAll('[data-testid="card-title"]').map((node) => node.text())
     expect(allTitles).toContain('Android review only')
   })
+
+  it('mobile は初期状態で「すべて」を選択している', async () => {
+    routeState.name = 'news-mobile'
+    newsStoreState.articles = [
+      mobileArticleIos,
+      {
+        ...mobileArticleAndroid,
+        id: 'mobile-review-only',
+        url: 'https://example.com/mobile-review-only',
+        title: 'Android review only',
+        titleJa: 'Android確認推奨のみ',
+        actionRequired: false,
+        importantLevel: 'review',
+      },
+    ]
+
+    const wrapper = mount(NewsView, {
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    await nextTick()
+
+    const buttons = wrapper.findAll('button')
+    expect(buttons.find((button) => button.text() === '重要事項')).toBeUndefined()
+    const allButton = buttons.find((button) => button.text() === 'すべて')
+    expect(allButton?.classes()).toContain('bg-gray-900')
+
+    const allTitles = wrapper.findAll('[data-testid="card-title"]').map((node) => node.text())
+    expect(allTitles).toContain('Android review only')
+  })
+
+  it('mobile の重要事項カードは1列で横長に並べる', async () => {
+    routeState.name = 'news-mobile'
+    newsStoreState.articles = [mobileArticleIos]
+
+    const wrapper = mount(NewsView, {
+      global: {
+        stubs: {
+          Transition: false,
+        },
+      },
+    })
+
+    await nextTick()
+
+    const title = wrapper.find('[data-testid="important-title"]')
+    expect(title.exists()).toBe(true)
+    const grid = title.element.closest('article')?.parentElement
+    expect(grid).toBeTruthy()
+    expect(grid?.classList.contains('grid')).toBe(true)
+    expect(grid?.classList.contains('grid-cols-1')).toBe(true)
+    expect(grid?.classList.contains('xl:grid-cols-3')).toBe(false)
+  })
 })

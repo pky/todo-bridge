@@ -1,5 +1,4 @@
 import Parser from 'rss-parser'
-import { classifyMobileArticle } from '../mobileClassifier'
 import { MOBILE_SOURCES } from './mobileSources'
 import type { RawArticle } from '../types'
 
@@ -45,7 +44,6 @@ export async function fetchMobileRssArticles(): Promise<RawArticle[]> {
           const title = item.title || ''
           const description = item.contentSnippet || item.content || ''
           const thumbnailUrl = extractThumbnail(item as unknown as Record<string, unknown>)
-          const { actionRequired, actionType, importantLevel, requiredByDate } = classifyMobileArticle({ title, description })
 
           return [{
             title,
@@ -58,10 +56,6 @@ export async function fetchMobileRssArticles(): Promise<RawArticle[]> {
             sourceTier: source.sourceTier,
             platform: source.platform,
             isOfficial: source.isOfficial,
-            actionRequired,
-            actionType,
-            importantLevel,
-            ...(requiredByDate ? { requiredByDate } : {}),
             score: null,
             publishedAt: item.pubDate ? new Date(item.pubDate) : new Date(),
           }] satisfies RawArticle[]

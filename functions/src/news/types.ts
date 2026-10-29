@@ -1,5 +1,6 @@
 // functions/src/news/types.ts
 import * as admin from 'firebase-admin'
+import type { MobileSummary } from './mobileClaudeClassifier'
 
 export type NewsTopic = 'ai' | 'mobile'
 export type NewsSource = 'hn' | 'reddit' | 'rss' | 'github' | 'official'
@@ -19,24 +20,45 @@ export type ImportantLevel = 'urgent' | 'review' | 'reference'
 
 export interface NewsArticle {
   title: string
-  description: string       // 収集時の生テキスト（英語記事はGemini前のスコアリングに使用）
+  description: string       // 収集時の生テキスト（英語記事は判定・要約前のスコアリングに使用）
   content?: string          // スクレイピングした本文の主要部分
-  titleJa?: string          // Gemini翻訳後に設定（日本語記事はtitleと同じ）
-  summaryJa?: string        // Gemini要約後に設定（日本語記事はdescriptionから）
+  titleJa?: string          // Claude翻訳後に設定（日本語記事はtitleと同じ）
+  summaryJa?: string        // Claude要約後に設定（日本語記事はdescriptionから）
   contentJa?: string        // 本文主要部分の日本語訳
-  tags?: string[]           // Geminiで抽出したAI・技術系キーワードタグ
+  tags?: string[]           // 判定時に抽出したAI・技術系キーワードタグ
   url: string
+  normalizedUrl?: string
   thumbnailUrl: string | null
   topic: NewsTopic
   source: NewsSource
   sourceName: string
+  publisherDomain?: string
   sourceTier?: SourceTier
   platform?: MobilePlatform
+  generalSource?: boolean
   isOfficial?: boolean
   actionRequired?: boolean
   actionType?: ActionType
   importantLevel?: ImportantLevel
   requiredByDate?: string
+  triageStatus?: 'done' | 'pending'
+  triageVersion?: string
+  triageDecision?: 'include' | 'hold' | 'exclude'
+  category?: string
+  triagedAt?: number
+  relevant?: boolean
+  developerValue?: 'high' | 'normal' | 'low'
+  readReason?: string
+  summaryStatus?: 'generated' | 'fallback' | 'rejected'
+  summarySource?: 'content' | 'description'
+  summaryVersion?: string
+  summarizedAt?: number
+  feedEligible?: boolean
+  sharedScore?: number
+  importance?: 'high' | 'normal' | 'low'
+  classificationStatus?: 'done' | 'pending'
+  inScope?: boolean
+  mobileSummary?: MobileSummary
   score: number | null
   publishedAt: admin.firestore.Timestamp
   fetchedAt: admin.firestore.Timestamp
@@ -51,8 +73,10 @@ export interface RawArticle {
   topic?: NewsTopic
   source: NewsSource
   sourceName: string
+  publisherDomain?: string
   sourceTier?: SourceTier
   platform?: MobilePlatform
+  generalSource?: boolean
   isOfficial?: boolean
   actionRequired?: boolean
   actionType?: ActionType

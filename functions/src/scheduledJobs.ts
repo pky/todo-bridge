@@ -45,7 +45,7 @@ export const dailyBackupJob = functions
 
 export const dailyNewsPipeline = functions
   .region('asia-northeast1')
-  .runWith({ timeoutSeconds: 540, memory: '512MB', secrets: ['GEMINI_API_KEY'] })
+  .runWith({ timeoutSeconds: 540, memory: '512MB', secrets: ['ANTHROPIC_API_KEY'] })
   .pubsub.schedule('0 6 * * *')
   .timeZone('Asia/Tokyo')
   .onRun(async () => {

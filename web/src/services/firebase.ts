@@ -7,7 +7,7 @@ import {
   memoryLocalCache,
 } from 'firebase/firestore'
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions'
-import app, { emulatorHost, isEmulator } from './firebaseApp'
+import app, { authEmulatorPort, emulatorHost, firestoreEmulatorPort, functionsEmulatorPort, isEmulator } from './firebaseApp'
 
 export const auth = getAuth(app)
 export const googleProvider = new GoogleAuthProvider()
@@ -26,9 +26,9 @@ export const functions = getFunctions(app, 'asia-northeast1')
 
 // エミュレータ接続（開発・テスト環境用）
 if (isEmulator) {
-  connectAuthEmulator(auth, `http://${emulatorHost}:9099`, { disableWarnings: true })
-  connectFirestoreEmulator(db, emulatorHost, 8080)
-  connectFunctionsEmulator(functions, emulatorHost, 5001)
+  connectAuthEmulator(auth, `http://${emulatorHost}:${authEmulatorPort}`, { disableWarnings: true })
+  connectFirestoreEmulator(db, emulatorHost, firestoreEmulatorPort)
+  connectFunctionsEmulator(functions, emulatorHost, functionsEmulatorPort)
 }
 
 export default app

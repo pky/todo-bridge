@@ -3,13 +3,7 @@ import axios from 'axios'
 import type { RawArticle } from '../types'
 
 const HN_API = 'https://hacker-news.firebaseio.com/v0'
-const AI_KEYWORDS = [
-  'AI', 'machine learning', 'LLM', 'GPT', 'Claude', 'Gemini',
-  'artificial intelligence', 'neural', 'deep learning', 'OpenAI',
-  'Anthropic', 'model', 'transformer', 'diffusion',
-  'Copilot', 'GitHub Copilot', 'Microsoft Copilot', 'agent',
-  'coding assistant', 'code generation', 'developer tool'
-]
+const TIMEOUT_MS = 10000
 
 interface HNItem {
   id: number
@@ -21,42 +15,42 @@ interface HNItem {
   text?: string
 }
 
-function isAIRelated(title: string): boolean {
-  const lower = title.toLowerCase()
-  return AI_KEYWORDS.some(kw => lower.includes(kw.toLowerCase()))
+export function selectHnStories(items: Array<HNItem | null>, limit: number): RawArticle[] {
+  const articles: RawArticle[] = []
+  for (const item of items) {
+    if (articles.length >= limit) break
+    if (!item || !item.title || !item.url || item.type !== 'story') continue
+    let publisherDomain: string | undefined
+    try { publisherDomain = new URL(item.url).hostname.replace(/^www\./, '') } catch { /* 不正URLでは掲載元を補わない。 */ }
+    articles.push({
+      title: item.title,
+      url: item.url,
+      description: item.text || '',
+      thumbnailUrl: null,
+      source: 'hn',
+      sourceName: 'Hacker News',
+      ...(publisherDomain ? { publisherDomain } : {}),
+      generalSource: true,
+      score: item.score ?? 0,
+      publishedAt: new Date((item.time ?? 0) * 1000),
+    })
+  }
+  return articles
 }
 
-export async function fetchHNArticles(limit = 50): Promise<RawArticle[]> {
-  // トップストーリーIDを取得
-  const { data: ids } = await axios.get<number[]>(`${HN_API}/topstories.json`)
-  const top200 = ids.slice(0, 200)
+export async function fetchHNArticles(): Promise<RawArticle[]> {
+  const { data: ids } = await axios.get<number[]>(`${HN_API}/topstories.json`, { timeout: TIMEOUT_MS })
+  const top100 = ids.slice(0, 100)
+  const items: Array<HNItem | null> = []
 
-  // 並列でアイテム詳細を取得（20件ずつバッチ処理）
-  const articles: RawArticle[] = []
-  for (let i = 0; i < top200.length && articles.length < limit; i += 20) {
-    const batch = top200.slice(i, i + 20)
-    const items = await Promise.all(
-      batch.map(id => axios.get<HNItem>(`${HN_API}/item/${id}.json`).then(r => r.data))
-    )
-
-    for (const item of items) {
-      if (!item.title || !item.url || item.type !== 'story') continue
-      if (!isAIRelated(item.title)) continue
-
-      articles.push({
-        title: item.title,
-        url: item.url,
-        description: item.text || '',
-        thumbnailUrl: null,
-        source: 'hn',
-        sourceName: 'Hacker News',
-        score: item.score ?? 0,
-        publishedAt: new Date((item.time ?? 0) * 1000),
-      })
-
-      if (articles.length >= limit) break
-    }
+  // 上位100件すべてを20件ずつ取得し、関連性は後段で判定する。
+  for (let i = 0; i < top100.length; i += 20) {
+    const batch = top100.slice(i, i + 20)
+    items.push(...await Promise.all(
+      batch.map(id => axios.get<HNItem | null>(`${HN_API}/item/${id}.json`, { timeout: TIMEOUT_MS })
+        .then(r => r.data)
+        .catch(() => null))
+    ))
   }
-
-  return articles
+  return selectHnStories(items, 100)
 }

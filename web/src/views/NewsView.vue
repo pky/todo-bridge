@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useNewsStore } from '@/stores/news'
 import NewsCard from '@/components/NewsCard.vue'
+import MobileSummary from '@/components/MobileSummary.vue'
 import type { NewsArticle } from '@/types'
 import type { NewsTopic } from '@/types/news'
 
@@ -16,7 +17,7 @@ const newsStore = useNewsStore()
 const bookmarkToast = ref(false)
 const showScrollTop = ref(false)
 const listContainerRef = ref<HTMLElement | null>(null)
-const mobileFilter = ref<'all' | 'required' | 'ios' | 'android'>('required')
+const mobileFilter = ref<'all' | 'ios' | 'android'>('all')
 const lastFeedCheckDateByTopic = ref<Record<NewsTopic, string | null>>({
   ai: null,
   mobile: null,
@@ -110,8 +111,6 @@ const filteredArticles = computed(() => {
   if (!isMobileTopic.value) return newsStore.articles
 
   switch (mobileFilter.value) {
-    case 'required':
-      return preferenceFilteredArticles.value.filter((article) => isImportantArticle(article))
     case 'ios':
       return preferenceFilteredArticles.value.filter((article) => article.platform === 'ios')
     case 'android':
@@ -171,11 +170,7 @@ function getImportanceReason(article: NewsArticle): string {
 const importantArticles = computed(() => {
   if (!isMobileTopic.value) return []
 
-  const sourceArticles = mobileFilter.value === 'required'
-    ? preferenceFilteredArticles.value
-    : filteredArticles.value
-
-  return [...sourceArticles]
+  return [...filteredArticles.value]
     .filter((article) => isImportantArticle(article))
     .sort((left, right) => getImportanceRank(right) - getImportanceRank(left))
     .slice(0, 3)
@@ -246,7 +241,7 @@ watch(
   [currentTopic, () => authStore.user?.uid, () => authStore.loading],
   async ([topic, uid, authLoading], [previousTopic, previousUid]) => {
     if (topic !== previousTopic) {
-      mobileFilter.value = topic === 'mobile' ? 'required' : 'all'
+      mobileFilter.value = 'all'
     }
 
     if (authLoading || !uid) return
@@ -320,13 +315,6 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
         <div class="flex gap-2 overflow-x-auto">
           <button
             class="rounded-full px-3 py-1 text-xs font-medium"
-            :class="mobileFilter === 'required' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600'"
-            @click="mobileFilter = 'required'"
-          >
-            重要事項
-          </button>
-          <button
-            class="rounded-full px-3 py-1 text-xs font-medium"
             :class="mobileFilter === 'ios' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'"
             @click="mobileFilter = 'ios'"
           >
@@ -398,7 +386,7 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
             <h2 class="mt-1 text-base font-semibold text-gray-900">今日の重要事項</h2>
           </div>
 
-          <div v-if="importantArticles.length > 0" class="grid gap-3 px-3 py-3 xl:grid-cols-3">
+          <div v-if="importantArticles.length > 0" class="grid grid-cols-1 gap-3 px-3 py-3">
             <article
               v-for="article in importantArticles"
               :key="`important-${article.id}`"
@@ -422,7 +410,12 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
                 </button>
               </div>
 
-              <p v-if="article.summaryJa" class="mt-2 text-xs leading-relaxed text-gray-600">
+              <MobileSummary
+                v-if="article.mobileSummary"
+                :summary="article.mobileSummary"
+                class="mt-2 text-xs leading-relaxed text-gray-600"
+              />
+              <p v-else-if="article.summaryJa" class="mt-2 text-xs leading-relaxed text-gray-600">
                 {{ article.summaryJa }}
               </p>
 
