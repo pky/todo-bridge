@@ -519,4 +519,95 @@ describe('newsInteractions の読み取りを候補記事に絞る', () => {
       expect(batchSetMock).not.toHaveBeenCalled()
     })
   })
+
+  describe('回帰: 旧形式の個別フィード（articleRef のみ）', () => {
+    // articleRef の参照先を完全な記事として返すよう getDoc を拡張する。interactions の応答は installServer のまま。
+    const serveRefArticles = (refs: Record<string, Fixture>) => {
+      const base = getDocMock.getMockImplementation()!
+      getDocMock.mockImplementation(async (ref: { path: string }) => {
+        const found = refs[ref.path]
+        if (found) return { id: found.id, exists: () => true, data: () => found.data }
+        return base(ref)
+      })
+    }
+    const refFeedDoc = (feedId: string, refPath: string, displayScore: number): Fixture => ({
+      id: feedId,
+      data: { date: TODAY, displayScore, articleRef: refPath },
+    })
+    const refArticle = (id: string): Fixture => ({ id, data: { ...articleData, url: urlOf(id), displayScore: 50 } })
+
+    it('解決後の url が別IDで dismissed / クリック済み / shownCount>=2 の記録を持つ記事を、全件読みなしで除外する', async () => {
+      const names = ['ref-dismissed', 'ref-clicked', 'ref-read', 'ref-keep']
+      installServer({
+        personal: names.map((name, i) => refFeedDoc(`feed-${name}`, `topics/ai/articles/${name}`, 90 - i)),
+        interactions: [
+          // 記録は別ID。現在の共有候補にも、個別フィード文書（url を持たない）にも現れない。
+          interaction('ai_other-1', { topic: 'ai', articleId: 'other-1', url: urlOf('ref-dismissed'), dismissed: true }),
+          interaction('ai_other-2', { topic: 'ai', articleId: 'other-2', url: urlOf('ref-clicked'), clickedAt: { seconds: 1 } }),
+          interaction('ai_other-3', { topic: 'ai', articleId: 'other-3', url: urlOf('ref-read'), shownCount: 2 }),
+        ],
+      })
+      serveRefArticles(Object.fromEntries(names.map((name) => [`topics/ai/articles/${name}`, refArticle(name)])))
+      const store = useNewsStore()
+      await store.loadTodayFeed('ai')
+      await settle()
+
+      expect(store.error).toBeNull()
+      expect(unboundedReads()).toEqual([])
+      expect(ids(store.articles)).toEqual(['ref-keep'])
+    })
+  })
+
+  describe('回帰: 表示追跡で topic 付きの記録を裸の旧形式より優先する', () => {
+    it('裸の記録が昨日でも、topic 付き ai_123 が今日なら加算を書かない', async () => {
+      installServer({
+        personal: [personal('123', 90)],
+        interactions: [
+          interaction('123', { url: urlOf('123'), shownCount: 1, lastShownDate: YESTERDAY }),
+          interaction('ai_123', { topic: 'ai', articleId: '123', url: urlOf('123'), shownCount: 1, lastShownDate: TODAY }),
+        ],
+      })
+      const store = useNewsStore()
+      await store.loadTodayFeed('ai')
+      await settle()
+
+      expect(ids(store.articles)).toEqual(['123'])
+      expect(unboundedReads()).toEqual([])
+      expect(batchSetMock).not.toHaveBeenCalled()
+      expect(batchCommitMock).not.toHaveBeenCalled()
+    })
+
+    it('裸の記録だけが昨日で topic 付きが無ければ、従来どおり ai_123 に加算する', async () => {
+      installServer({
+        personal: [personal('123', 90)],
+        interactions: [interaction('123', { url: urlOf('123'), shownCount: 1, lastShownDate: YESTERDAY })],
+      })
+      await useNewsStore().loadTodayFeed('ai')
+      await vi.waitFor(() => {
+        expect(batchCommitMock).toHaveBeenCalledTimes(1)
+      })
+
+      expect(batchSetMock).toHaveBeenCalledTimes(1)
+      expect((batchSetMock.mock.calls[0]?.[0] as { path: string }).path).toBe(`${INTERACTIONS}/ai_123`)
+      expect(batchSetMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ shownCount: { __increment: 1 }, lastShownDate: TODAY }))
+    })
+
+    it('mobile でも、裸の記録が昨日で mobile_123 が今日なら加算を書かない', async () => {
+      installServer({
+        topic: 'mobile',
+        personal: [personal('123', 90, { topic: 'mobile' })],
+        interactions: [
+          interaction('123', { url: urlOf('123'), shownCount: 1, lastShownDate: YESTERDAY }),
+          interaction('mobile_123', { topic: 'mobile', articleId: '123', url: urlOf('123'), shownCount: 1, lastShownDate: TODAY }),
+        ],
+      })
+      const store = useNewsStore()
+      await store.loadTodayFeed('mobile')
+      await settle()
+
+      expect(ids(store.articles)).toEqual(['123'])
+      expect(batchSetMock).not.toHaveBeenCalled()
+      expect(batchCommitMock).not.toHaveBeenCalled()
+    })
+  })
 })
