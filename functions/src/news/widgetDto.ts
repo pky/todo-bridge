@@ -11,6 +11,8 @@ export interface WidgetArticleDto {
   summary?: string
   imageUrl?: string
   url?: string
+  /** 読む理由。topic が ai の記事で、空でないときだけ返す。 */
+  readReason?: string
 }
 
 export interface WidgetNewsResponse {
