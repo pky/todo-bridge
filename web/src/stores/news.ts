@@ -319,7 +319,11 @@ export const useNewsStore = defineStore('news', () => {
     }
   }
 
-  async function resolveArticleDocs(feedDocs: Array<{ id: string; data: () => unknown }>): Promise<NewsArticle[]> {
+  // refCache を渡すと、同じ articleRef の参照先は1回だけ読み、以降は同じ結果を使い回す。
+  async function resolveArticleDocs(
+    feedDocs: Array<{ id: string; data: () => unknown }>,
+    refCache?: Map<string, Promise<NewsArticle | null>>
+  ): Promise<NewsArticle[]> {
     const articlePromises = feedDocs.map(async (feedDoc) => {
       const rawData = feedDoc.data()
       if (!rawData || typeof rawData !== 'object') return null
@@ -332,14 +336,21 @@ export const useNewsStore = defineStore('news', () => {
 
       // 旧形式（articleRefしかない場合）
       if (typeof data.articleRef === 'string') {
-        try {
-          const articleSnap = await getDoc(doc(db, data.articleRef))
-          if (!articleSnap.exists()) return null
-          return { id: articleSnap.id, ...(articleSnap.data() as Record<string, unknown>) } as NewsArticle
-        } catch (e) {
-          console.warn('[news] Failed to fetch referenced article', e)
-          return null
-        }
+        const articleRef = data.articleRef
+        const cached = refCache?.get(articleRef)
+        if (cached) return cached
+        const fetched = (async (): Promise<NewsArticle | null> => {
+          try {
+            const articleSnap = await getDoc(doc(db, articleRef))
+            if (!articleSnap.exists()) return null
+            return { id: articleSnap.id, ...(articleSnap.data() as Record<string, unknown>) } as NewsArticle
+          } catch (e) {
+            console.warn('[news] Failed to fetch referenced article', e)
+            return null
+          }
+        })()
+        refCache?.set(articleRef, fetched)
+        return fetched
       }
 
       return null
@@ -362,9 +373,14 @@ export const useNewsStore = defineStore('news', () => {
     if (displayedArticles.length === 0) return
 
     const interactionDocs = await loadRelatedInteractionDocs(uid, topic, displayedArticles, false)
-    const interactionMap = new Map(
-      interactionDocs.map((snap) => [snap.data.articleId ?? snap.id, snap.data])
-    )
+    // 同じ記事に topic 付きと裸の旧形式の記録が両方ある場合は、topic 付きを優先する。
+    const interactionMap = new Map<string, Partial<NewsInteraction>>()
+    for (const snap of interactionDocs) {
+      const key = snap.data.articleId ?? snap.id
+      if (!interactionMap.has(key) || snap.id === getInteractionDocId(topic, key)) {
+        interactionMap.set(key, snap.data)
+      }
+    }
     const batch = writeBatch(db)
     let hasUpdates = false
 
@@ -463,6 +479,7 @@ export const useNewsStore = defineStore('news', () => {
     error.value = null
 
     try {
+      const refCache = new Map<string, Promise<NewsArticle | null>>()
       const personalizedFeedPromise = loadLatestFeedDocs(uid, topic)
       const sharedFeedPromise = loadLatestTopicArticleDocs(topic)
 
@@ -475,7 +492,12 @@ export const useNewsStore = defineStore('news', () => {
       const personalInteractionsPromise = personalizedFeedPromise.then(async (personalizedFeed) => {
         const sharedCandidates = await sharedCandidatesPromise
         const alreadyRead = new Set(sharedCandidates.map((candidate) => `${String(candidate.id)}\n${String(candidate.url)}`))
-        const candidates = toInteractionCandidates(personalizedFeed.feedDocs)
+        // 参照だけの旧形式文書は、解決後の id と url も候補にする。
+        const resolvedPersonal = await resolveArticleDocs(personalizedFeed.feedDocs, refCache)
+        const candidates = [
+          ...toInteractionCandidates(personalizedFeed.feedDocs),
+          ...resolvedPersonal.map((article) => ({ id: article.id, url: article.url })),
+        ]
           .filter((candidate) => !alreadyRead.has(`${String(candidate.id)}\n${String(candidate.url)}`))
         return loadTopicInteractions(uid, topic, candidates)
       })
@@ -488,7 +510,7 @@ export const useNewsStore = defineStore('news', () => {
             }
             if (articles.value.length > 0) return
 
-            const resolvedSharedArticles = await resolveArticleDocs(sharedFeed.articleDocs)
+            const resolvedSharedArticles = await resolveArticleDocs(sharedFeed.articleDocs, refCache)
             const sharedArticles = topic === 'ai'
               ? selectDisplayableAiNews(resolvedSharedArticles, { shared: true })
               : topic === 'mobile' ? selectDisplayableMobileNews(resolvedSharedArticles) : resolvedSharedArticles
@@ -545,7 +567,8 @@ export const useNewsStore = defineStore('news', () => {
             })
             if (sharedRemaining.length === 0) {
               const personalizedArticles = (await resolveArticleDocs(
-                personalizedFeed.feedDocs.filter((feedDoc) => !dismissedArticleIds.has(feedDoc.id))
+                personalizedFeed.feedDocs.filter((feedDoc) => !dismissedArticleIds.has(feedDoc.id)),
+                refCache
               )).filter((article) => !excludedUrls.has(article.url) || shouldKeepVisibleAfterClick(article, topic))
               const personalizedRemaining = topic === 'ai'
                 ? selectDisplayableAiNews(personalizedArticles, { shared: false })
@@ -585,7 +608,7 @@ export const useNewsStore = defineStore('news', () => {
         return
       }
 
-      const results = await resolveArticleDocs(sortedFeedDocs.filter(feedDoc => !dismissedIds.value.has(feedDoc.id)))
+      const results = await resolveArticleDocs(sortedFeedDocs.filter(feedDoc => !dismissedIds.value.has(feedDoc.id)), refCache)
       const unfilteredArticles = results
         .filter(article => !excludedUrls.has(article.url) || shouldKeepVisibleAfterClick(article, topic))
       const visibleArticles = topic === 'ai'
