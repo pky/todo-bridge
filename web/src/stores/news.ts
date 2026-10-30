@@ -153,17 +153,72 @@ export const useNewsStore = defineStore('news', () => {
     return interaction.topic === topic || (!interaction.topic && topic === 'ai')
   }
 
-  async function loadTopicInteractions(uid: string, topic: NewsTopic): Promise<{
+  type InteractionCandidate = { id: unknown; url?: unknown }
+  const INTERACTION_QUERY_IN_LIMIT = 30
+
+  // 今日の候補記事に関係する記録だけを、ID と url で引いて読む。全件は読まない。
+  // ドキュメント ID は `${topic}_${記事ID}` と、旧形式の裸の記事ID。
+  async function loadRelatedInteractionDocs(
+    uid: string,
+    topic: NewsTopic,
+    candidates: InteractionCandidate[],
+    includeUrls = true
+  ): Promise<Array<{ id: string; data: Partial<NewsInteraction> }>> {
+    if (candidates.length === 0) return []
+    const interactionsRef = collection(db, `users/${uid}/newsInteractions`)
+
+    const articleIds = [...new Set(
+      candidates
+        .map((candidate) => candidate.id)
+        .filter((id): id is string => typeof id === 'string' && id !== '' && !id.includes('/'))
+    )]
+    const docIds = articleIds.flatMap((id) => [getInteractionDocId(topic, id), id])
+    const urls = includeUrls
+      ? [...new Set(
+          candidates
+            .map((candidate) => candidate.url)
+            .filter((url): url is string => typeof url === 'string' && url !== '')
+        )]
+      : []
+
+    const urlQueries: Array<ReturnType<typeof query>> = []
+    for (let i = 0; i < urls.length; i += INTERACTION_QUERY_IN_LIMIT) {
+      urlQueries.push(query(interactionsRef, where('url', 'in', urls.slice(i, i + INTERACTION_QUERY_IN_LIMIT))))
+    }
+
+    const [idSnaps, urlSnaps] = await Promise.all([
+      Promise.all(docIds.map((docId) => getDoc(doc(db, `users/${uid}/newsInteractions/${docId}`)))),
+      Promise.all(urlQueries.map((target) => getServerFirstSnapshot(target))),
+    ])
+    const found = new Map<string, Partial<NewsInteraction>>()
+    for (const snap of idSnaps) {
+      if (snap.exists() && !found.has(snap.id)) found.set(snap.id, snap.data() as Partial<NewsInteraction>)
+    }
+    for (const snapshot of urlSnaps) {
+      for (const interactionDoc of snapshot.docs) {
+        if (!found.has(interactionDoc.id)) found.set(interactionDoc.id, interactionDoc.data() as Partial<NewsInteraction>)
+      }
+    }
+    return [...found].map(([id, data]) => ({ id, data }))
+  }
+
+  function toInteractionCandidates(feedDocs: Array<{ id: string; data: () => unknown }>): InteractionCandidate[] {
+    return feedDocs.map((feedDoc) => {
+      const data = feedDoc.data() as { url?: unknown } | undefined
+      return { id: feedDoc.id, url: data?.url }
+    })
+  }
+
+  async function loadTopicInteractions(uid: string, topic: NewsTopic, candidates: InteractionCandidate[]): Promise<{
     excludedUrls: Set<string>
     dismissedArticleIds: Set<string>
   }> {
-    const interactionsRef = collection(db, `users/${uid}/newsInteractions`)
-    const interactionsSnap = await getServerFirstSnapshot(interactionsRef)
+    const interactionDocs = await loadRelatedInteractionDocs(uid, topic, candidates)
     const excludedUrls = new Set<string>()
     const dismissedArticleIds = new Set<string>()
 
-    for (const interactionDoc of interactionsSnap.docs) {
-      const data = interactionDoc.data() as Partial<NewsInteraction>
+    for (const interactionDoc of interactionDocs) {
+      const data = interactionDoc.data
       if (!isMatchingTopicInteraction(topic, data)) continue
 
       const interactionArticleId = data.articleId ?? interactionDoc.id
@@ -306,13 +361,9 @@ export const useNewsStore = defineStore('news', () => {
   ): Promise<void> {
     if (displayedArticles.length === 0) return
 
-    const interactionsRef = collection(db, `users/${uid}/newsInteractions`)
-    const interactionsSnap = await getServerFirstSnapshot(interactionsRef)
+    const interactionDocs = await loadRelatedInteractionDocs(uid, topic, displayedArticles, false)
     const interactionMap = new Map(
-      interactionsSnap.docs.map((snap) => {
-        const data = snap.data() as Partial<NewsInteraction>
-        return [data.articleId ?? snap.id, data]
-      })
+      interactionDocs.map((snap) => [snap.data.articleId ?? snap.id, snap.data])
     )
     const batch = writeBatch(db)
     let hasUpdates = false
@@ -412,9 +463,22 @@ export const useNewsStore = defineStore('news', () => {
     error.value = null
 
     try {
-      const interactionsPromise = loadTopicInteractions(uid, topic)
       const personalizedFeedPromise = loadLatestFeedDocs(uid, topic)
       const sharedFeedPromise = loadLatestTopicArticleDocs(topic)
+
+      // 履歴は候補記事が分かってから、共有記事と個別フィードそれぞれの取得完了に合わせて引く。
+      // 個別フィード側は、共有記事側で引いた分を除く。
+      const sharedCandidatesPromise = sharedFeedPromise.then((sharedFeed) => toInteractionCandidates(sharedFeed.articleDocs))
+      const sharedInteractionsPromise = sharedCandidatesPromise.then((candidates) =>
+        loadTopicInteractions(uid, topic, candidates)
+      )
+      const personalInteractionsPromise = personalizedFeedPromise.then(async (personalizedFeed) => {
+        const sharedCandidates = await sharedCandidatesPromise
+        const alreadyRead = new Set(sharedCandidates.map((candidate) => `${String(candidate.id)}\n${String(candidate.url)}`))
+        const candidates = toInteractionCandidates(personalizedFeed.feedDocs)
+          .filter((candidate) => !alreadyRead.has(`${String(candidate.id)}\n${String(candidate.url)}`))
+        return loadTopicInteractions(uid, topic, candidates)
+      })
 
       if (!cachedFeed?.articles.length) {
         void sharedFeedPromise
@@ -453,10 +517,16 @@ export const useNewsStore = defineStore('news', () => {
 
       const { excludedUrls, dismissedArticleIds, latestDate, sortedFeedDocs, isSharedFallback } = await withTimeout(
         (async () => {
-          const [{ excludedUrls, dismissedArticleIds }, personalizedFeed, sharedFeed] = await Promise.all([
-            interactionsPromise,
+          const [personalizedFeed, sharedFeed, sharedInteractions, personalInteractions] = await Promise.all([
             personalizedFeedPromise,
             sharedFeedPromise,
+            sharedInteractionsPromise,
+            personalInteractionsPromise,
+          ])
+          const excludedUrls = new Set([...sharedInteractions.excludedUrls, ...personalInteractions.excludedUrls])
+          const dismissedArticleIds = new Set([
+            ...sharedInteractions.dismissedArticleIds,
+            ...personalInteractions.dismissedArticleIds,
           ])
 
           let shouldUseSharedFallback = (
@@ -690,7 +760,6 @@ export const useNewsStore = defineStore('news', () => {
     }
 
     try {
-      const { excludedUrls, dismissedArticleIds } = await loadTopicInteractions(uid, 'mobile')
       const { latestDate, feedDocs } = await loadLatestFeedDocs(uid, 'mobile')
 
       if (!latestDate) {
@@ -698,6 +767,11 @@ export const useNewsStore = defineStore('news', () => {
         mobileAlertSummary.value = { urgent: 0, review: 0 }
         return
       }
+      const { excludedUrls, dismissedArticleIds } = await loadTopicInteractions(
+        uid,
+        'mobile',
+        toInteractionCandidates(feedDocs)
+      )
 
       const visibleArticles = feedDocs
         .filter(feedDoc => !dismissedArticleIds.has(feedDoc.id))
