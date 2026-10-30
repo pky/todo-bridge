@@ -24,7 +24,15 @@ async function loadRelatedInteractions(
   if (candidates.length === 0) return []
   const path = `users/${uid}/newsInteractions`
 
-  const ids = [...new Set(candidates.map((article) => article.id))]
+  // newsInteractions のドキュメント ID は、書き手（Web の getInteractionDocId、widgetReadLaterStore）が
+  // すべて `${topic}_${記事ID}` の形で書く。旧形式は topic なしの裸の記事ID。
+  // この2形式だけを取れば、selectWidgetFeed が使う記録を取りこぼさない。
+  // 別の形式で書く書き手を足すときは、ここを直す。
+  // データ側の id は型どおりとは限らないため、文字列で空でなく '/' を含まないものだけで参照を作る。
+  const rawIds: unknown[] = candidates.map((article) => article.id)
+  const ids = [...new Set(
+    rawIds.filter((id): id is string => typeof id === 'string' && id !== '' && !id.includes('/'))
+  )]
   const refs = ids.flatMap((id) => [db.doc(`${path}/${topic}_${id}`), db.doc(`${path}/${id}`)])
 
   const urls = [...new Set(
@@ -34,7 +42,7 @@ async function loadRelatedInteractions(
   for (let i = 0; i < urls.length; i += URL_IN_LIMIT) chunks.push(urls.slice(i, i + URL_IN_LIMIT))
 
   const [byId, ...byUrl] = await Promise.all([
-    db.getAll(...refs),
+    refs.length > 0 ? db.getAll(...refs) : Promise.resolve([]),
     ...chunks.map((chunk) => db.collection(path).where('url', 'in', chunk).get()),
   ])
 
