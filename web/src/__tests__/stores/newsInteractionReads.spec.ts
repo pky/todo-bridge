@@ -610,4 +610,117 @@ describe('newsInteractions の読み取りを候補記事に絞る', () => {
       expect(batchCommitMock).not.toHaveBeenCalled()
     })
   })
+
+  describe('オフライン: 個々の getDoc が unavailable で失敗しても、取れた履歴を捨てない', () => {
+    // 条件に合う newsInteractions の getDoc だけを、指定コードの FirestoreError 相当で reject させる。
+    const failDocsWhere = (shouldFail: (path: string) => boolean, code: string) => {
+      const base = getDocMock.getMockImplementation()!
+      getDocMock.mockImplementation(async (ref: { path: string }) => {
+        if (ref.path.startsWith(`${INTERACTIONS}/`) && shouldFail(ref.path)) {
+          throw Object.assign(new Error('Failed to get document because the client is offline.'), { code })
+        }
+        return base(ref)
+      })
+    }
+    const isBareId = (path: string) => !lastSegment(path).includes('_')
+
+    it('裸のIDの getDoc が unavailable でも、url クエリの記録で記事を除外しフィード更新は失敗しない', async () => {
+      installServer({
+        personal: [personal('o-keep', 90), personal('o-read', 80), personal('o-keep2', 70)],
+        interactions: [
+          interaction('ai_other-1', { topic: 'ai', articleId: 'other-1', url: urlOf('o-read'), shownCount: 2 }),
+        ],
+      })
+      failDocsWhere(isBareId, 'unavailable')
+      const store = useNewsStore()
+      await store.loadTodayFeed('ai')
+      await settle()
+
+      expect(store.error).toBeNull()
+      expect(ids(store.articles)).toEqual(['o-keep', 'o-keep2'])
+    })
+
+    it('成功した ID 参照の記録も、別の getDoc が unavailable でも捨てない', async () => {
+      installServer({
+        personal: [personal('o-keep', 90), personal('o-dismissed', 80)],
+        interactions: [
+          interaction('ai_o-dismissed', { topic: 'ai', articleId: 'o-dismissed', url: urlOf('o-dismissed'), dismissed: true }),
+        ],
+      })
+      failDocsWhere(isBareId, 'unavailable')
+      const store = useNewsStore()
+      await store.loadTodayFeed('ai')
+      await settle()
+
+      expect(store.error).toBeNull()
+      expect(ids(store.articles)).toEqual(['o-keep'])
+      expect(store.dismissedIds.has('o-dismissed')).toBe(true)
+    })
+
+    it('loadMobileAlertCount は unavailable でも件数を0にリセットせず、除外後の件数を返す', async () => {
+      const mobile = (id: string, level: string, score: number) =>
+        personal(id, score, { topic: 'mobile', isOfficial: true, importantLevel: level })
+      installServer({
+        topic: 'mobile',
+        personal: [
+          mobile('m-urgent', 'urgent', 90),
+          mobile('m-urgent2', 'urgent', 80),
+          mobile('m-review', 'review', 70),
+          mobile('m-review-dismissed', 'review', 60),
+        ],
+        interactions: [
+          interaction('mobile_other', { topic: 'mobile', articleId: 'other', url: urlOf('m-review-dismissed'), dismissed: true }),
+        ],
+      })
+      failDocsWhere(isBareId, 'unavailable')
+      const store = useNewsStore()
+      await store.loadMobileAlertCount()
+
+      expect(store.mobileAlertSummary).toEqual({ urgent: 2, review: 1 })
+      expect(store.mobileAlertCount).toBe(2)
+    })
+
+    it('表示追跡（url なしの経路）でも、一部の getDoc が unavailable なら成功した記録で処理を続ける', async () => {
+      installServer({
+        personal: [personal('o-today', 90), personal('o-fresh', 80)],
+        interactions: [
+          interaction('ai_o-today', { topic: 'ai', articleId: 'o-today', url: urlOf('o-today'), shownCount: 1, lastShownDate: TODAY }),
+        ],
+      })
+      failDocsWhere(isBareId, 'unavailable')
+      const store = useNewsStore()
+      await store.loadTodayFeed('ai')
+      await vi.waitFor(() => {
+        expect(batchCommitMock).toHaveBeenCalledTimes(1)
+      })
+
+      // 今日表示済みの記事は加算せず、履歴のない記事だけ書く
+      const written = batchSetMock.mock.calls.map((call) => (call[0] as { path: string }).path)
+      expect(written).toEqual([`${INTERACTIONS}/ai_o-fresh`])
+    })
+
+    it('unavailable 以外（permission-denied）の失敗は握りつぶさず呼び出し元に伝わる', async () => {
+      installServer({ personal: [personal('o-keep', 90)] })
+      failDocsWhere(isBareId, 'permission-denied')
+      const store = useNewsStore()
+      await store.loadTodayFeed('ai')
+      await settle()
+
+      expect(store.error).not.toBeNull()
+      expect(store.articles).toEqual([])
+    })
+
+    it('permission-denied のとき loadMobileAlertCount は従来どおり失敗として扱い、件数を0にする', async () => {
+      installServer({
+        topic: 'mobile',
+        personal: [personal('m-urgent', 90, { topic: 'mobile', isOfficial: true, importantLevel: 'urgent' })],
+      })
+      failDocsWhere(isBareId, 'permission-denied')
+      const store = useNewsStore()
+      await store.loadMobileAlertCount()
+
+      expect(console.error).toHaveBeenCalled()
+      expect(store.mobileAlertSummary).toEqual({ urgent: 0, review: 0 })
+    })
+  })
 })
