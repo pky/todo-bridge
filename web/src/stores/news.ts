@@ -158,6 +158,10 @@ export const useNewsStore = defineStore('news', () => {
 
   // 今日の候補記事に関係する記録だけを、ID と url で引いて読む。全件は読まない。
   // ドキュメント ID は `${topic}_${記事ID}` と、旧形式の裸の記事ID。
+  function isUnavailableError(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === 'unavailable'
+  }
+
   async function loadRelatedInteractionDocs(
     uid: string,
     topic: NewsTopic,
@@ -187,12 +191,20 @@ export const useNewsStore = defineStore('news', () => {
     }
 
     const [idSnaps, urlSnaps] = await Promise.all([
-      Promise.all(docIds.map((docId) => getDoc(doc(db, `users/${uid}/newsInteractions/${docId}`)))),
+      Promise.all(docIds.map(async (docId) => {
+        try {
+          return await getDoc(doc(db, `users/${uid}/newsInteractions/${docId}`))
+        } catch (error) {
+          // オフラインでキャッシュに無い記録は「見つからない」として扱い、他の取得結果を捨てない。
+          if (isUnavailableError(error)) return null
+          throw error
+        }
+      })),
       Promise.all(urlQueries.map((target) => getServerFirstSnapshot(target))),
     ])
     const found = new Map<string, Partial<NewsInteraction>>()
     for (const snap of idSnaps) {
-      if (snap.exists() && !found.has(snap.id)) found.set(snap.id, snap.data() as Partial<NewsInteraction>)
+      if (snap && snap.exists() && !found.has(snap.id)) found.set(snap.id, snap.data() as Partial<NewsInteraction>)
     }
     for (const snapshot of urlSnaps) {
       for (const interactionDoc of snapshot.docs) {
