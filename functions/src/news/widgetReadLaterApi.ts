@@ -1,5 +1,9 @@
 import * as functions from 'firebase-functions/v1'
+import * as admin from 'firebase-admin'
+import { selectWidgetFeed } from './widgetFeed'
 import type { WidgetTopic } from './widgetFeed'
+import { loadWidgetFeedInputs } from './widgetNewsLoader'
+import { addReadLaterTask, isReadLaterAdded } from './widgetReadLaterStore'
 import type { ReadLaterArticle } from './widgetReadLaterStore'
 
 export interface WidgetReadLaterDeps {
@@ -68,3 +72,30 @@ export function createWidgetReadLaterHandler(deps: WidgetReadLaterDeps): (
     }
   }
 }
+
+async function findVisibleArticle(uid: string, topic: WidgetTopic, articleId: string): Promise<ReadLaterArticle | null> {
+  const input = await loadWidgetFeedInputs(admin.firestore(), uid, topic)
+  const doc = selectWidgetFeed(input).articles.find((article) => article.id === articleId)
+  if (!doc) return null
+  const titleJa = doc.titleJa
+  const title = doc.title
+  const summaryJa = doc.summaryJa
+  return {
+    id: doc.id,
+    title: typeof titleJa === 'string' && titleJa !== '' ? titleJa : typeof title === 'string' ? title : '',
+    summary: typeof summaryJa === 'string' ? summaryJa.trim() : '',
+    url: typeof doc.url === 'string' ? doc.url : null,
+  }
+}
+
+const storeDeps = (): { db: FirebaseFirestore.Firestore; serverTimestamp(): unknown } => ({
+  db: admin.firestore(),
+  serverTimestamp: () => admin.firestore.FieldValue.serverTimestamp(),
+})
+
+export const widgetReadLater = functions.region('asia-northeast1').https.onRequest(createWidgetReadLaterHandler({
+  verifyIdToken: (token) => admin.auth().verifyIdToken(token, true),
+  findArticle: findVisibleArticle,
+  isAdded: (uid, topic, articleId) => isReadLaterAdded(storeDeps(), uid, topic, articleId),
+  add: (uid, topic, article) => addReadLaterTask(storeDeps(), uid, topic, article),
+}))
