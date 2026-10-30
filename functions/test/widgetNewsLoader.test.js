@@ -45,7 +45,11 @@ function createDb(collections) {
           return {
             async get() {
               calls.push({ path, kind: 'where', field, op, value })
-              return snapshot(items.filter(item => op === '==' && item.data[field] === value))
+              return snapshot(items.filter(item => {
+                if (op === '==') return item.data[field] === value
+                if (op === 'in') return Array.isArray(value) && value.includes(item.data[field])
+                return false
+              }))
             },
           }
         },
@@ -55,6 +59,19 @@ function createDb(collections) {
         },
       }
     },
+    doc(path) {
+      const index = path.lastIndexOf('/')
+      return { path, id: path.slice(index + 1), parentPath: path.slice(0, index) }
+    },
+    async getAll(...refs) {
+      calls.push({ path: refs.length > 0 ? refs[0].parentPath : null, kind: 'getAll', ids: refs.map(ref => ref.id) })
+      return refs.map(ref => {
+        const found = (collections[ref.parentPath] || []).find(item => item.id === ref.id)
+        return found
+          ? { id: ref.id, exists: true, data: () => found.data }
+          : { id: ref.id, exists: false, data: () => undefined }
+      })
+    },
   }
   return db
 }
@@ -63,7 +80,7 @@ const personalPath = topic => `users/${UID}/newsFeed/${topic}/articles`
 const sharedPath = topic => `topics/${topic}/articles`
 const interactionsPath = `users/${UID}/newsInteractions`
 
-test('個別フィード・共有・記録を所定のパスから読む', async () => {
+test('個別フィード・共有を所定のパスから読み、記録は全件読みしない', async () => {
   const { loadWidgetFeedInputs } = mod()
   const db = createDb({
     [personalPath('ai')]: [{ id: 'p1', data: { date: '2026-01-02', title: 'P1' } }],
@@ -74,8 +91,10 @@ test('個別フィード・共有・記録を所定のパスから読む', async
   const paths = new Set(db.calls.map(call => call.path))
   assert.ok(paths.has(personalPath('ai')))
   assert.ok(paths.has(sharedPath('ai')))
-  assert.ok(paths.has(interactionsPath))
-  assert.equal(paths.size, 3)
+  // 記録の全件読み（kind 'all'）の不在は widgetNewsLoaderReads.test.js で検証する。
+  // 古い実装と新しい実装のどちらでも成り立つ範囲に留め、読むパスは3つ以内とする。
+  assert.ok(paths.size <= 3)
+  assert.ok([...paths].every(path => [personalPath('ai'), sharedPath('ai'), interactionsPath].includes(path)))
 })
 
 test('topicがmobileならmobileのパスから読む', async () => {
@@ -127,12 +146,17 @@ test('最新日は date 降順の先頭1件から得て、その日付の全件�
 test('記事のidは doc.id、データは doc.data() のスプレッド（idが後勝ちではなく {id, ...data} の順）', async () => {
   const { loadWidgetFeedInputs } = mod()
   const db = createDb({
-    [personalPath('ai')]: [{ id: 'doc-id-1', data: { date: '2026-01-02', title: '架空の記事', id: 'data-id' } }],
+    [personalPath('ai')]: [{
+      id: 'doc-id-1',
+      data: { date: '2026-01-02', title: '架空の記事', id: 'data-id', url: 'https://example.com/x' },
+    }],
     [sharedPath('ai')]: [{ id: 'doc-id-2', data: { date: '2026-01-02', title: '共有の記事' } }],
     [interactionsPath]: [{ id: 'rec-1', data: { url: 'https://example.com/x', shownCount: 2 } }],
   })
   const input = await loadWidgetFeedInputs(db, UID, 'ai')
-  assert.deepEqual(input.personalDocs, [{ id: 'data-id', date: '2026-01-02', title: '架空の記事' }])
+  assert.deepEqual(input.personalDocs, [
+    { id: 'data-id', date: '2026-01-02', title: '架空の記事', url: 'https://example.com/x' },
+  ])
   assert.deepEqual(input.sharedDocs, [{ id: 'doc-id-2', date: '2026-01-02', title: '共有の記事' }])
   assert.deepEqual(input.interactions, [{ id: 'rec-1', url: 'https://example.com/x', shownCount: 2 }])
 })
@@ -173,5 +197,5 @@ test('読み込みは読み取りだけで、書き込み系のメソッドを�
   const { loadWidgetFeedInputs } = mod()
   const db = createDb({ [personalPath('ai')]: [{ id: 'p1', data: { date: '2026-01-02' } }] })
   await loadWidgetFeedInputs(db, UID, 'ai')
-  assert.ok(db.calls.every(call => ['latest', 'where', 'all'].includes(call.kind)))
+  assert.ok(db.calls.every(call => ['latest', 'where', 'all', 'getAll'].includes(call.kind)))
 })
