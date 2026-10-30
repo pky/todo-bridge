@@ -26,7 +26,7 @@ export interface WidgetNewsResponse {
   articles: WidgetArticleDto[]
 }
 
-export function toWidgetArticleDto(doc: FeedDoc): WidgetArticleDto {
+export function toWidgetArticleDto(doc: FeedDoc, topic?: WidgetTopic): WidgetArticleDto {
   const publishedAt = doc.publishedAt
   const article: WidgetArticleDto = {
     id: doc.id,
@@ -61,6 +61,10 @@ export function toWidgetArticleDto(doc: FeedDoc): WidgetArticleDto {
       // 不正な画像URLは返さず、クライアントの代替画像に任せる。
     }
   }
+  if (topic === 'ai' && typeof doc.readReason === 'string') {
+    const readReason = doc.readReason.trim()
+    if (readReason) article.readReason = readReason
+  }
   return article
 }
 
@@ -69,7 +73,7 @@ export function computeRevision(feedDate: string | null, articleIds: string[]): 
 }
 
 export function buildWidgetNewsResponse(topic: WidgetTopic, result: WidgetFeedResult, now: Date): WidgetNewsResponse {
-  const articles = result.articles.map(toWidgetArticleDto)
+  const articles = result.articles.map((doc) => toWidgetArticleDto(doc, topic))
   return {
     dtoVersion: WIDGET_DTO_VERSION,
     topic,
