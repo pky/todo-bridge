@@ -9,7 +9,7 @@ import NewsCard from '@/components/NewsCard.vue'
 import MobileSummary from '@/components/MobileSummary.vue'
 import type { MobileActionItem, NewsArticle } from '@/types'
 import type { NewsTopic } from '@/types/news'
-import { isActionItemOverdue, selectResolvedActionItems, selectUnresolvedActionItems } from '@/utils/mobileActionItems'
+import { isActionItemOverdue, matchesMobileActionItemPreferences, selectResolvedActionItems, selectUnresolvedActionItems } from '@/utils/mobileActionItems'
 
 const router = useRouter()
 const route = useRoute()
@@ -64,9 +64,9 @@ async function refreshFeedForCurrentTopic(): Promise<void> {
 
   const checkedDate = getLocalDateKey()
   const refreshPromise: Promise<void> = (async () => {
-    if (topic === 'mobile') await newsStore.loadMobileActionItems()
     await newsStore.loadPreferences(topic)
     await newsStore.loadTodayFeed(topic)
+    if (topic === 'mobile') await newsStore.loadMobileActionItems()
     lastFeedCheckDateByTopic.value = {
       ...lastFeedCheckDateByTopic.value,
       [topic]: checkedDate,
@@ -140,18 +140,25 @@ function getImportanceReason(article: MobileActionItem): string {
 const importantArticles = computed(() => {
   if (!isMobileTopic.value) return []
   return selectUnresolvedActionItems(newsStore.mobileActionItems, newsStore.mobileActionItemStates)
-    .filter(item => mobileFilter.value === 'all' || item.platform === mobileFilter.value)
+    .filter(matchesActionItemFilters)
 })
+
+function matchesActionItemFilters(item: MobileActionItem): boolean {
+  return matchesMobileActionItemPreferences(item, newsStore.preferences)
+    && (mobileFilter.value === 'all' || item.platform === mobileFilter.value)
+}
 
 const resolvedActionItems = computed(() => isMobileTopic.value
   ? selectResolvedActionItems(newsStore.mobileActionItems, newsStore.mobileActionItemStates)
+    .filter(matchesActionItemFilters)
   : [])
 
 const regularArticles = computed(() => {
   if (!isMobileTopic.value) return filteredArticles.value
 
-  return filteredArticles.value.filter(article => !article.actionItemKey
-    || !newsStore.mobileActionItems[article.actionItemKey])
+  const actionItemUrls = new Set(Object.values(newsStore.mobileActionItems).map(item => item.url))
+  return filteredArticles.value.filter(article => (!article.actionItemKey
+    || !newsStore.mobileActionItems[article.actionItemKey]) && !actionItemUrls.has(article.url))
 })
 
 const heroArticles = computed(() => {

@@ -672,6 +672,7 @@ export async function runCollectMobileArticles(): Promise<void> {
     `[collectMobileArticles] reused=${reuse.length} fresh=${fresh.length} classified=${results.size} pending=${fresh.length - results.size} requestCount=${requestCount}`
   )
 
+  let actionItemCount = 0
   try {
     const actionItemsRef = db.doc('topics/mobile/meta/actionItems')
     const articles = [...savedToday, ...reusedToSave.map(item => item.data), ...toSave.map(item => item.data)]
@@ -679,14 +680,17 @@ export async function runCollectMobileArticles(): Promise<void> {
     await db.runTransaction(async transaction => syncMobileActionItems({
       async load(): Promise<Record<string, MobileActionItem> | null> {
         const snapshot = await transaction.get(actionItemsRef)
-        return snapshot.get('items') ?? null
+        const items: Record<string, MobileActionItem> | null = snapshot.get('items') ?? null
+        actionItemCount = Object.keys(items ?? {}).length
+        return items
       },
       async save(items) {
+        actionItemCount = Object.keys(items).length
         transaction.set(actionItemsRef, { items, updatedAt: admin.firestore.FieldValue.serverTimestamp() })
       },
     }, articles, now, today))
   } catch (err) {
-    console.error(`[collectMobileArticles] action item sync failed name=${err instanceof Error ? err.name : 'unknown'}`)
+    console.error(`[collectMobileArticles] action item sync failed count=${actionItemCount} name=${err instanceof Error ? err.name : 'unknown'}`)
   }
 
   await cleanupOldArticles('mobile')

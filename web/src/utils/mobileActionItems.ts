@@ -1,4 +1,16 @@
-import type { MobileActionItem, MobileActionItemState } from '@/types'
+import type { MobileActionItem, MobileActionItemState, NewsPreferences } from '@/types'
+
+export function matchesMobileActionItemPreferences(item: MobileActionItem, preferences: NewsPreferences): boolean {
+  const platforms = preferences.platforms ?? ['ios', 'android']
+  if (item.platform != null && item.platform !== 'cross' && !platforms.includes(item.platform)) return false
+  if (preferences.officialOnly === true && item.isOfficial !== true) return false
+  // sourceTier を持たない既存の集約では、非公式の項目をコミュニティ記事として扱う。
+  const isCommunity = item.sourceTier === 'community-rss'
+    || (item.sourceTier == null && item.isOfficial === false)
+  if (preferences.includeCommunity === false && isCommunity) return false
+  if (preferences.actionRequiredOnly === true && item.actionRequired !== true) return false
+  return true
+}
 
 function getImportanceRank(item: MobileActionItem): number {
   let rank = 0

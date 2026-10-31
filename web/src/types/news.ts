@@ -67,7 +67,7 @@ export interface NewsArticle {
 
 export type MobileActionItem = Pick<NewsArticle,
   'url' | 'titleJa' | 'title' | 'summaryJa' | 'mobileSummary' | 'platform' |
-  'sourceName' | 'isOfficial' | 'importantLevel' | 'actionRequired' |
+  'sourceName' | 'sourceTier' | 'isOfficial' | 'importantLevel' | 'actionRequired' |
   'actionType' | 'requiredByDate'
 > & {
   key: string
