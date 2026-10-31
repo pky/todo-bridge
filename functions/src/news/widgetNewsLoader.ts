@@ -1,6 +1,6 @@
 import type { FeedDoc, WidgetFeedInput, WidgetTopic } from './widgetFeed'
 
-async function loadLatestDocs(collection: FirebaseFirestore.CollectionReference): Promise<{
+async function loadLatestDocs(collection: FirebaseFirestore.CollectionReference, eligibleOnly = false): Promise<{
   date: string | null
   docs: FeedDoc[]
 }> {
@@ -8,7 +8,8 @@ async function loadLatestDocs(collection: FirebaseFirestore.CollectionReference)
   const date: unknown = latestSnapshot.docs[0]?.data().date
   if (typeof date !== 'string' || !date) return { date: null, docs: [] }
 
-  const snapshot = await collection.where('date', '==', date).get()
+  const datedQuery = collection.where('date', '==', date)
+  const snapshot = await (eligibleOnly ? datedQuery.where('feedEligible', '==', true) : datedQuery).get()
   return { date, docs: snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) }
 }
 
@@ -61,7 +62,7 @@ export async function loadWidgetFeedInputs(
 ): Promise<WidgetFeedInput> {
   const [personal, shared] = await Promise.all([
     loadLatestDocs(db.collection(`users/${uid}/newsFeed/${topic}/articles`)),
-    loadLatestDocs(db.collection(`topics/${topic}/articles`)),
+    loadLatestDocs(db.collection(`topics/${topic}/articles`), topic === 'ai'),
   ])
   const interactions = await loadRelatedInteractions(db, uid, topic, [...personal.docs, ...shared.docs])
   return {

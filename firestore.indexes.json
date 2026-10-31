@@ -112,6 +112,14 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "date", "order": "ASCENDING" },
+        { "fieldPath": "feedEligible", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "articles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "date", "order": "ASCENDING" },
         { "fieldPath": "displayScore", "order": "DESCENDING" }
       ]
     }
