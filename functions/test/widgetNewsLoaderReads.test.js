@@ -55,16 +55,20 @@ function createDb(collections) {
           }
         },
         where(field, op, value) {
-          return {
+          const chain = (filters) => ({
+            where(nextField, nextOp, nextValue) {
+              return chain([...filters, { field: nextField, op: nextOp, value: nextValue }])
+            },
             async get() {
-              calls.push({ path, kind: 'where', field, op, value })
-              return snapshot(items.filter(item => {
+              for (const filter of filters) calls.push({ path, kind: 'where', ...filter })
+              return snapshot(items.filter(item => filters.every(({ field, op, value }) => {
                 if (op === '==') return item.data[field] === value
                 if (op === 'in') return Array.isArray(value) && value.includes(item.data[field])
                 return false
-              }))
+              })))
             },
-          }
+          })
+          return chain([{ field, op, value }])
         },
         async get() {
           calls.push({ path, kind: 'all' })
