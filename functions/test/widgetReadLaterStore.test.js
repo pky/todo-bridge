@@ -327,6 +327,7 @@ test('同じバッチで newsInteractions/{topic}_{articleId} に dismissed を 
     articleId: ARTICLE.id,
     dismissed: true,
     dismissedAt: TS,
+    readLaterAt: TS,
     url: ARTICLE.url,
   })
 })
@@ -348,6 +349,7 @@ test('url が null のときは newsInteractions に url キーを含めない',
     articleId: ARTICLE.id,
     dismissed: true,
     dismissedAt: TS,
+    readLaterAt: TS,
   })
 })
 
@@ -459,4 +461,66 @@ test('already のときも成功時もログに uid・記事のタイトル・UR
   for (const secret of [UID, ARTICLE.title, ARTICLE.url, ARTICLE.summary]) {
     assert.ok(!text.includes(secret), `ログに含まれている: ${secret}`)
   }
+})
+
+// ---- 後で読むの記録を好みの学習に使うための追記 ----
+
+const LEARNING_ARTICLE = {
+  ...ARTICLE,
+  titleEn: 'Fictional Claude agents article',
+  summaryJa: '架空の日本語要約です',
+  tags: ['claude', 'agents'],
+}
+
+function interactionWrite(db, topic = 'ai', articleId = ARTICLE.id) {
+  const writes = writesAt(db, `users/${UID}/newsInteractions/${topic}_${articleId}`)
+  assert.equal(writes.length, 1, 'newsInteractions への書き込みが1件ではない')
+  return writes[0]
+}
+
+test('newsInteractions の書き込みに readLaterAt（サーバー時刻）と titleEn・summaryJa・tags を入れる', async () => {
+  const deps = createDeps()
+  assert.equal(await add(deps, LEARNING_ARTICLE), 'created')
+  const write = interactionWrite(deps.db)
+  assert.equal(write.op, 'set')
+  assert.deepEqual(write.options, { merge: true })
+  assert.equal(write.data.readLaterAt, TS)
+  assert.equal(write.data.titleEn, LEARNING_ARTICLE.titleEn)
+  assert.equal(write.data.summaryJa, LEARNING_ARTICLE.summaryJa)
+  assert.deepEqual(write.data.tags, LEARNING_ARTICLE.tags)
+})
+
+test('readLaterAt を足しても dismissed・dismissedAt・url の記録は残す', async () => {
+  const deps = createDeps()
+  await add(deps, LEARNING_ARTICLE)
+  const write = interactionWrite(deps.db)
+  assert.equal(write.data.readLaterAt, TS)
+  assert.equal(write.data.topic, 'ai')
+  assert.equal(write.data.articleId, ARTICLE.id)
+  assert.equal(write.data.dismissed, true)
+  assert.equal(write.data.dismissedAt, TS)
+  assert.equal(write.data.url, ARTICLE.url)
+})
+
+test('titleEn・summaryJa・tags を渡さなければ readLaterAt だけ足し、それらのキーは書かない（undefined も書かない）', async () => {
+  const deps = createDeps()
+  await add(deps, ARTICLE)
+  const write = interactionWrite(deps.db)
+  assert.equal(write.data.readLaterAt, TS)
+  for (const key of ['titleEn', 'summaryJa', 'tags']) {
+    assert.ok(!(key in write.data), `${key} キーが含まれている`)
+  }
+  for (const [key, value] of Object.entries(write.data)) {
+    assert.notEqual(value, undefined, `${key} が undefined で書かれている`)
+  }
+})
+
+test('一部だけ渡したときは渡したものだけ書く（tags だけ）', async () => {
+  const deps = createDeps()
+  await add(deps, { ...ARTICLE, tags: ['agents'] })
+  const write = interactionWrite(deps.db)
+  assert.equal(write.data.readLaterAt, TS)
+  assert.deepEqual(write.data.tags, ['agents'])
+  assert.ok(!('titleEn' in write.data), 'titleEn キーが含まれている')
+  assert.ok(!('summaryJa' in write.data), 'summaryJa キーが含まれている')
 })

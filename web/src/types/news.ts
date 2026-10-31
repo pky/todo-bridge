@@ -102,6 +102,7 @@ export interface NewsInteraction {
   clickedAt?: import('firebase/firestore').Timestamp
   dismissed?: boolean
   dismissedAt?: import('firebase/firestore').Timestamp
+  readLaterAt?: import('firebase/firestore').Timestamp
   shownCount?: number
   lastShownDate?: string
   lastShownAt?: import('firebase/firestore').Timestamp

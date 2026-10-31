@@ -7,6 +7,10 @@ export interface ReadLaterArticle {
   title: string
   summary: string
   url: string | null
+  /** 好みの学習に使う記録用。記事に値があるときだけ入る。 */
+  titleEn?: string
+  summaryJa?: string
+  tags?: string[]
 }
 
 export interface ReadLaterStoreDeps {
@@ -110,7 +114,11 @@ async function addReadLaterTaskAttempt(
     articleId: article.id,
     dismissed: true,
     dismissedAt: serverTimestamp(),
+    readLaterAt: serverTimestamp(),
     ...(article.url ? { url: article.url } : {}),
+    ...(article.titleEn !== undefined ? { titleEn: article.titleEn } : {}),
+    ...(article.summaryJa !== undefined ? { summaryJa: article.summaryJa } : {}),
+    ...(article.tags !== undefined ? { tags: article.tags } : {}),
   }, { merge: true })
 
   try {

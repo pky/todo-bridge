@@ -14,6 +14,14 @@ import {
 import { normalizeTitle, normalizeUrl } from './collectArticles'
 import { createClaudeMessagesClient } from './claudeClient'
 import { createClaudeDailyRequestReservation } from './claudeDailyBudget'
+import {
+  buildInteractionSignals,
+  calcPreferenceMultiplier,
+  extractKeywords,
+  learnKeywordPreferences,
+  type InteractionSignal,
+  type LearnedKeywords,
+} from './interactionLearning'
 import type { NewsArticle, NewsPreferences, NewsTopic } from './types'
 
 type NewsArticleWithId = NewsArticle & { id: string }
@@ -88,26 +96,6 @@ function isJapanese(text: string): boolean {
 }
 
 const db = admin.firestore()
-// 日本語テキストに混在する英語技術用語も含めて抽出（3文字以上、ストップワード除外）
-const STOP_WORDS = new Set([
-  'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'her',
-  'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how',
-  'its', 'may', 'new', 'now', 'old', 'see', 'two', 'way', 'who', 'did',
-  'let', 'put', 'say', 'she', 'too', 'use',
-  'this', 'that', 'with', 'from', 'have', 'will', 'your', 'more', 'also',
-  'into', 'they', 'been', 'were', 'what', 'when', 'which', 'about', 'their',
-  'than', 'then', 'them', 'some', 'just', 'like', 'other', 'over', 'only',
-  'news', 'said', 'says', 'show', 'shows', 'using', 'used', 'make', 'made',
-  'http', 'https', 'year', 'week', 'time', 'data', 'model', 'models',
-])
-
-function extractKeywords(text: string): string[] {
-  // 小文字化して英字シーケンスを正規表現で直接抽出
-  // 日本語テキスト内の "Claude" "LLM" "RAG" なども拾える
-  const words = text.toLowerCase().match(/[a-z]{3,}/g) ?? []
-  return words.filter(w => !STOP_WORDS.has(w))
-}
-
 interface ClickData {
   titleEn?: string
   summaryJa?: string
@@ -134,32 +122,6 @@ function learnKeywordsFromClicks(clicks: ClickData[]): string[] {
   return Array.from(freq.entries())
     .filter(([, count]) => count >= 2)
     .map(([word]) => word)
-}
-
-function calcPreferenceMultiplier(
-  article: NewsArticle,
-  preferences: NewsPreferences,
-  learnedKeywords: string[]
-): number {
-  // titleJa/summaryJa は要約後に設定されるため、未設定時は title/description で代用
-  const text = `${article.titleJa ?? ''} ${article.summaryJa ?? ''} ${article.title} ${article.description ?? ''}`.toLowerCase()
-  let preferenceMultiplier = 1.0
-
-  // 手動設定キーワード
-  for (const kw of preferences.keywords) {
-    if (text.includes(kw.word.toLowerCase())) {
-      preferenceMultiplier = Math.max(preferenceMultiplier, kw.weight)
-    }
-  }
-
-  // クリック履歴から学習したキーワード
-  for (const kw of learnedKeywords) {
-    if (text.includes(kw)) {
-      preferenceMultiplier = Math.max(preferenceMultiplier, 1.5)
-    }
-  }
-
-  return preferenceMultiplier
 }
 
 function calcMobileDisplayScore(
@@ -373,7 +335,7 @@ async function commitArticleUpdates(topic: NewsTopic, updates: Map<string, Parti
 interface FeedUser {
   uid: string
   preferences: NewsPreferences
-  learnedKeywords: string[]
+  learned: LearnedKeywords
   dismissedCount: number
   articles: NewsArticleWithId[]
 }
@@ -433,7 +395,7 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
         const dismissedIds = new Set<string>()
         const excludedUrls = new Set<string>()  // dismissed + clicked のURL（翌日再収集対策）
         const shownCountByUrl = new Map<string, number>()
-        const clicks: ClickData[] = []
+        const signals: InteractionSignal[] = []
 
         for (const intDoc of interactionsSnap.docs) {
           const data = intDoc.data()
@@ -447,12 +409,8 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
           if (data.clickedAt) {
             // クリック済みURLも翌日以降は除外（同URLが再収集された場合もブロック）
             if (data.url) excludedUrls.add(data.url as string)
-            clicks.push({
-              titleEn: data.titleEn as string | undefined,
-              summaryJa: data.summaryJa as string | undefined,
-              tags: data.tags as string[] | undefined,
-            })
           }
+          signals.push(...buildInteractionSignals(data))
           if (data.url && typeof data.shownCount === 'number') {
             shownCountByUrl.set(
               data.url as string,
@@ -467,17 +425,20 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
           }
         }
 
-        // クリック履歴からキーワードを学習
-        const learnedKeywords = learnKeywordsFromClicks(clicks)
-        if (learnedKeywords.length > 0) {
-          console.log(`[generatePersonalizedFeed] Learned keywords for ${uid}:`, learnedKeywords.slice(0, 10))
+        // クリック・後で読む・興味なしの履歴からキーワードを学習
+        const learned = learnKeywordPreferences(signals, Date.now())
+        if (learned.positive.length > 0 || learned.negative.length > 0) {
+          console.log(
+            `[generatePersonalizedFeed] Learned keywords for ${uid}: ` +
+            `positive=${learned.positive.length}, negative=${learned.negative.length}`
+          )
         }
 
         // 3. 除外済みを取り除く（IDベース + URLベースの両方でフィルタ）
         feedUsers.push({
           uid,
           preferences,
-          learnedKeywords,
+          learned,
           dismissedCount: dismissedIds.size,
           articles: articles.filter(a => !dismissedIds.has(a.id) && !excludedUrls.has(a.url)),
         })
@@ -493,7 +454,7 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
       .map(article => ({
         article,
         displayScore: calcAiBaseScore(article, scoreLimits)
-          * calcPreferenceMultiplier(article, user.preferences, user.learnedKeywords),
+          * calcPreferenceMultiplier(article, user.preferences, user.learned),
       }))
     const select = (user: FeedUser) => selectAiFeed(rank(user))
 
@@ -597,7 +558,7 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
         console.log(
           `[generatePersonalizedFeed] Saved feed for user ${user.uid} ` +
           `(${displayable.length} articles, dismissed: ${user.dismissedCount}, ` +
-          `learned: ${user.learnedKeywords.length})`
+          `learned: +${user.learned.positive.length}/-${user.learned.negative.length})`
         )
       } catch (err) {
         console.error(`[generatePersonalizedFeed] Failed to save feed for user ${user.uid}:`, err)
