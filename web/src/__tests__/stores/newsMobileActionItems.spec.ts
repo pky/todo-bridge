@@ -12,6 +12,8 @@ const getDocsFromServerMock = vi.hoisted(() => vi.fn())
 const getDocMock = vi.hoisted(() => vi.fn())
 const getDocFromServerMock = vi.hoisted(() => vi.fn())
 const setDocMock = vi.hoisted(() => vi.fn())
+const updateDocMock = vi.hoisted(() => vi.fn())
+const deleteFieldMock = vi.hoisted(() => vi.fn(() => ({ __delete: true })))
 const batchSetMock = vi.hoisted(() => vi.fn())
 const batchCommitMock = vi.hoisted(() => vi.fn())
 const incrementMock = vi.hoisted(() => vi.fn((value: number) => ({ __increment: value })))
@@ -32,6 +34,8 @@ vi.mock('firebase/firestore', () => ({
   getDoc: getDocMock,
   getDocFromServer: getDocFromServerMock,
   setDoc: setDocMock,
+  updateDoc: updateDocMock,
+  deleteField: deleteFieldMock,
   writeBatch: vi.fn(() => ({
     set: batchSetMock,
     commit: batchCommitMock,
@@ -127,6 +131,7 @@ describe('要対応記事の集約と対応済み状態', () => {
     createTaskMock.mockResolvedValue(undefined)
     createListMock.mockResolvedValue(undefined)
     setDocMock.mockResolvedValue(undefined)
+    updateDocMock.mockResolvedValue(undefined)
     batchCommitMock.mockResolvedValue(undefined)
     vi.spyOn(console, 'error').mockImplementation(() => {})
     vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -173,7 +178,7 @@ describe('要対応記事の集約と対応済み状態', () => {
   })
 
   describe('resolveMobileActionItem', () => {
-    it('状態ドキュメントに setDoc を1回だけ書き、集約に無いキーを取り除き、手元も更新する', async () => {
+    it('状態ドキュメントの対象キーだけをmergeで1回書き、既存状態を残して手元も更新する', async () => {
       installDocs({
         aggregate: { items: { a: actionItem('a'), b: actionItem('b') } },
         state: { resolved: { b: { state: 'dismissed', at: BASE }, gone: { state: 'done', at: BASE } } },
@@ -187,12 +192,15 @@ describe('要対応記事の集約と対応済み状態', () => {
       expect(setDocMock).toHaveBeenCalledTimes(1)
       const [ref, data] = setDocMock.mock.calls[0] as [{ path: string }, { resolved: Record<string, unknown> }]
       expect(ref.path).toBe(STATE_PATH)
-      expect(Object.keys(data.resolved).sort()).toEqual(['a', 'b'])
+      expect(Object.keys(data.resolved)).toEqual(['a'])
+      expect(setDocMock.mock.calls[0]?.[2]).toEqual({ merge: true })
+      expect(getDocFromServerMock).not.toHaveBeenCalled()
+      expect(getDocMock).toHaveBeenCalledTimes(2)
       expect(data.resolved.a).toEqual({ state: 'done', at: expect.any(Number) })
-      expect(data.resolved.b).toEqual({ state: 'dismissed', at: BASE })
+      expect(store.mobileActionItemStates.b).toEqual({ state: 'dismissed', at: BASE })
 
       expect(store.mobileActionItemStates.a).toEqual({ state: 'done', at: expect.any(Number) })
-      expect(store.mobileActionItemStates.gone).toBeUndefined()
+      expect(store.mobileActionItemStates.gone).toEqual({ state: 'done', at: BASE })
     })
 
     it('dismissed も同じく1回の書き込みで記録する', async () => {
@@ -207,11 +215,13 @@ describe('要対応記事の集約と対応済み状態', () => {
       const [, data] = setDocMock.mock.calls[0] as [unknown, { resolved: Record<string, unknown> }]
       expect(data.resolved).toEqual({ a: { state: 'dismissed', at: expect.any(Number) } })
       expect(store.mobileActionItemStates.a?.state).toBe('dismissed')
+      expect(stateWrites()[0]?.[2]).toEqual({ merge: true })
+      expect(getDocFromServerMock).not.toHaveBeenCalled()
     })
   })
 
   describe('restoreMobileActionItem', () => {
-    it('そのキーを除いた resolved を setDoc で1回だけ書き、手元からも消す', async () => {
+    it('対象キーだけをupdateDocとdeleteFieldで1回削除し、手元からも消す', async () => {
       installDocs({
         aggregate: { items: { a: actionItem('a'), b: actionItem('b') } },
         state: { resolved: { a: { state: 'done', at: BASE }, b: { state: 'dismissed', at: BASE + 1 } } },
@@ -222,10 +232,13 @@ describe('要対応記事の集約と対応済み状態', () => {
 
       await store.restoreMobileActionItem('a')
 
-      expect(setDocMock).toHaveBeenCalledTimes(1)
-      const [ref, data] = setDocMock.mock.calls[0] as [{ path: string }, { resolved: Record<string, unknown> }]
-      expect(ref.path).toBe(STATE_PATH)
-      expect(data.resolved).toEqual({ b: { state: 'dismissed', at: BASE + 1 } })
+      expect(setDocMock).not.toHaveBeenCalled()
+      expect(updateDocMock).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ path: STATE_PATH }), { 'resolved.a': { __delete: true } },
+      )
+      expect(deleteFieldMock).toHaveBeenCalledTimes(1)
+      expect(getDocFromServerMock).not.toHaveBeenCalled()
+      expect(getDocMock).toHaveBeenCalledTimes(2)
       expect(store.mobileActionItemStates.a).toBeUndefined()
       expect(store.mobileActionItemStates.b).toEqual({ state: 'dismissed', at: BASE + 1 })
     })
@@ -269,6 +282,8 @@ describe('要対応記事の集約と対応済み状態', () => {
       const [, data] = stateWrites()[0] as [unknown, { resolved: Record<string, { state: string }> }]
       expect(data.resolved.a?.state).toBe('dismissed')
       expect(store.mobileActionItemStates.a?.state).toBe('dismissed')
+      expect(stateWrites()[0]?.[2]).toEqual({ merge: true })
+      expect(getDocFromServerMock).not.toHaveBeenCalled()
     })
 
     it('あとで読むでは状態ドキュメントに書かない', async () => {

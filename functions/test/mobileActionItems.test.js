@@ -124,11 +124,36 @@ test('isMobileActionItemArticle: classificationStatus が done でない記事�
   assert.equal(isMobileActionItemArticle(article({ classificationStatus: undefined })), false)
 })
 
-test('getMobileActionItemKey は normalizeUrl した URL の sha256 先頭20桁の16進', () => {
+test('getMobileActionItemKey は Apple ニュース ID の apple:<id> を sha256 した先頭20桁の16進', () => {
   const url = 'https://developer.apple.com/news/?id=abc123'
   const key = actionItems.getMobileActionItemKey(url)
   assert.match(key, /^[0-9a-f]{20}$/)
-  assert.equal(key, expectedKey(url))
+  assert.equal(key, crypto.createHash('sha256').update('apple:abc123').digest('hex').slice(0, 20))
+})
+
+test('getMobileActionItemKey は Apple Developer News の日英で同じ ID なら同じキー、別 ID なら別キー', () => {
+  const { getMobileActionItemKey } = actionItems
+  const english = 'https://developer.apple.com/news/?id=abc123'
+  const japanese = 'https://developer.apple.com/jp/news/?id=abc123'
+  assert.equal(getMobileActionItemKey(japanese), getMobileActionItemKey(english))
+  assert.notEqual(getMobileActionItemKey(english), getMobileActionItemKey('https://developer.apple.com/news/?id=def456'))
+})
+
+test('getMobileActionItemKey は同じページの別フラグメントを別キーにし、正規化 URL とフラグメントをハッシュする', () => {
+  const { getMobileActionItemKey } = actionItems
+  const base = 'https://example.com/release-notes/'
+  const oldFragment = '#2026-10-01-old-release'
+  const newFragment = '#2026-10-28-new-release'
+  assert.notEqual(getMobileActionItemKey(`${base}${oldFragment}`), getMobileActionItemKey(`${base}${newFragment}`))
+  assert.equal(
+    getMobileActionItemKey(`${base}${newFragment}`),
+    crypto.createHash('sha256').update(`${normalizeUrl(base)}${newFragment}`).digest('hex').slice(0, 20)
+  )
+})
+
+test('getMobileActionItemKey はフラグメントも Apple ニュース ID も無ければ正規化 URL をハッシュする', () => {
+  const url = 'https://example.com/security-1?utm_source=x'
+  assert.equal(actionItems.getMobileActionItemKey(url), expectedKey(url))
 })
 
 test('getMobileActionItemKey は追跡パラメーター違いを同じキーにする', () => {
@@ -139,6 +164,15 @@ test('getMobileActionItemKey は追跡パラメーター違いを同じキーに
     getMobileActionItemKey(base)
   )
   assert.equal(getMobileActionItemKey(`${base}/?fbclid=z`), getMobileActionItemKey(base))
+  const fragment = '#2026-10-28-new-release'
+  assert.equal(
+    getMobileActionItemKey(`https://example.com/release-notes/?utm_source=x${fragment}`),
+    getMobileActionItemKey(`https://example.com/release-notes/${fragment}`)
+  )
+  assert.equal(
+    getMobileActionItemKey('https://developer.apple.com/jp/news/?id=abc123&utm_source=x'),
+    getMobileActionItemKey('https://developer.apple.com/jp/news/?id=abc123')
+  )
 })
 
 test('buildMobileActionItem は表示用項目、ms の publishedAt、firstSeenDate、key を持つ', () => {
@@ -194,6 +228,24 @@ test('mergeMobileActionItems: 要対応でない記事は追加しない', () =>
   )
   assert.equal(result.changed, false)
   assert.deepEqual(result.items, {})
+})
+
+test('mergeMobileActionItems: 同じページの別フラグメントのリリースノートを両方追加する', () => {
+  const urls = [
+    'https://example.com/release-notes/#2026-10-01-old-release',
+    'https://example.com/release-notes/#2026-10-28-new-release',
+  ]
+  const result = actionItems.mergeMobileActionItems({}, urls.map(url => article({ url })), NOW, TODAY)
+  const expectedKeys = urls.map(url => crypto.createHash('sha256')
+    .update(`${normalizeUrl(url)}${new URL(url).hash}`).digest('hex').slice(0, 20))
+  assert.equal(result.changed, true)
+  assert.deepEqual(Object.keys(result.items).sort(), expectedKeys.sort())
+  for (const url of urls) {
+    const key = actionItems.getMobileActionItemKey(url)
+    assert.equal(result.items[key].url, url)
+    assert.equal(result.items[key].firstSeenDate, TODAY)
+    assert.equal(result.items[key].key, key)
+  }
 })
 
 test('mergeMobileActionItems: 既にあるキーは上書きせず firstSeenDate を保ち、変化なしなら changed=false', () => {

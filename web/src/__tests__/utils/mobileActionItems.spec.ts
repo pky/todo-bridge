@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { MobileActionItem, MobileActionItemState } from '@/types'
 import {
   isActionItemOverdue,
-  pruneResolvedState,
   selectResolvedActionItems,
   selectUnresolvedActionItems,
 } from '@/utils/mobileActionItems'
@@ -127,21 +126,29 @@ describe('isActionItemOverdue', () => {
   })
 })
 
-describe('pruneResolvedState', () => {
-  it('集約に無いキーを取り除き、あるキーの状態はそのまま残す', () => {
-    const items = toRecord([item('a'), item('b')])
+describe('集約に無いキーの状態を表示から除外する', () => {
+  it('古い状態を保持したまま、集約にある未処理と処理済みだけを返す', () => {
+    const items = toRecord([item('a'), item('b'), item('c')])
     const resolved: Record<string, MobileActionItemState> = {
       a: { state: 'done', at: BASE },
       b: { state: 'dismissed', at: BASE + 1 },
       gone: { state: 'done', at: BASE + 2 },
     }
-    expect(pruneResolvedState(items, resolved)).toEqual({
+    expect(keys(selectUnresolvedActionItems(items, resolved))).toEqual(['c'])
+    expect(keys(selectResolvedActionItems(items, resolved))).toEqual(['b', 'a'])
+    expect(resolved).toEqual({
       a: { state: 'done', at: BASE },
       b: { state: 'dismissed', at: BASE + 1 },
+      gone: { state: 'done', at: BASE + 2 },
     })
   })
 
-  it('集約が空なら空になる', () => {
-    expect(pruneResolvedState({}, { a: { state: 'done', at: BASE } })).toEqual({})
+  it('集約が空なら古い状態があっても両一覧と件数は空になる', () => {
+    const resolved: Record<string, MobileActionItemState> = { a: { state: 'done', at: BASE } }
+    expect(selectUnresolvedActionItems({}, resolved)).toEqual([])
+    expect(selectResolvedActionItems({}, resolved)).toEqual([])
+    expect(selectUnresolvedActionItems({}, resolved)).toHaveLength(0)
+    expect(selectResolvedActionItems({}, resolved)).toHaveLength(0)
+    expect(resolved).toEqual({ a: { state: 'done', at: BASE } })
   })
 })
