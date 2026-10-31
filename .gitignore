@@ -39,6 +39,7 @@ screenshots/
 playwright-report/
 test-results/
 coverage/
+.e2e/
 
 # TypeScript cache
 *.tsbuildinfo

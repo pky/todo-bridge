@@ -37,12 +37,13 @@ web/:
 - ビルド: `cd web && npm run build`（test:auth、vue-tsc -b、vite build を実行）
 - Firestore ルール（emulator に Java が必要）: `cd web && npm run test:rules`
 - レスポンシブ UI: `cd web && npm run test:responsive`
+- 画面の E2E（Java 21 以上が必要）: `cd web && npm run verify:e2e:smoke` と、機能ごとの `verify:e2e:*`。手順は `.agents/skills/verify-todobridge/`
 
 functions/:
 - Lint: `cd functions && npm run lint`
 - テスト: `cd functions && npm test`（ビルド後に node --test）
 
-完了と報告する前に、触ったパッケージの lint、型チェック、テスト、ビルドをすべて通す。テストを書き換えて通すのは禁止。リポジトリ直下の `npm run verify` が test:rules と test:responsive 以外の全ゲートを実行する。firestore.rules を変えたら test:rules、レスポンシブ UI を変えたら test:responsive も実行する。
+完了と報告する前に、触ったパッケージの lint、型チェック、テスト、ビルドをすべて通す。テストを書き換えて通すのは禁止。リポジトリ直下の `npm run verify` が test:rules、test:responsive、verify:e2e:* 以外の全ゲートを実行する。firestore.rules を変えたら test:rules、レスポンシブ UI を変えたら test:responsive も実行する。web/src の画面の動きを変えたら verify:e2e:smoke と、該当する機能の verify:e2e:* も実行する。該当する機能にテストが無ければ、機能マップに沿って足す。
 
 コミット前に `git status --short` と `git diff --check` で、意図しない差分、未追跡ファイル、公開に向かない内容がないか確認する。
 
