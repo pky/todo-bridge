@@ -85,6 +85,9 @@ async function findVisibleArticle(uid: string, topic: WidgetTopic, articleId: st
     title: typeof titleJa === 'string' && titleJa !== '' ? titleJa : typeof title === 'string' ? title : '',
     summary: typeof summaryJa === 'string' ? summaryJa.trim() : '',
     url: typeof doc.url === 'string' ? doc.url : null,
+    ...(typeof title === 'string' ? { titleEn: title } : {}),
+    ...(typeof summaryJa === 'string' && summaryJa.trim() !== '' ? { summaryJa } : {}),
+    ...(Array.isArray(doc.tags) && doc.tags.every((t: unknown) => typeof t === 'string') ? { tags: doc.tags as string[] } : {}),
   }
 }
 
