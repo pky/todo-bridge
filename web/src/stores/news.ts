@@ -773,14 +773,32 @@ export const useNewsStore = defineStore('news', () => {
     )
   }
 
+  function learningFields(article: NewsArticle): { titleEn: string; summaryJa?: string; tags?: string[] } {
+    return {
+      titleEn: article.title,
+      ...(article.summaryJa ? { summaryJa: article.summaryJa } : {}),
+      ...(article.tags ? { tags: article.tags } : {}),
+    }
+  }
+
   async function dismissArticle(articleId: string, url?: string, topic: NewsTopic = 'ai'): Promise<void> {
     const uid = authStore.user?.uid
     if (!uid) return
 
+    // 表示中の記事なら、好みの学習に使うタイトル・要約・タグも一緒に記録する
+    const shown = articles.value.find(a => a.id === articleId)
+
     // Firestoreに記録（urlも保存して翌日の同URL記事を除外できるようにする）
     await setDoc(
       doc(db, `users/${uid}/newsInteractions/${getInteractionDocId(topic, articleId)}`),
-      { topic, articleId, dismissed: true, dismissedAt: serverTimestamp(), ...(url ? { url } : {}) },
+      {
+        topic,
+        articleId,
+        dismissed: true,
+        dismissedAt: serverTimestamp(),
+        ...(url ? { url } : {}),
+        ...(shown ? learningFields(shown) : {}),
+      },
       { merge: true }
     )
 
@@ -881,6 +899,13 @@ export const useNewsStore = defineStore('news', () => {
       notes: [article.summaryJa ?? ''],
       url: article.url,
     })
+
+    // 後で読むを好みの学習に使うため、時刻とタイトル・要約・タグを記録する
+    await setDoc(
+      doc(db, `users/${uid}/newsInteractions/${getInteractionDocId(article.topic ?? 'ai', article.id)}`),
+      { topic: article.topic ?? 'ai', articleId: article.id, readLaterAt: serverTimestamp(), ...learningFields(article) },
+      { merge: true }
+    )
 
     // ブックマーク済み記事はフィードから除外（今日 + 翌日以降も同URLは出さない）
     await dismissArticle(article.id, article.url, article.topic ?? 'ai')
