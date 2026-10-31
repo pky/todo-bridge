@@ -2,13 +2,16 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { nextTick, reactive } from 'vue'
 import NewsView from '@/views/NewsView.vue'
-import type { NewsArticle } from '@/types'
+import type { MobileActionItem, MobileActionItemState, NewsArticle } from '@/types'
 
 const dismissArticleMock = vi.hoisted(() => vi.fn())
 const loadTodayFeedMock = vi.hoisted(() => vi.fn())
 const loadPreferencesMock = vi.hoisted(() => vi.fn())
 const trackClickMock = vi.hoisted(() => vi.fn())
 const bookmarkArticleMock = vi.hoisted(() => vi.fn())
+const loadMobileActionItemsMock = vi.hoisted(() => vi.fn())
+const resolveMobileActionItemMock = vi.hoisted(() => vi.fn())
+const restoreMobileActionItemMock = vi.hoisted(() => vi.fn())
 const routeState = vi.hoisted(() => ({ name: 'news-ai' as string }))
 const pushMock = vi.hoisted(() => vi.fn())
 const authStoreState = reactive({
@@ -60,7 +63,28 @@ const mobileArticleAndroid: NewsArticle = {
   importantLevel: 'urgent',
 }
 
+function actionItem(article: NewsArticle): MobileActionItem {
+  return {
+    key: article.id,
+    url: article.url,
+    title: article.title,
+    titleJa: article.titleJa,
+    summaryJa: article.summaryJa,
+    platform: article.platform,
+    sourceName: article.sourceName,
+    isOfficial: article.isOfficial,
+    importantLevel: article.importantLevel,
+    actionRequired: article.actionRequired,
+    actionType: article.actionType,
+    requiredByDate: article.requiredByDate,
+    publishedAt: Date.UTC(2026, 2, 14),
+    firstSeenDate: '2026-03-14',
+  }
+}
+
 const newsStoreState = reactive({
+  mobileActionItems: {} as Record<string, MobileActionItem>,
+  mobileActionItemStates: {} as Record<string, MobileActionItemState>,
   articles: [article],
   loading: false,
   error: null as string | null,
@@ -97,6 +121,9 @@ vi.mock('@/stores/news', () => ({
     dismissArticle: dismissArticleMock,
     trackClick: trackClickMock,
     bookmarkArticle: bookmarkArticleMock,
+    loadMobileActionItems: loadMobileActionItemsMock,
+    resolveMobileActionItem: resolveMobileActionItemMock,
+    restoreMobileActionItem: restoreMobileActionItemMock,
   }),
 }))
 
@@ -117,6 +144,8 @@ describe('NewsView', () => {
   beforeEach(() => {
     vi.useRealTimers()
     vi.clearAllMocks()
+    newsStoreState.mobileActionItems = {}
+    newsStoreState.mobileActionItemStates = {}
     newsStoreState.articles = [article]
     newsStoreState.loading = false
     newsStoreState.error = null
@@ -133,6 +162,9 @@ describe('NewsView', () => {
     dismissArticleMock.mockResolvedValue(undefined)
     trackClickMock.mockResolvedValue(undefined)
     bookmarkArticleMock.mockResolvedValue(undefined)
+    loadMobileActionItemsMock.mockResolvedValue(undefined)
+    resolveMobileActionItemMock.mockResolvedValue(undefined)
+    restoreMobileActionItemMock.mockResolvedValue(undefined)
     routeState.name = 'news-ai'
     authStoreState.user = { uid: 'user-1' }
     authStoreState.loading = false
@@ -313,7 +345,11 @@ describe('NewsView', () => {
 
   it('mobile ではフィルタで iOS のみ表示できる', async () => {
     routeState.name = 'news-mobile'
-    newsStoreState.articles = [mobileArticleIos, mobileArticleAndroid]
+    newsStoreState.articles = []
+    newsStoreState.mobileActionItems = {
+      [mobileArticleIos.id]: actionItem(mobileArticleIos),
+      [mobileArticleAndroid.id]: actionItem(mobileArticleAndroid),
+    }
 
     const wrapper = mount(NewsView, {
       global: {
@@ -328,6 +364,7 @@ describe('NewsView', () => {
     expect(wrapper.text()).toContain('iOS')
     expect(loadPreferencesMock).toHaveBeenCalledWith('mobile')
     expect(loadTodayFeedMock).toHaveBeenCalledWith('mobile')
+    expect(loadMobileActionItemsMock).toHaveBeenCalledTimes(1)
 
     const buttons = wrapper.findAll('button')
     const iosButton = buttons.find((button) => button.text() === 'iOS')
@@ -345,16 +382,17 @@ describe('NewsView', () => {
 
   it('mobile では重要事項サマリーを先頭に表示する', async () => {
     routeState.name = 'news-mobile'
-    newsStoreState.articles = [
-      mobileArticleIos,
-      mobileArticleAndroid,
-      {
+    newsStoreState.articles = []
+    newsStoreState.mobileActionItems = {
+      [mobileArticleIos.id]: actionItem(mobileArticleIos),
+      [mobileArticleAndroid.id]: actionItem(mobileArticleAndroid),
+      'mobile-official-policy': actionItem({
         ...mobileArticleAndroid,
         id: 'mobile-official-policy',
         url: 'https://example.com/mobile-official-policy',
         isOfficial: true,
-      },
-    ]
+      }),
+    }
 
     const wrapper = mount(NewsView, {
       global: {
@@ -375,7 +413,8 @@ describe('NewsView', () => {
 
   it('mobile の重要事項に確認するリンクを出す', async () => {
     routeState.name = 'news-mobile'
-    newsStoreState.articles = [mobileArticleIos]
+    newsStoreState.articles = []
+    newsStoreState.mobileActionItems = { [mobileArticleIos.id]: actionItem(mobileArticleIos) }
 
     const wrapper = mount(NewsView, {
       global: {
@@ -396,7 +435,8 @@ describe('NewsView', () => {
 
   it('mobile の重要事項からあとで読むへ追加できる', async () => {
     routeState.name = 'news-mobile'
-    newsStoreState.articles = [mobileArticleIos]
+    newsStoreState.articles = []
+    newsStoreState.mobileActionItems = { [mobileArticleIos.id]: actionItem(mobileArticleIos) }
 
     const wrapper = mount(NewsView, {
       global: {
@@ -413,23 +453,45 @@ describe('NewsView', () => {
 
     await button?.trigger('click')
 
-    expect(bookmarkArticleMock).toHaveBeenCalledWith(mobileArticleIos)
+    expect(bookmarkArticleMock).toHaveBeenCalledWith(expect.objectContaining({
+      url: mobileArticleIos.url,
+      title: mobileArticleIos.title,
+      titleJa: mobileArticleIos.titleJa,
+    }))
+    expect(resolveMobileActionItemMock).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="important-title"]').text()).toBe('iOS SDK更新')
   })
 
-  it('mobile の重要事項は urgent の記事だけ表示する', async () => {
+  it('mobile の重要事項は集約の未処理 urgent と review を表示し、集約にない review は通常欄に残す', async () => {
     routeState.name = 'news-mobile'
-    newsStoreState.articles = [
-      mobileArticleIos,
-      {
+    newsStoreState.articles = [{
+      ...mobileArticleAndroid,
+      id: 'mobile-review-only',
+      url: 'https://example.com/mobile-review-only',
+      title: 'Android review only',
+      titleJa: 'Android確認推奨のみ',
+      actionRequired: false,
+      importantLevel: 'review',
+    }]
+    newsStoreState.mobileActionItems = {
+      [mobileArticleIos.id]: actionItem(mobileArticleIos),
+      'action-review': actionItem({
         ...mobileArticleAndroid,
-        id: 'mobile-review-only',
-        url: 'https://example.com/mobile-review-only',
-        title: 'Android review only',
-        titleJa: 'Android確認推奨のみ',
-        actionRequired: false,
+        id: 'action-review',
+        titleJa: '要対応の確認推奨',
+        url: 'https://example.com/action-review',
         importantLevel: 'review',
-      },
-    ]
+      }),
+      'resolved-urgent': actionItem({
+        ...mobileArticleIos,
+        id: 'resolved-urgent',
+        titleJa: '対応済みの緊急項目',
+        url: 'https://example.com/resolved-urgent',
+      }),
+    }
+    newsStoreState.mobileActionItemStates = {
+      'resolved-urgent': { state: 'done', at: Date.UTC(2026, 2, 14) },
+    }
 
     const wrapper = mount(NewsView, {
       global: {
@@ -443,6 +505,8 @@ describe('NewsView', () => {
 
     const importantTitles = wrapper.findAll('[data-testid="important-title"]').map((node) => node.text())
     expect(importantTitles).toContain('iOS SDK更新')
+    expect(importantTitles).toContain('要対応の確認推奨')
+    expect(importantTitles).not.toContain('対応済みの緊急項目')
     expect(importantTitles).not.toContain('Android確認推奨のみ')
 
     const buttons = wrapper.findAll('button')
@@ -491,7 +555,8 @@ describe('NewsView', () => {
 
   it('mobile の重要事項カードは1列で横長に並べる', async () => {
     routeState.name = 'news-mobile'
-    newsStoreState.articles = [mobileArticleIos]
+    newsStoreState.articles = []
+    newsStoreState.mobileActionItems = { [mobileArticleIos.id]: actionItem(mobileArticleIos) }
 
     const wrapper = mount(NewsView, {
       global: {

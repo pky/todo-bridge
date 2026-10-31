@@ -434,4 +434,24 @@ describeWithEmulator('firestore rules', () => {
     await assertFails(getDoc(doc(aliceDb, 'appConfig/googleCalendar')))
     await assertSucceeds(getDoc(doc(aliceDb, 'appConfig/authAccess')))
   })
+
+  it('要対応記事の集約ドキュメントはサインイン済みなら読めるが未サインインは読めない', async () => {
+    await seedDoc('topics/mobile/meta/actionItems', { items: {}, updatedAt: Timestamp.fromMillis(1) })
+    const aliceDb = testEnv.authenticatedContext('alice', { email: 'alice@example.com' }).firestore()
+    const anonymousDb = testEnv.unauthenticatedContext().firestore()
+
+    await assertSucceeds(getDoc(doc(aliceDb, 'topics/mobile/meta/actionItems')))
+    await assertFails(getDoc(doc(anonymousDb, 'topics/mobile/meta/actionItems')))
+  })
+
+  it('要対応記事の集約ドキュメントにはサインイン済みでも書き込めない', async () => {
+    await seedDoc('topics/mobile/meta/actionItems', { items: {}, updatedAt: Timestamp.fromMillis(1) })
+    const aliceDb = testEnv.authenticatedContext('alice', { email: 'alice@example.com' }).firestore()
+    const path = 'topics/mobile/meta/actionItems'
+
+    await assertFails(setDoc(doc(aliceDb, path), { items: { injected: { url: 'https://example.com/x' } } }))
+    await assertFails(updateDoc(doc(aliceDb, path), { updatedAt: Timestamp.fromMillis(2) }))
+    await assertFails(deleteDoc(doc(aliceDb, path)))
+    await assertFails(setDoc(doc(aliceDb, 'topics/mobile/meta/other'), { items: {} }))
+  })
 })

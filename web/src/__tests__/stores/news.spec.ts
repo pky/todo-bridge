@@ -62,6 +62,31 @@ const articleData = {
   displayScore: 10,
 }
 
+function installMobileActionItems(items: Record<string, Record<string, unknown>>, resolved: Record<string, unknown> = {}) {
+  getDocMock.mockImplementation(async (ref: { path: string }) => {
+    const data = ref.path === 'topics/mobile/meta/actionItems'
+      ? { items }
+      : ref.path === 'users/user-1/newsState/mobileActionItems' ? { resolved } : undefined
+    return { exists: () => data !== undefined, data: () => data }
+  })
+}
+
+function mobileActionItem(key: string, overrides: Record<string, unknown> = {}) {
+  return {
+    key,
+    title: `Action ${key}`,
+    url: `https://example.com/${key}`,
+    sourceName: 'Example',
+    platform: 'ios',
+    isOfficial: true,
+    importantLevel: 'urgent',
+    actionRequired: true,
+    publishedAt: Date.UTC(2026, 2, 14),
+    firstSeenDate: '2026-03-14',
+    ...overrides,
+  }
+}
+
 describe('News Store', () => {
   beforeEach(() => {
     vi.useRealTimers()
@@ -168,94 +193,28 @@ describe('News Store', () => {
     expect(batchCommitMock).not.toHaveBeenCalled()
   })
 
-  it('mobile の通知件数は urgent と review を分けて数える', async () => {
-    getDocsFromServerMock.mockImplementation(async (target: any) => {
-      const path = target.type === 'query' ? target.target.path : target.path
-      const clauses = target.type === 'query' ? target.clauses : []
-
-      if (path === 'users/user-1/newsInteractions') {
-        return createDocs([
-          {
-            id: 'mobile-dismissed',
-            data: {
-              topic: 'mobile',
-              articleId: 'mobile-dismissed',
-              url: 'https://example.com/mobile-dismissed',
-              dismissed: true,
-            },
-          },
-        ])
-      }
-
-      if (path === 'users/user-1/newsFeed/mobile/articles' && clauses.some((clause: any) => clause.type === 'limit')) {
-        return createDocs([{ id: 'mobile-1', data: { date: '2026-03-14', displayScore: 20 } }])
-      }
-
-      if (path === 'users/user-1/newsFeed/mobile/articles' && clauses.some((clause: any) => clause.type === 'where')) {
-        return createDocs([
-          {
-            id: 'mobile-1',
-            data: {
-              ...articleData,
-              topic: 'mobile',
-              url: 'https://example.com/mobile-1',
-              sourceName: 'Apple Developer News',
-              source: 'official',
-              isOfficial: true,
-              actionRequired: true,
-              importantLevel: 'urgent',
-            },
-          },
-          {
-            id: 'mobile-2',
-            data: {
-              ...articleData,
-              topic: 'mobile',
-              url: 'https://example.com/mobile-2',
-              sourceName: 'Taisyo',
-              source: 'rss',
-              isOfficial: false,
-              actionRequired: true,
-              importantLevel: 'urgent',
-            },
-          },
-          {
-            id: 'mobile-review',
-            data: {
-              ...articleData,
-              topic: 'mobile',
-              url: 'https://example.com/mobile-review',
-              sourceName: 'Google Developers Japan',
-              source: 'official',
-              isOfficial: true,
-              actionRequired: false,
-              importantLevel: 'review',
-            },
-          },
-          {
-            id: 'mobile-dismissed',
-            data: {
-              ...articleData,
-              topic: 'mobile',
-              url: 'https://example.com/mobile-dismissed',
-              sourceName: 'Google Developers Japan',
-              source: 'official',
-              isOfficial: true,
-              actionRequired: true,
-              importantLevel: 'urgent',
-            },
-          },
-        ])
-      }
-
-      return createDocs([])
+  it('mobile の通知件数は集約の未処理 urgent と review を公式・非公式とも数える', async () => {
+    installMobileActionItems({
+      official: mobileActionItem('official'),
+      community: mobileActionItem('community', { isOfficial: false }),
+      review: mobileActionItem('review', { importantLevel: 'review' }),
+      done: mobileActionItem('done'),
+      dismissed: mobileActionItem('dismissed'),
+      resolvedReview: mobileActionItem('resolvedReview', { importantLevel: 'review' }),
+    }, {
+      done: { state: 'done', at: Date.UTC(2026, 2, 14) },
+      dismissed: { state: 'dismissed', at: Date.UTC(2026, 2, 14) },
+      resolvedReview: { state: 'done', at: Date.UTC(2026, 2, 14) },
     })
 
     const store = useNewsStore()
     await store.loadMobileAlertCount()
 
-    expect(store.mobileAlertCount).toBe(1)
-    expect(store.mobileAlertSummary).toEqual({ urgent: 1, review: 1 })
+    expect(store.mobileAlertCount).toBe(2)
+    expect(store.mobileAlertSummary).toEqual({ urgent: 2, review: 1 })
+    expect(getDocMock).toHaveBeenCalledTimes(2)
+    expect(getDocsMock).not.toHaveBeenCalled()
+    expect(getDocsFromServerMock).not.toHaveBeenCalled()
   })
 
   it('mobile の urgent 記事はクリック済みでも重要事項として残す', async () => {
@@ -302,14 +261,28 @@ describe('News Store', () => {
       return createDocs([])
     })
 
+    installMobileActionItems({ 'mobile-urgent': mobileActionItem('mobile-urgent') })
+
     const store = useNewsStore()
     await store.loadTodayFeed('mobile')
+    getDocMock.mockClear()
+    getDocFromServerMock.mockClear()
+    getDocsMock.mockClear()
+    getDocsFromServerMock.mockClear()
     await store.loadMobileAlertCount()
 
     expect(store.articles).toHaveLength(1)
     expect(store.articles[0]?.id).toBe('mobile-urgent')
     expect(store.mobileAlertCount).toBe(1)
     expect(store.mobileAlertSummary).toEqual({ urgent: 1, review: 0 })
+    expect(getDocMock).toHaveBeenCalledTimes(2)
+    expect(getDocMock.mock.calls.map(([ref]) => (ref as { path: string }).path).sort()).toEqual([
+      'topics/mobile/meta/actionItems',
+      'users/user-1/newsState/mobileActionItems',
+    ].sort())
+    expect(getDocFromServerMock).not.toHaveBeenCalled()
+    expect(getDocsMock).not.toHaveBeenCalled()
+    expect(getDocsFromServerMock).not.toHaveBeenCalled()
   })
 
   it('AI フィードのサーバー取得失敗時はキャッシュ取得へフォールバックする', async () => {
