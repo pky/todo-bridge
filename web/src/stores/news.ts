@@ -7,8 +7,9 @@ import {
   getDocs,
   getDocsFromServer,
   getDoc,
-  getDocFromServer,
   setDoc,
+  updateDoc,
+  deleteField,
   writeBatch,
   increment,
   query,
@@ -25,7 +26,7 @@ import { useTasksStore } from './tasks'
 import { useSpaceStore, buildPersonalSpaceId } from './space'
 import { filterEligibleAiNews, selectDisplayableAiNews } from '@/utils/aiNewsDisplay'
 import { filterEligibleMobileNews, selectDisplayableMobileNews } from '@/utils/mobileNewsDisplay'
-import { matchesMobileActionItemPreferences, pruneResolvedState, selectUnresolvedActionItems } from '@/utils/mobileActionItems'
+import { matchesMobileActionItemPreferences, selectUnresolvedActionItems } from '@/utils/mobileActionItems'
 import type {
   NewsArticle,
   NewsPreferences,
@@ -91,10 +92,13 @@ export const useNewsStore = defineStore('news', () => {
   const mobileActionItems = ref<Record<string, MobileActionItem>>({})
   const mobileActionItemStates = ref<Record<string, MobileActionItemState>>({})
   let actionItemsOwnerUid: string | null = null
+  let actionItemsOwnerGeneration = 0
   let actionItemsLoadedDate: string | null | undefined
   let actionItemsLoadFailed = false
   const actionItemLoads = new Map<string, Promise<void>>()
   let actionItemWrite: Promise<void> = Promise.resolve()
+  let actionItemWriteRevision = 0
+  const actionItemMutations = new Map<string, { revision: number; state: MobileActionItemState | undefined }>()
   let activeLoadSequence = 0
 
   function getNewsCacheKey(uid: string, topic: NewsTopic): string {
@@ -129,7 +133,7 @@ export const useNewsStore = defineStore('news', () => {
     return latestFeedDateByTopic.value.mobile ?? readCachedFeed(uid, 'mobile')?.date ?? null
   }
 
-  function cacheMobileActionItems(uid: string, feedDate: string | null): void {
+  function cacheMobileActionItems(uid: string, feedDate: string | null | undefined): void {
     try {
       localStorage.setItem(getActionItemsCacheKey(uid), JSON.stringify({
         feedDate,
@@ -141,21 +145,28 @@ export const useNewsStore = defineStore('news', () => {
     }
   }
 
-  async function loadMobileActionItems(): Promise<void> {
-    const uid = authStore.user?.uid
-    if (actionItemsOwnerUid !== (uid ?? null)) {
+  function setActionItemsOwner(uid: string | null): void {
+    if (actionItemsOwnerUid !== uid) {
       mobileActionItems.value = {}
       mobileActionItemStates.value = {}
-      actionItemsOwnerUid = uid ?? null
+      actionItemsOwnerUid = uid
+      actionItemsOwnerGeneration++
       actionItemsLoadedDate = undefined
       actionItemsLoadFailed = false
+      actionItemMutations.clear()
     }
+  }
+
+  async function loadMobileActionItems(): Promise<void> {
+    const uid = authStore.user?.uid
+    setActionItemsOwner(uid ?? null)
     if (!uid) {
       updateMobileAlerts()
       return
     }
     const feedDate = getActionItemsFeedDate(uid)
-    const loadKey = JSON.stringify([uid, feedDate])
+    const ownerGeneration = actionItemsOwnerGeneration
+    const loadKey = JSON.stringify([uid, ownerGeneration, feedDate])
     const pending = actionItemLoads.get(loadKey)
     if (pending) return await pending
     // キャッシュ保存に失敗しても、同じフィードの操作済み状態を巻き戻さない。
@@ -179,6 +190,7 @@ export const useNewsStore = defineStore('news', () => {
       // キャッシュが壊れている場合は2件のドキュメントから読み直す。
     }
 
+    const readRevision = actionItemWriteRevision
     const load = (async () => {
       try {
         const [aggregate, state] = await Promise.all([
@@ -186,17 +198,26 @@ export const useNewsStore = defineStore('news', () => {
           getDoc(doc(db, `users/${uid}/newsState/mobileActionItems`)),
         ])
         if (authStore.user?.uid !== uid || actionItemsOwnerUid !== uid
+          || actionItemsOwnerGeneration !== ownerGeneration
           || getActionItemsFeedDate(uid) !== feedDate) return
         const aggregateData: { items?: Record<string, MobileActionItem> } | undefined = aggregate.data()
         const stateData: { resolved?: Record<string, MobileActionItemState> } | undefined = state.data()
         mobileActionItems.value = aggregateData?.items ?? {}
-        mobileActionItemStates.value = stateData?.resolved ?? {}
+        const resolved = { ...stateData?.resolved }
+        // 読み込み開始後に成功した操作だけを重ね、他のキーは読んだ状態を維持する。
+        for (const [key, mutation] of actionItemMutations) {
+          if (mutation.revision <= readRevision) continue
+          if (mutation.state) resolved[key] = mutation.state
+          else delete resolved[key]
+        }
+        mobileActionItemStates.value = resolved
         actionItemsLoadedDate = feedDate
         actionItemsLoadFailed = false
         updateMobileAlerts()
         cacheMobileActionItems(uid, feedDate)
       } catch (err) {
         if (authStore.user?.uid !== uid || actionItemsOwnerUid !== uid
+          || actionItemsOwnerGeneration !== ownerGeneration
           || getActionItemsFeedDate(uid) !== feedDate) return
         console.error('[news] loadMobileActionItems error:', err)
         actionItemsLoadedDate = undefined
@@ -213,35 +234,27 @@ export const useNewsStore = defineStore('news', () => {
     }
   }
 
-  async function writeMobileActionItemState(key: string, state?: MobileActionItemState['state'], url?: string): Promise<void> {
+  async function writeMobileActionItemState(key: string, state?: MobileActionItemState['state']): Promise<void> {
     const uid = authStore.user?.uid
     if (!uid) return
-    // 丸ごと保存するため、前の操作が成功してから最新の状態で次の書き込みを組み立てる。
+    // 同じ端末の操作順と、成功後に反映する手元の状態をそろえる。
     const operation = actionItemWrite.then(async () => {
       if (authStore.user?.uid !== uid) return
-      const feedDate = getActionItemsFeedDate(uid)
-      const [aggregate, currentState] = await Promise.all([
-        getDocFromServer(doc(db, 'topics/mobile/meta/actionItems')),
-        getDocFromServer(doc(db, `users/${uid}/newsState/mobileActionItems`)),
-      ])
-      if (authStore.user?.uid !== uid) return
-      const aggregateData: { items?: Record<string, MobileActionItem> } | undefined = aggregate.data()
-      const stateData: { resolved?: Record<string, MobileActionItemState> } | undefined = currentState.data()
-      const items = aggregateData?.items ?? {}
-      const targetKey = items[key]?.key ?? Object.values(items).find(item => item.url === url)?.key
-      if (!targetKey) return
-      const resolved = pruneResolvedState(items, stateData?.resolved ?? {})
-      if (state) resolved[targetKey] = { state, at: Date.now() }
-      else delete resolved[targetKey]
-      await setDoc(doc(db, `users/${uid}/newsState/mobileActionItems`), { resolved })
-      if (authStore.user?.uid !== uid) return
-      actionItemsOwnerUid = uid
-      mobileActionItems.value = items
+      setActionItemsOwner(uid)
+      const target = doc(db, `users/${uid}/newsState/mobileActionItems`)
+      const nextState: MobileActionItemState | undefined = state ? { state, at: Date.now() } : undefined
+      if (nextState) await setDoc(target, { resolved: { [key]: nextState } }, { merge: true })
+      else await updateDoc(target, { [`resolved.${key}`]: deleteField() })
+      if (authStore.user?.uid !== uid || actionItemsOwnerUid !== uid) return
+      const resolved = { ...mobileActionItemStates.value }
+      if (nextState) resolved[key] = nextState
+      else delete resolved[key]
       mobileActionItemStates.value = resolved
-      actionItemsLoadedDate = feedDate
+      actionItemMutations.set(key, { revision: ++actionItemWriteRevision, state: nextState })
       actionItemsLoadFailed = false
       updateMobileAlerts()
-      cacheMobileActionItems(uid, feedDate)
+      // 集約を読み直していないため、キャッシュは最後に読み込んだフィードの日付を保つ。
+      cacheMobileActionItems(uid, actionItemsLoadedDate)
     })
     actionItemWrite = operation.catch(() => {})
     await operation
@@ -976,12 +989,13 @@ export const useNewsStore = defineStore('news', () => {
   async function dismissArticle(articleId: string, url?: string, topic: NewsTopic = 'ai'): Promise<void> {
     const uid = authStore.user?.uid
     if (!uid) return
-    if (topic === 'mobile') {
-      const key = articles.value.find(article => article.id === articleId)?.actionItemKey ?? articleId
-      await writeMobileActionItemState(key, 'dismissed', url)
-      if (authStore.user?.uid !== uid) return
-    }
+    const key = topic === 'mobile'
+      ? articles.value.find(article => article.id === articleId)?.actionItemKey
+        ?? Object.values(mobileActionItems.value).find(item => item.url === url)?.key
+      : undefined
     await recordArticleDismissal(articleId, url, topic)
+    if (authStore.user?.uid !== uid) return
+    if (key) await writeMobileActionItemState(key, 'dismissed')
   }
 
   async function loadMobileAlertCount(): Promise<void> {

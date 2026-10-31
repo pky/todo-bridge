@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { normalizeUrl } from './collectArticles'
+import { getMobileMatchKey } from './collectArticles'
 import type { NewsArticle } from './types'
 
 export const MOBILE_ACTION_ITEM_MAX_AGE_DAYS = 180
@@ -22,7 +22,7 @@ export function isMobileActionItemArticle(article: NewsArticle): boolean {
 }
 
 export function getMobileActionItemKey(url: string): string {
-  return createHash('sha256').update(normalizeUrl(url)).digest('hex').slice(0, 20)
+  return createHash('sha256').update(getMobileMatchKey(url)).digest('hex').slice(0, 20)
 }
 
 export function buildMobileActionItem(article: NewsArticle, today: string): MobileActionItem {

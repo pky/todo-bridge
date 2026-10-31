@@ -451,7 +451,7 @@ export function preferJapaneseAppleNews(articles: RawArticle[]): RawArticle[] {
   })
 }
 
-function getMobileMatchKey(url: string): string {
+export function getMobileMatchKey(url: string): string {
   const id = getAppleNewsId(url)
   if (id) return `apple:${id}`
   // リリースノートは同じページの版をフラグメントで区別するため、キーに残す
