@@ -20,6 +20,7 @@ TodoBridge は、RTM代替を目指した、共有対応のタスク管理アプ
 ![Mobile news screen](./img/screenshot-mobile-news.png)
 
 iOS / Android アプリ開発で見逃したくない更新を、確認優先の項目と通常の記事一覧に分けて把握しやすくしています。
+要対応の記事は公開から180日間、対応済みまたは興味なしにするまで持ち越します。処理済みの一覧から戻すこともでき、あとで読むへの追加や記事のクリックでは消えません。
 情報源は Apple と Google の公式ページ7本です（Apple Developer News の日本語版と英語版、App Store Connect のリリースノート、Apple のセキュリティアップデート一覧、Android Developers Blog、Play Console のお知らせ、Android Security Bulletin）。Claude（Sonnet 5.5）がセキュリティ、SDK 要件、ポリシーの記事だけを選び、概要、対象、期限、やることの4項目に日本語でまとめます。
 
 ## このアプリを作った目的
