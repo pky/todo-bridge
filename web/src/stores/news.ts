@@ -1,6 +1,6 @@
 // web/src/stores/news.ts
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import {
   collection,
   doc,
@@ -8,6 +8,8 @@ import {
   getDocsFromServer,
   getDoc,
   setDoc,
+  updateDoc,
+  deleteField,
   writeBatch,
   increment,
   query,
@@ -24,12 +26,15 @@ import { useTasksStore } from './tasks'
 import { useSpaceStore, buildPersonalSpaceId } from './space'
 import { filterEligibleAiNews, selectDisplayableAiNews } from '@/utils/aiNewsDisplay'
 import { filterEligibleMobileNews, selectDisplayableMobileNews } from '@/utils/mobileNewsDisplay'
+import { matchesMobileActionItemPreferences, selectUnresolvedActionItems } from '@/utils/mobileActionItems'
 import type {
   NewsArticle,
   NewsPreferences,
   KeywordWeight,
   TaskList,
   MobileNotificationPreferences,
+  MobileActionItem,
+  MobileActionItemState,
 } from '@/types'
 import type { NewsInteraction, NewsTopic } from '@/types/news'
 
@@ -44,6 +49,12 @@ type FeedLoadState =
 interface FeedDiagnostic {
   state: FeedLoadState
   message: string
+}
+
+interface MobileActionItemsCache {
+  feedDate: string | null
+  items: Record<string, MobileActionItem>
+  resolved: Record<string, MobileActionItemState>
 }
 
 export const useNewsStore = defineStore('news', () => {
@@ -78,6 +89,16 @@ export const useNewsStore = defineStore('news', () => {
   const dismissedIds = ref<Set<string>>(new Set())
   const mobileAlertCount = ref(0)
   const mobileAlertSummary = ref({ urgent: 0, review: 0 })
+  const mobileActionItems = ref<Record<string, MobileActionItem>>({})
+  const mobileActionItemStates = ref<Record<string, MobileActionItemState>>({})
+  let actionItemsOwnerUid: string | null = null
+  let actionItemsOwnerGeneration = 0
+  let actionItemsLoadedDate: string | null | undefined
+  let actionItemsLoadFailed = false
+  const actionItemLoads = new Map<string, Promise<void>>()
+  let actionItemWrite: Promise<void> = Promise.resolve()
+  let actionItemWriteRevision = 0
+  const actionItemMutations = new Map<string, { revision: number; state: MobileActionItemState | undefined }>()
   let activeLoadSequence = 0
 
   function getNewsCacheKey(uid: string, topic: NewsTopic): string {
@@ -89,6 +110,162 @@ export const useNewsStore = defineStore('news', () => {
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     return `${year}-${month}-${day}`
+  }
+
+  function getActionItemsCacheKey(uid: string): string {
+    return `rertm-mobile-action-items-${uid}`
+  }
+
+  function updateMobileAlerts(): void {
+    const unresolved = selectUnresolvedActionItems(mobileActionItems.value, mobileActionItemStates.value)
+      .filter(item => matchesMobileActionItemPreferences(item, preferences.value))
+    const urgent = unresolved.filter(item => item.importantLevel === 'urgent').length
+    const review = unresolved.filter(item => item.importantLevel === 'review').length
+    mobileAlertCount.value = urgent
+    mobileAlertSummary.value = { urgent, review }
+  }
+
+  watch(preferences, () => {
+    if (!actionItemsLoadFailed) updateMobileAlerts()
+  }, { deep: true, flush: 'sync' })
+
+  function getActionItemsFeedDate(uid: string): string | null {
+    return latestFeedDateByTopic.value.mobile ?? readCachedFeed(uid, 'mobile')?.date ?? null
+  }
+
+  function cacheMobileActionItems(uid: string, feedDate: string | null | undefined): void {
+    try {
+      localStorage.setItem(getActionItemsCacheKey(uid), JSON.stringify({
+        feedDate,
+        items: mobileActionItems.value,
+        resolved: mobileActionItemStates.value,
+      }))
+    } catch {
+      // 保存領域が使えなくても、読み込みや対応済み操作は成功として扱う。
+    }
+  }
+
+  function setActionItemsOwner(uid: string | null): void {
+    if (actionItemsOwnerUid !== uid) {
+      mobileActionItems.value = {}
+      mobileActionItemStates.value = {}
+      actionItemsOwnerUid = uid
+      actionItemsOwnerGeneration++
+      actionItemsLoadedDate = undefined
+      actionItemsLoadFailed = false
+      actionItemMutations.clear()
+    }
+  }
+
+  async function loadMobileActionItems(): Promise<void> {
+    const uid = authStore.user?.uid
+    setActionItemsOwner(uid ?? null)
+    if (!uid) {
+      updateMobileAlerts()
+      return
+    }
+    const feedDate = getActionItemsFeedDate(uid)
+    const ownerGeneration = actionItemsOwnerGeneration
+    const loadKey = JSON.stringify([uid, ownerGeneration, feedDate])
+    const pending = actionItemLoads.get(loadKey)
+    if (pending) return await pending
+    // キャッシュ保存に失敗しても、同じフィードの操作済み状態を巻き戻さない。
+    if (actionItemsLoadedDate === feedDate && !actionItemsLoadFailed) {
+      updateMobileAlerts()
+      return
+    }
+
+    try {
+      const raw = localStorage.getItem(getActionItemsCacheKey(uid))
+      const cached: MobileActionItemsCache | null = raw ? JSON.parse(raw) : null
+      if (cached?.feedDate === feedDate && cached.items && cached.resolved) {
+        mobileActionItems.value = cached.items
+        mobileActionItemStates.value = cached.resolved
+        actionItemsLoadedDate = cached.feedDate
+        actionItemsLoadFailed = false
+        updateMobileAlerts()
+        return
+      }
+    } catch {
+      // キャッシュが壊れている場合は2件のドキュメントから読み直す。
+    }
+
+    const readRevision = actionItemWriteRevision
+    const load = (async () => {
+      try {
+        const [aggregate, state] = await Promise.all([
+          getDoc(doc(db, 'topics/mobile/meta/actionItems')),
+          getDoc(doc(db, `users/${uid}/newsState/mobileActionItems`)),
+        ])
+        if (authStore.user?.uid !== uid || actionItemsOwnerUid !== uid
+          || actionItemsOwnerGeneration !== ownerGeneration
+          || getActionItemsFeedDate(uid) !== feedDate) return
+        const aggregateData: { items?: Record<string, MobileActionItem> } | undefined = aggregate.data()
+        const stateData: { resolved?: Record<string, MobileActionItemState> } | undefined = state.data()
+        mobileActionItems.value = aggregateData?.items ?? {}
+        const resolved = { ...stateData?.resolved }
+        // 読み込み開始後に成功した操作だけを重ね、他のキーは読んだ状態を維持する。
+        for (const [key, mutation] of actionItemMutations) {
+          if (mutation.revision <= readRevision) continue
+          if (mutation.state) resolved[key] = mutation.state
+          else delete resolved[key]
+        }
+        mobileActionItemStates.value = resolved
+        actionItemsLoadedDate = feedDate
+        actionItemsLoadFailed = false
+        updateMobileAlerts()
+        cacheMobileActionItems(uid, feedDate)
+      } catch (err) {
+        if (authStore.user?.uid !== uid || actionItemsOwnerUid !== uid
+          || actionItemsOwnerGeneration !== ownerGeneration
+          || getActionItemsFeedDate(uid) !== feedDate) return
+        console.error('[news] loadMobileActionItems error:', err)
+        actionItemsLoadedDate = undefined
+        actionItemsLoadFailed = true
+        mobileAlertCount.value = 0
+        mobileAlertSummary.value = { urgent: 0, review: 0 }
+      }
+    })()
+    actionItemLoads.set(loadKey, load)
+    try {
+      await load
+    } finally {
+      actionItemLoads.delete(loadKey)
+    }
+  }
+
+  async function writeMobileActionItemState(key: string, state?: MobileActionItemState['state']): Promise<void> {
+    const uid = authStore.user?.uid
+    if (!uid) return
+    // 同じ端末の操作順と、成功後に反映する手元の状態をそろえる。
+    const operation = actionItemWrite.then(async () => {
+      if (authStore.user?.uid !== uid) return
+      setActionItemsOwner(uid)
+      const target = doc(db, `users/${uid}/newsState/mobileActionItems`)
+      const nextState: MobileActionItemState | undefined = state ? { state, at: Date.now() } : undefined
+      if (nextState) await setDoc(target, { resolved: { [key]: nextState } }, { merge: true })
+      else await updateDoc(target, { [`resolved.${key}`]: deleteField() })
+      if (authStore.user?.uid !== uid || actionItemsOwnerUid !== uid) return
+      const resolved = { ...mobileActionItemStates.value }
+      if (nextState) resolved[key] = nextState
+      else delete resolved[key]
+      mobileActionItemStates.value = resolved
+      actionItemMutations.set(key, { revision: ++actionItemWriteRevision, state: nextState })
+      actionItemsLoadFailed = false
+      updateMobileAlerts()
+      // 集約を読み直していないため、キャッシュは最後に読み込んだフィードの日付を保つ。
+      cacheMobileActionItems(uid, actionItemsLoadedDate)
+    })
+    actionItemWrite = operation.catch(() => {})
+    await operation
+  }
+
+  async function resolveMobileActionItem(key: string, state: MobileActionItemState['state']): Promise<void> {
+    await writeMobileActionItemState(key, state)
+  }
+
+  async function restoreMobileActionItem(key: string): Promise<void> {
+    await writeMobileActionItemState(key)
   }
 
   function readCachedFeed(uid: string, topic: NewsTopic): { date: string; articles: NewsArticle[]; isSharedFallback: boolean } | null {
@@ -762,9 +939,7 @@ export const useNewsStore = defineStore('news', () => {
       articleId: article.id,
       url: article.url,
       clickedAt: serverTimestamp() as NewsInteraction['clickedAt'],
-      titleEn: article.title,
-      summaryJa: article.summaryJa,
-      tags: article.tags,
+      ...learningFields(article),
     }
     await setDoc(
       doc(db, `users/${uid}/newsInteractions/${getInteractionDocId(topic, article.id)}`),
@@ -773,7 +948,7 @@ export const useNewsStore = defineStore('news', () => {
     )
   }
 
-  function learningFields(article: NewsArticle): { titleEn: string; summaryJa?: string; tags?: string[] } {
+  function learningFields(article: Pick<NewsArticle, 'title' | 'summaryJa' | 'tags'>): { titleEn: string; summaryJa?: string; tags?: string[] } {
     return {
       titleEn: article.title,
       ...(article.summaryJa ? { summaryJa: article.summaryJa } : {}),
@@ -781,12 +956,14 @@ export const useNewsStore = defineStore('news', () => {
     }
   }
 
-  async function dismissArticle(articleId: string, url?: string, topic: NewsTopic = 'ai'): Promise<void> {
+  async function recordArticleDismissal(articleId: string, url?: string, topic: NewsTopic = 'ai'): Promise<void> {
     const uid = authStore.user?.uid
     if (!uid) return
 
     // 表示中の記事なら、好みの学習に使うタイトル・要約・タグも一緒に記録する
     const shown = articles.value.find(a => a.id === articleId)
+      ?? (topic === 'mobile' ? mobileActionItems.value[articleId]
+        ?? Object.values(mobileActionItems.value).find(item => item.url === url) : undefined)
 
     // Firestoreに記録（urlも保存して翌日の同URL記事を除外できるようにする）
     await setDoc(
@@ -803,49 +980,26 @@ export const useNewsStore = defineStore('news', () => {
     )
 
     // ローカルから即座に除去
+    if (authStore.user?.uid !== uid) return
     dismissedIds.value.add(articleId)
     articles.value = articles.value.filter(a => a.id !== articleId)
     updateCachedFeedArticleList(uid, topic, articleId)
   }
 
-  async function loadMobileAlertCount(): Promise<void> {
+  async function dismissArticle(articleId: string, url?: string, topic: NewsTopic = 'ai'): Promise<void> {
     const uid = authStore.user?.uid
-    if (!uid) {
-      mobileAlertCount.value = 0
-      mobileAlertSummary.value = { urgent: 0, review: 0 }
-      return
-    }
+    if (!uid) return
+    const key = topic === 'mobile'
+      ? articles.value.find(article => article.id === articleId)?.actionItemKey
+        ?? Object.values(mobileActionItems.value).find(item => item.url === url)?.key
+      : undefined
+    await recordArticleDismissal(articleId, url, topic)
+    if (authStore.user?.uid !== uid) return
+    if (key) await writeMobileActionItemState(key, 'dismissed')
+  }
 
-    try {
-      const { latestDate, feedDocs } = await loadLatestFeedDocs(uid, 'mobile')
-
-      if (!latestDate) {
-        mobileAlertCount.value = 0
-        mobileAlertSummary.value = { urgent: 0, review: 0 }
-        return
-      }
-      const { excludedUrls, dismissedArticleIds } = await loadTopicInteractions(
-        uid,
-        'mobile',
-        toInteractionCandidates(feedDocs)
-      )
-
-      const visibleArticles = feedDocs
-        .filter(feedDoc => !dismissedArticleIds.has(feedDoc.id))
-        .map(feedDoc => ({ id: feedDoc.id, ...(feedDoc.data() as Record<string, unknown>) }) as NewsArticle)
-        .filter(article => !excludedUrls.has(article.url) || shouldKeepVisibleAfterClick(article, 'mobile'))
-        .filter(article => article.isOfficial === true)
-
-      const urgent = visibleArticles.filter(article => article.importantLevel === 'urgent').length
-      const review = visibleArticles.filter(article => article.importantLevel === 'review').length
-
-      mobileAlertSummary.value = { urgent, review }
-      mobileAlertCount.value = urgent
-    } catch (err) {
-      console.error('[news] loadMobileAlertCount error:', err)
-      mobileAlertCount.value = 0
-      mobileAlertSummary.value = { urgent: 0, review: 0 }
-    }
+  async function loadMobileAlertCount(): Promise<void> {
+    await loadMobileActionItems()
   }
 
   async function bookmarkArticle(article: NewsArticle): Promise<void> {
@@ -908,7 +1062,7 @@ export const useNewsStore = defineStore('news', () => {
     )
 
     // ブックマーク済み記事はフィードから除外（今日 + 翌日以降も同URLは出さない）
-    await dismissArticle(article.id, article.url, article.topic ?? 'ai')
+    await recordArticleDismissal(article.id, article.url, article.topic ?? 'ai')
   }
 
   return {
@@ -919,6 +1073,8 @@ export const useNewsStore = defineStore('news', () => {
     latestFeedDateByTopic,
     feedDiagnosticsByTopic,
     mobileNotificationPreferences,
+    mobileActionItems,
+    mobileActionItemStates,
     dismissedIds,
     loadTodayFeed,
     loadPreferences,
@@ -930,6 +1086,9 @@ export const useNewsStore = defineStore('news', () => {
     dismissArticle,
     bookmarkArticle,
     loadMobileAlertCount,
+    loadMobileActionItems,
+    resolveMobileActionItem,
+    restoreMobileActionItem,
     mobileAlertCount,
     mobileAlertSummary,
   }

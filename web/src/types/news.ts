@@ -52,6 +52,7 @@ export interface NewsArticle {
   isOfficial?: boolean
   actionRequired?: boolean
   actionType?: ActionType
+  actionItemKey?: string
   importantLevel?: ImportantLevel
   requiredByDate?: string
   classificationStatus?: 'done' | 'pending'
@@ -62,6 +63,21 @@ export interface NewsArticle {
   publishedAt: Timestamp
   fetchedAt: Timestamp
   date: string
+}
+
+export type MobileActionItem = Pick<NewsArticle,
+  'url' | 'titleJa' | 'title' | 'summaryJa' | 'mobileSummary' | 'platform' |
+  'sourceName' | 'sourceTier' | 'isOfficial' | 'importantLevel' | 'actionRequired' |
+  'actionType' | 'requiredByDate'
+> & {
+  key: string
+  publishedAt: number
+  firstSeenDate: string
+}
+
+export interface MobileActionItemState {
+  state: 'done' | 'dismissed'
+  at: number
 }
 
 export interface PersonalizedFeedItem {

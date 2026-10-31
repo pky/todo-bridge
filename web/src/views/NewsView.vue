@@ -2,12 +2,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Timestamp } from 'firebase/firestore'
 import { useAuthStore } from '@/stores/auth'
 import { useNewsStore } from '@/stores/news'
 import NewsCard from '@/components/NewsCard.vue'
 import MobileSummary from '@/components/MobileSummary.vue'
-import type { NewsArticle } from '@/types'
+import type { MobileActionItem, NewsArticle } from '@/types'
 import type { NewsTopic } from '@/types/news'
+import { isActionItemOverdue, matchesMobileActionItemPreferences, selectResolvedActionItems, selectUnresolvedActionItems } from '@/utils/mobileActionItems'
 
 const router = useRouter()
 const route = useRoute()
@@ -18,6 +20,9 @@ const bookmarkToast = ref(false)
 const showScrollTop = ref(false)
 const listContainerRef = ref<HTMLElement | null>(null)
 const mobileFilter = ref<'all' | 'ios' | 'android'>('all')
+const showResolvedActionItems = ref(false)
+const actionItemError = ref<string | null>(null)
+const pendingActionItems = ref<Set<string>>(new Set())
 const lastFeedCheckDateByTopic = ref<Record<NewsTopic, string | null>>({
   ai: null,
   mobile: null,
@@ -30,7 +35,8 @@ const pageSubtitle = computed(() => currentTopic.value === 'mobile' ? 'Apple / A
 const isMobileTopic = computed(() => currentTopic.value === 'mobile')
 const latestFeedDate = computed(() => newsStore.latestFeedDateByTopic[currentTopic.value])
 const feedDiagnostic = computed(() => newsStore.feedDiagnosticsByTopic[currentTopic.value])
-const hasVisibleArticles = computed(() => filteredArticles.value.length > 0)
+const hasVisibleArticles = computed(() => filteredArticles.value.length > 0
+  || importantArticles.value.length > 0 || resolvedActionItems.value.length > 0)
 
 function formatFeedDate(value: string | null): string {
   if (!value) return '更新日: 不明'
@@ -60,6 +66,7 @@ async function refreshFeedForCurrentTopic(): Promise<void> {
   const refreshPromise: Promise<void> = (async () => {
     await newsStore.loadPreferences(topic)
     await newsStore.loadTodayFeed(topic)
+    if (topic === 'mobile') await newsStore.loadMobileActionItems()
     lastFeedCheckDateByTopic.value = {
       ...lastFeedCheckDateByTopic.value,
       [topic]: checkedDate,
@@ -83,10 +90,6 @@ async function refreshFeedIfDateChanged(): Promise<void> {
   if (lastFeedCheckDateByTopic.value[topic] === today) return
 
   await refreshFeedForCurrentTopic()
-}
-
-function isImportantArticle(article: NewsArticle): boolean {
-  return article.importantLevel === 'urgent'
 }
 
 const preferenceFilteredArticles = computed(() => {
@@ -120,40 +123,7 @@ const filteredArticles = computed(() => {
   }
 })
 
-function getImportanceRank(article: NewsArticle): number {
-  let rank = 0
-  if (article.importantLevel === 'urgent') rank += 12
-  if (article.importantLevel === 'review') rank += 6
-  if (article.isOfficial) rank += 4
-  if (article.actionRequired) rank += 8
-  if (article.requiredByDate) rank += 4
-
-  switch (article.actionType) {
-    case 'sdk_requirement':
-      rank += 5
-      break
-    case 'policy':
-    case 'play_policy':
-      rank += 4
-      break
-    case 'security':
-      rank += 4
-      break
-    case 'store_review':
-      rank += 3
-      break
-    case 'beta':
-      rank += 2
-      break
-    case 'release':
-      rank += 1
-      break
-  }
-
-  return rank
-}
-
-function getImportanceReason(article: NewsArticle): string {
+function getImportanceReason(article: MobileActionItem): string {
   if (article.importantLevel === 'urgent' && article.requiredByDate) {
     return `期限あり: ${article.requiredByDate} までに確認`
   }
@@ -169,18 +139,26 @@ function getImportanceReason(article: NewsArticle): string {
 
 const importantArticles = computed(() => {
   if (!isMobileTopic.value) return []
-
-  return [...filteredArticles.value]
-    .filter((article) => isImportantArticle(article))
-    .sort((left, right) => getImportanceRank(right) - getImportanceRank(left))
-    .slice(0, 3)
+  return selectUnresolvedActionItems(newsStore.mobileActionItems, newsStore.mobileActionItemStates)
+    .filter(matchesActionItemFilters)
 })
+
+function matchesActionItemFilters(item: MobileActionItem): boolean {
+  return matchesMobileActionItemPreferences(item, newsStore.preferences)
+    && (mobileFilter.value === 'all' || item.platform === mobileFilter.value)
+}
+
+const resolvedActionItems = computed(() => isMobileTopic.value
+  ? selectResolvedActionItems(newsStore.mobileActionItems, newsStore.mobileActionItemStates)
+    .filter(matchesActionItemFilters)
+  : [])
 
 const regularArticles = computed(() => {
   if (!isMobileTopic.value) return filteredArticles.value
 
-  const importantIds = new Set(importantArticles.value.map((article) => article.id))
-  return filteredArticles.value.filter((article) => !importantIds.has(article.id))
+  const actionItemUrls = new Set(Object.values(newsStore.mobileActionItems).map(item => item.url))
+  return filteredArticles.value.filter(article => (!article.actionItemKey
+    || !newsStore.mobileActionItems[article.actionItemKey]) && !actionItemUrls.has(article.url))
 })
 
 const heroArticles = computed(() => {
@@ -273,11 +251,48 @@ async function handleBookmark(article: NewsArticle): Promise<void> {
 }
 
 async function handleDismiss(article: NewsArticle): Promise<void> {
-  await newsStore.dismissArticle(article.id, article.url, currentTopic.value)
+  try {
+    actionItemError.value = null
+    await newsStore.dismissArticle(article.id, article.url, currentTopic.value)
+  } catch {
+    actionItemError.value = '更新に失敗しました。もう一度お試しください。'
+  }
 }
 
 async function handleArticleClick(article: NewsArticle): Promise<void> {
   await newsStore.trackClick(article, currentTopic.value)
+}
+
+function actionItemArticle(item: MobileActionItem): NewsArticle {
+  const existing = newsStore.articles.find(article => article.actionItemKey === item.key || article.url === item.url)
+  const publishedAt = Timestamp.fromMillis(item.publishedAt)
+  return {
+    ...existing,
+    ...item,
+    id: existing?.id ?? item.key,
+    actionItemKey: item.key,
+    topic: 'mobile',
+    source: existing?.source ?? (item.isOfficial ? 'official' : 'rss'),
+    thumbnailUrl: existing?.thumbnailUrl ?? null,
+    score: existing?.score ?? null,
+    publishedAt,
+    fetchedAt: existing?.fetchedAt ?? publishedAt,
+    date: existing?.date ?? item.firstSeenDate,
+  }
+}
+
+async function updateActionItem(key: string, restore = false): Promise<void> {
+  if (pendingActionItems.value.has(key)) return
+  pendingActionItems.value.add(key)
+  actionItemError.value = null
+  try {
+    if (restore) await newsStore.restoreMobileActionItem(key)
+    else await newsStore.resolveMobileActionItem(key, 'done')
+  } catch {
+    actionItemError.value = '更新に失敗しました。もう一度お試しください。'
+  } finally {
+    pendingActionItems.value.delete(key)
+  }
 }
 
 </script>
@@ -343,7 +358,7 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
       </div>
 
       <!-- エラー -->
-      <div v-else-if="newsStore.error" class="px-4 py-8 text-center">
+      <div v-else-if="newsStore.error && !hasVisibleArticles" class="px-4 py-8 text-center">
         <p class="text-sm text-red-500">{{ newsStore.error }}</p>
         <button
           class="mt-3 text-sm text-blue-500"
@@ -354,7 +369,7 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
       </div>
 
       <!-- 記事なし -->
-      <div v-else-if="filteredArticles.length === 0" class="px-4 py-12 text-center">
+      <div v-else-if="!hasVisibleArticles" class="px-4 py-12 text-center">
         <p class="text-sm text-gray-500">{{ feedDiagnostic.message }}</p>
         <p class="text-xs text-gray-300 mt-1">
           {{
@@ -373,6 +388,7 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
 
       <!-- 記事一覧 -->
       <div v-else class="px-3 py-3 pb-20">
+        <p v-if="actionItemError" role="alert" class="mb-3 text-sm text-red-600">{{ actionItemError }}</p>
         <div v-if="newsStore.loading && hasVisibleArticles" class="pb-2 text-right">
           <p class="text-xs text-gray-400">{{ feedDiagnostic.message }}</p>
         </div>
@@ -389,7 +405,7 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
           <div v-if="importantArticles.length > 0" class="grid grid-cols-1 gap-3 px-3 py-3">
             <article
               v-for="article in importantArticles"
-              :key="`important-${article.id}`"
+              :key="`important-${article.key}`"
               class="rounded-xl border border-amber-100 bg-white p-3 shadow-sm"
             >
               <div class="flex items-start justify-between gap-3">
@@ -401,7 +417,7 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
                 </div>
                 <button
                   class="rounded-full p-1 text-gray-300 hover:text-red-400"
-                  @click.stop="handleDismiss(article)"
+                  @click.stop="handleDismiss(actionItemArticle(article))"
                   title="興味なし"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -419,7 +435,7 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
                 {{ article.summaryJa }}
               </p>
 
-              <div class="mt-3 flex items-center justify-between gap-2">
+              <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <div class="flex flex-wrap gap-1 text-[11px]">
                   <span
                     v-if="article.importantLevel === 'urgent'"
@@ -438,17 +454,31 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
                   <span v-if="article.platform === 'android'" class="rounded-full bg-gray-100 px-2 py-1 text-gray-700">Android</span>
                   <span v-if="article.actionRequired" class="rounded-full bg-red-100 px-2 py-1 text-red-700">要対応</span>
                   <span
+                    v-if="isActionItemOverdue(article, getLocalDateKey())"
+                    class="rounded-full bg-red-100 px-2 py-1 text-red-700"
+                  >
+                    期限切れ・未対応
+                  </span>
+                  <span
                     v-if="article.requiredByDate"
                     class="rounded-full bg-blue-100 px-2 py-1 text-blue-700"
                   >
                     期限 {{ article.requiredByDate }}
                   </span>
                 </div>
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    class="rounded-full border border-green-200 bg-white px-3 py-1 text-xs font-medium text-green-700 disabled:opacity-50"
+                    :disabled="pendingActionItems.has(article.key)"
+                    @click.stop="updateActionItem(article.key)"
+                  >
+                    対応済み
+                  </button>
                   <button
                     type="button"
                     class="rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-medium text-amber-700 hover:border-amber-300 hover:bg-amber-50"
-                    @click.stop="handleBookmark(article)"
+                    @click.stop="handleBookmark(actionItemArticle(article))"
                   >
                     あとで読む
                   </button>
@@ -457,12 +487,38 @@ async function handleArticleClick(article: NewsArticle): Promise<void> {
                     :href="article.url"
                     target="_blank"
                     rel="noopener noreferrer"
-                    @click.stop="handleArticleClick(article)"
+                    @click.stop="handleArticleClick(actionItemArticle(article))"
                   >
                     確認する
                   </a>
                 </div>
               </div>
+            </article>
+          </div>
+        </section>
+
+        <section v-if="isMobileTopic && resolvedActionItems.length > 0" class="mb-3 rounded-xl border border-gray-200 bg-white p-3">
+          <button
+            type="button"
+            class="text-sm font-medium text-gray-600"
+            :aria-expanded="showResolvedActionItems"
+            @click="showResolvedActionItems = !showResolvedActionItems"
+          >
+            対応済み {{ resolvedActionItems.length }}件
+          </button>
+          <div v-if="showResolvedActionItems" class="mt-3 grid gap-3">
+            <article v-for="item in resolvedActionItems" :key="item.key" class="flex items-start justify-between gap-3">
+              <a :href="item.url" target="_blank" rel="noopener noreferrer" class="min-w-0 break-words text-sm text-gray-600">
+                {{ item.titleJa || item.title }}
+              </a>
+              <button
+                type="button"
+                class="shrink-0 rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 disabled:opacity-50"
+                :disabled="pendingActionItems.has(item.key)"
+                @click="updateActionItem(item.key, true)"
+              >
+                戻す
+              </button>
             </article>
           </div>
         </section>

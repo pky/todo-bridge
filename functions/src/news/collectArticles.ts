@@ -18,6 +18,7 @@ import { createClaudeMessagesClient as createAiClaudeMessagesClient } from './cl
 import { createClaudeDailyRequestReservation } from './claudeDailyBudget'
 import { triageAiArticles, getAiTriageConfig, type TriageInput, type TriageResult } from './aiClaudeTriage'
 import { AI_REUSE_MAX_AGE_MS, AI_TRIAGE_VERSION, isSyntheticGithubDescription } from './aiSelection'
+import { getMobileActionItemKey, isMobileActionItemArticle, syncMobileActionItems, type MobileActionItem } from './mobileActionItems'
 import type { RawArticle, NewsArticle, NewsTopic, SourceTier } from './types'
 
 const db = admin.firestore()
@@ -450,7 +451,7 @@ export function preferJapaneseAppleNews(articles: RawArticle[]): RawArticle[] {
   })
 }
 
-function getMobileMatchKey(url: string): string {
+export function getMobileMatchKey(url: string): string {
   const id = getAppleNewsId(url)
   if (id) return `apple:${id}`
   // リリースノートは同じページの版をフラグメントで区別するため、キーに残す
@@ -523,7 +524,7 @@ export function buildClassifiedMobileArticle(
     return { ...base, ...contentField, ...platformField, tags: [], classificationStatus: 'pending' }
   }
   const inScope = result.category !== 'out_of_scope'
-  return {
+  const article: NewsArticle = {
     ...base,
     ...contentField,
     ...platformField,
@@ -538,6 +539,8 @@ export function buildClassifiedMobileArticle(
     inScope,
     mobileSummary: result.summary,
   }
+  if (isMobileActionItemArticle(article)) article.actionItemKey = getMobileActionItemKey(article.url)
+  return article
 }
 
 export function buildReusedMobileArticle(
@@ -547,7 +550,7 @@ export function buildReusedMobileArticle(
   fetchedAt: admin.firestore.Timestamp
 ): NewsArticle {
   const base = buildMobileBase(raw, today, fetchedAt)
-  return {
+  const article: NewsArticle = {
     ...base,
     thumbnailUrl: raw.thumbnailUrl ?? source.thumbnailUrl,
     ...(source.content ? { content: source.content } : {}),
@@ -563,6 +566,8 @@ export function buildReusedMobileArticle(
     ...(typeof source.inScope === 'boolean' ? { inScope: source.inScope } : {}),
     ...(source.mobileSummary ? { mobileSummary: source.mobileSummary } : {}),
   }
+  if (isMobileActionItemArticle(article)) article.actionItemKey = getMobileActionItemKey(article.url)
+  return article
 }
 
 async function fetchExistingMobileArticles(urls: string[]): Promise<NewsArticle[]> {
@@ -608,7 +613,8 @@ export async function runCollectMobileArticles(): Promise<void> {
   const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const collectionRef = db.collection('topics/mobile/articles')
   const todaySnap = await collectionRef.where('date', '==', today).get()
-  const processedUrls = new Set(todaySnap.docs.map(d => (d.data() as NewsArticle).url))
+  const savedToday = todaySnap.docs.map(d => d.data() as NewsArticle)
+  const processedUrls = new Set(savedToday.map(article => article.url))
   const toProcess = allRaw.filter(raw => !processedUrls.has(raw.url))
 
   const lookupUrls = toProcess.flatMap(raw => [raw.url, ...getAppleNewsAlternateUrls(raw.url)])
@@ -665,6 +671,27 @@ export async function runCollectMobileArticles(): Promise<void> {
   console.log(
     `[collectMobileArticles] reused=${reuse.length} fresh=${fresh.length} classified=${results.size} pending=${fresh.length - results.size} requestCount=${requestCount}`
   )
+
+  let actionItemCount = 0
+  try {
+    const actionItemsRef = db.doc('topics/mobile/meta/actionItems')
+    const articles = [...savedToday, ...reusedToSave.map(item => item.data), ...toSave.map(item => item.data)]
+    const now = Date.now()
+    await db.runTransaction(async transaction => syncMobileActionItems({
+      async load(): Promise<Record<string, MobileActionItem> | null> {
+        const snapshot = await transaction.get(actionItemsRef)
+        const items: Record<string, MobileActionItem> | null = snapshot.get('items') ?? null
+        actionItemCount = Object.keys(items ?? {}).length
+        return items
+      },
+      async save(items) {
+        actionItemCount = Object.keys(items).length
+        transaction.set(actionItemsRef, { items, updatedAt: admin.firestore.FieldValue.serverTimestamp() })
+      },
+    }, articles, now, today))
+  } catch (err) {
+    console.error(`[collectMobileArticles] action item sync failed count=${actionItemCount} name=${err instanceof Error ? err.name : 'unknown'}`)
+  }
 
   await cleanupOldArticles('mobile')
 }

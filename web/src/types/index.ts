@@ -5,6 +5,8 @@ export * from './user'
 export * from './document'
 export type {
   NewsArticle,
+  MobileActionItem,
+  MobileActionItemState,
   PersonalizedFeedItem,
   KeywordWeight,
   NewsPreferences,

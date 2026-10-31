@@ -39,6 +39,7 @@ export interface NewsArticle {
   isOfficial?: boolean
   actionRequired?: boolean
   actionType?: ActionType
+  actionItemKey?: string
   importantLevel?: ImportantLevel
   requiredByDate?: string
   triageStatus?: 'done' | 'pending'

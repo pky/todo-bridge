@@ -286,6 +286,11 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if false; // Cloud Functionsのみ書き込み可
 
+      match /meta/{docId} {
+        allow read: if isSignedIn();
+        allow write: if false;
+      }
+
       match /articles/{articleId} {
         allow read: if isSignedIn();
         allow write: if false;

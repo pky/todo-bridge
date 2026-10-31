@@ -155,6 +155,35 @@ function installServer(options: {
   getDocFromServerMock.mockImplementation(serveDoc('getDocFromServer'))
 }
 
+const ACTION_ITEMS = 'topics/mobile/meta/actionItems'
+const ACTION_ITEM_STATE = 'users/user-1/newsState/mobileActionItems'
+
+function installActionItemDocs(items: Record<string, Record<string, unknown>>, resolved: Record<string, unknown> = {}) {
+  getDocMock.mockImplementation(async (ref: { path: string }) => {
+    const data = ref.path === ACTION_ITEMS ? { items }
+      : ref.path === ACTION_ITEM_STATE ? { resolved } : undefined
+    return { exists: () => data !== undefined, data: () => data }
+  })
+}
+
+function actionItem(key: string, importantLevel: 'urgent' | 'review' = 'urgent') {
+  return {
+    key, title: `Action ${key}`, url: urlOf(key), sourceName: 'Example',
+    platform: 'ios', isOfficial: true, actionRequired: true, importantLevel,
+    publishedAt: Date.UTC(2026, 2, 14), firstSeenDate: TODAY,
+  }
+}
+
+function expectOnlyActionItemReads() {
+  expect(getDocMock).toHaveBeenCalledTimes(2)
+  expect(getDocMock.mock.calls.map(([ref]) => (ref as { path: string }).path).sort())
+    .toEqual([ACTION_ITEMS, ACTION_ITEM_STATE].sort())
+  expect(getDocFromServerMock).not.toHaveBeenCalled()
+  expect(getDocsMock).not.toHaveBeenCalled()
+  expect(getDocsFromServerMock).not.toHaveBeenCalled()
+  expect(allInteractionReads()).toEqual([])
+}
+
 // 条件なしで newsInteractions 全体を読む問い合わせ
 const unboundedReads = () => reads.filter((r) => r.kind === 'query' && r.path === INTERACTIONS && r.wheres.length === 0)
 const allInteractionReads = () => reads.filter((r) => r.path === INTERACTIONS || r.path.startsWith(`${INTERACTIONS}/`))
@@ -331,16 +360,13 @@ describe('newsInteractions の読み取りを候補記事に絞る', () => {
       expect(coveredUrls()).toContain(urlOf('numeric-id'))
     })
 
-    it('loadMobileAlertCount でもコレクション全体を読まない', async () => {
-      installServer({
-        topic: 'mobile',
-        personal: [personal('m1', 90, { topic: 'mobile', isOfficial: true, importantLevel: 'urgent' })],
-        interactions: [interaction('mobile_old', { topic: 'mobile', articleId: 'old', url: urlOf('old'), dismissed: true })],
-      })
-      await useNewsStore().loadMobileAlertCount()
-      await settle()
+    it('loadMobileAlertCount は集約1件と利用者状態1件だけを getDoc で読む', async () => {
+      installServer({ topic: 'mobile' })
+      installActionItemDocs({ m1: actionItem('m1') })
 
-      expect(unboundedReads()).toEqual([])
+      await useNewsStore().loadMobileAlertCount()
+
+      expectOnlyActionItemReads()
     })
   })
 
@@ -423,28 +449,26 @@ describe('newsInteractions の読み取りを候補記事に絞る', () => {
       expect(ids(store.articles)).toEqual(['m-keep', 'm-legacy'])
     })
 
-    it('mobile の通知件数は記録で除外した後の urgent と review を数える', async () => {
-      const mobile = (id: string, level: string, score: number) =>
-        personal(id, score, { topic: 'mobile', isOfficial: true, importantLevel: level })
-      installServer({
-        topic: 'mobile',
-        personal: [
-          mobile('m-urgent', 'urgent', 90),
-          mobile('m-urgent-dismissed', 'urgent', 80),
-          mobile('m-urgent-clicked', 'urgent', 70),
-          mobile('m-review', 'review', 60),
-        ],
-        interactions: [
-          interaction('mobile_m-urgent-dismissed', { topic: 'mobile', articleId: 'm-urgent-dismissed', url: urlOf('m-urgent-dismissed'), dismissed: true }),
-          interaction('mobile_old', { topic: 'mobile', articleId: 'old', url: urlOf('m-urgent-clicked'), clickedAt: { seconds: 1 } }),
-        ],
+    it('mobile の通知件数は集約の処理済みを除外した urgent と review を数える', async () => {
+      installServer({ topic: 'mobile' })
+      installActionItemDocs({
+        urgent: actionItem('urgent'),
+        community: { ...actionItem('community'), isOfficial: false },
+        done: actionItem('done'),
+        dismissed: actionItem('dismissed'),
+        review: actionItem('review', 'review'),
+        doneReview: actionItem('doneReview', 'review'),
+      }, {
+        done: { state: 'done', at: Date.UTC(2026, 2, 14) },
+        dismissed: { state: 'dismissed', at: Date.UTC(2026, 2, 14) },
+        doneReview: { state: 'done', at: Date.UTC(2026, 2, 14) },
       })
       const store = useNewsStore()
       await store.loadMobileAlertCount()
 
-      // urgent は未クリックのものだけ表示を維持し、クリック済みでも urgent は残る（現行の挙動）
       expect(store.mobileAlertSummary).toEqual({ urgent: 2, review: 1 })
       expect(store.mobileAlertCount).toBe(2)
+      expectOnlyActionItemReads()
     })
   })
 
@@ -657,27 +681,24 @@ describe('newsInteractions の読み取りを候補記事に絞る', () => {
       expect(store.dismissedIds.has('o-dismissed')).toBe(true)
     })
 
-    it('loadMobileAlertCount は unavailable でも件数を0にリセットせず、除外後の件数を返す', async () => {
-      const mobile = (id: string, level: string, score: number) =>
-        personal(id, score, { topic: 'mobile', isOfficial: true, importantLevel: level })
-      installServer({
-        topic: 'mobile',
-        personal: [
-          mobile('m-urgent', 'urgent', 90),
-          mobile('m-urgent2', 'urgent', 80),
-          mobile('m-review', 'review', 70),
-          mobile('m-review-dismissed', 'review', 60),
-        ],
-        interactions: [
-          interaction('mobile_other', { topic: 'mobile', articleId: 'other', url: urlOf('m-review-dismissed'), dismissed: true }),
-        ],
+    it('loadMobileAlertCount は集約の getDoc が unavailable なら件数を0に戻す', async () => {
+      installServer({ topic: 'mobile' })
+      installActionItemDocs({ urgent: actionItem('urgent'), review: actionItem('review', 'review') })
+      const serveDoc = getDocMock.getMockImplementation()!
+      getDocMock.mockImplementation(async (ref: { path: string }) => {
+        if (ref.path === ACTION_ITEMS) throw Object.assign(new Error('offline'), { code: 'unavailable' })
+        return serveDoc(ref)
       })
-      failDocsWhere(isBareId, 'unavailable')
       const store = useNewsStore()
+      store.mobileAlertCount = 2
+      store.mobileAlertSummary = { urgent: 2, review: 1 }
       await store.loadMobileAlertCount()
 
-      expect(store.mobileAlertSummary).toEqual({ urgent: 2, review: 1 })
-      expect(store.mobileAlertCount).toBe(2)
+      expect(getDocMock).toHaveBeenCalledWith(expect.objectContaining({ path: ACTION_ITEMS }))
+      expect(store.mobileAlertCount).toBe(0)
+      expect(store.mobileAlertSummary).toEqual({ urgent: 0, review: 0 })
+      expect(getDocsMock).not.toHaveBeenCalled()
+      expect(getDocsFromServerMock).not.toHaveBeenCalled()
     })
 
     it('表示追跡（url なしの経路）でも、一部の getDoc が unavailable なら成功した記録で処理を続ける', async () => {
@@ -710,17 +731,25 @@ describe('newsInteractions の読み取りを候補記事に絞る', () => {
       expect(store.articles).toEqual([])
     })
 
-    it('permission-denied のとき loadMobileAlertCount は従来どおり失敗として扱い、件数を0にする', async () => {
-      installServer({
-        topic: 'mobile',
-        personal: [personal('m-urgent', 90, { topic: 'mobile', isOfficial: true, importantLevel: 'urgent' })],
+    it('permission-denied のとき loadMobileAlertCount は利用者状態の取得失敗で件数を0にする', async () => {
+      installServer({ topic: 'mobile' })
+      installActionItemDocs({ urgent: actionItem('urgent') })
+      const serveDoc = getDocMock.getMockImplementation()!
+      getDocMock.mockImplementation(async (ref: { path: string }) => {
+        if (ref.path === ACTION_ITEM_STATE) throw Object.assign(new Error('permission denied'), { code: 'permission-denied' })
+        return serveDoc(ref)
       })
-      failDocsWhere(isBareId, 'permission-denied')
       const store = useNewsStore()
+      store.mobileAlertCount = 1
+      store.mobileAlertSummary = { urgent: 1, review: 1 }
       await store.loadMobileAlertCount()
 
       expect(console.error).toHaveBeenCalled()
+      expect(getDocMock).toHaveBeenCalledWith(expect.objectContaining({ path: ACTION_ITEM_STATE }))
+      expect(store.mobileAlertCount).toBe(0)
       expect(store.mobileAlertSummary).toEqual({ urgent: 0, review: 0 })
+      expect(getDocsMock).not.toHaveBeenCalled()
+      expect(getDocsFromServerMock).not.toHaveBeenCalled()
     })
   })
 })
