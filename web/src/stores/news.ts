@@ -289,7 +289,11 @@ export const useNewsStore = defineStore('news', () => {
       return { latestDate: null, articleDocs: [] as typeof articlesSnap.docs }
     }
 
-    const latestArticlesSnap = await getServerFirstSnapshot(query(articlesRef, where('date', '==', latestDate)))
+    const latestArticlesSnap = await getServerFirstSnapshot(query(
+      articlesRef,
+      where('date', '==', latestDate),
+      ...(topic === 'ai' ? [where('feedEligible', '==', true)] : [])
+    ))
     const sortedArticleDocs = [...latestArticlesSnap.docs].sort((a, b) => {
       const aData = a.data() as Partial<NewsArticle>
       const bData = b.data() as Partial<NewsArticle>
@@ -316,7 +320,7 @@ export const useNewsStore = defineStore('news', () => {
     }
     if (topic !== 'ai') return { latestDate, articleDocs: sortedArticleDocs }
 
-    // 最新日の記事は問い合わせではなくクライアント側で絞る（feedEligible の where は複合インデックスが要る）。
+    // date と feedEligible の複合インデックスで取得した記事を、概要などの表示条件でさらに絞る。
     // 件数の上限は利用者の除外条件を当てた後に掛ける。
     const docsById = new Map(sortedArticleDocs.map((articleDoc) => [articleDoc.id, articleDoc]))
     const displayable = filterEligibleAiNews(

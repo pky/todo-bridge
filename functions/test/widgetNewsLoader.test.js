@@ -42,16 +42,20 @@ function createDb(collections) {
           }
         },
         where(field, op, value) {
-          return {
+          const chain = (filters) => ({
+            where(nextField, nextOp, nextValue) {
+              return chain([...filters, { field: nextField, op: nextOp, value: nextValue }])
+            },
             async get() {
-              calls.push({ path, kind: 'where', field, op, value })
-              return snapshot(items.filter(item => {
+              for (const filter of filters) calls.push({ path, kind: 'where', ...filter })
+              return snapshot(items.filter(item => filters.every(({ field, op, value }) => {
                 if (op === '==') return item.data[field] === value
                 if (op === 'in') return Array.isArray(value) && value.includes(item.data[field])
                 return false
-              }))
+              })))
             },
-          }
+          })
+          return chain([{ field, op, value }])
         },
         async get() {
           calls.push({ path, kind: 'all' })
@@ -120,8 +124,8 @@ test('最新日は date 降順の先頭1件から得て、その日付の全件�
       { id: 'mid', data: { date: '2026-01-02' } },
     ],
     [sharedPath('ai')]: [
-      { id: 's-old', data: { date: '2026-01-02' } },
-      { id: 's-new', data: { date: '2026-01-04' } },
+      { id: 's-old', data: { date: '2026-01-02', feedEligible: true } },
+      { id: 's-new', data: { date: '2026-01-04', feedEligible: true } },
     ],
   })
   const input = await loadWidgetFeedInputs(db, UID, 'ai')
@@ -150,14 +154,14 @@ test('記事のidは doc.id、データは doc.data() のスプレッド（idが
       id: 'doc-id-1',
       data: { date: '2026-01-02', title: '架空の記事', id: 'data-id', url: 'https://example.com/x' },
     }],
-    [sharedPath('ai')]: [{ id: 'doc-id-2', data: { date: '2026-01-02', title: '共有の記事' } }],
+    [sharedPath('ai')]: [{ id: 'doc-id-2', data: { date: '2026-01-02', title: '共有の記事', feedEligible: true } }],
     [interactionsPath]: [{ id: 'rec-1', data: { url: 'https://example.com/x', shownCount: 2 } }],
   })
   const input = await loadWidgetFeedInputs(db, UID, 'ai')
   assert.deepEqual(input.personalDocs, [
     { id: 'data-id', date: '2026-01-02', title: '架空の記事', url: 'https://example.com/x' },
   ])
-  assert.deepEqual(input.sharedDocs, [{ id: 'doc-id-2', date: '2026-01-02', title: '共有の記事' }])
+  assert.deepEqual(input.sharedDocs, [{ id: 'doc-id-2', date: '2026-01-02', title: '共有の記事', feedEligible: true }])
   assert.deepEqual(input.interactions, [{ id: 'rec-1', url: 'https://example.com/x', shownCount: 2 }])
 })
 
