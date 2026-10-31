@@ -327,6 +327,7 @@ test('同じバッチで newsInteractions/{topic}_{articleId} に dismissed を 
     articleId: ARTICLE.id,
     dismissed: true,
     dismissedAt: TS,
+    readLaterAt: TS,
     url: ARTICLE.url,
   })
 })
@@ -348,6 +349,7 @@ test('url が null のときは newsInteractions に url キーを含めない',
     articleId: ARTICLE.id,
     dismissed: true,
     dismissedAt: TS,
+    readLaterAt: TS,
   })
 })
 
