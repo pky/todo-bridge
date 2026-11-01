@@ -22,6 +22,7 @@
     "verify:e2e:list": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 npm exec --no -- e2e list",
     "verify:e2e:smoke": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 npm exec --no -- e2e run verification/tests/smoke.e2e.ts --output .e2e/proof/doctor --trace on --video",
     "verify:e2e:mobile-news": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 npm exec --no -- e2e run verification/tests/mobile-news.e2e.ts --output .e2e/proof/mobile-news --trace on --video",
+    "verify:e2e:task-counts": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 npm exec --no -- e2e run verification/tests/task-counts.e2e.ts --output .e2e/proof/task-counts --trace on --video",
     "verify:e2e:guide": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 npm exec --no -- e2e guide",
     "verify:e2e:browser-install": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 npm exec --no -- e2e-web install chromium",
     "verify:e2e:mcp-locate": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 node verification/mcp-locate.mjs",

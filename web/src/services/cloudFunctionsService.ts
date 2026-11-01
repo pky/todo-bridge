@@ -102,16 +102,17 @@ export async function getSmartListTasks(
   return result.data
 }
 
-export async function refreshSmartListCounts(): Promise<Omit<SmartListCounts, 'lastUpdated'>> {
+export async function refreshSmartListCounts(options: { preferCached?: boolean } = {}): Promise<Omit<SmartListCounts, 'lastUpdated'>> {
   const spaceStore = useSpaceStore()
   const callable = httpsCallable<
-    { spaceId?: string | null; useLegacyPath: boolean },
+    { spaceId?: string | null; useLegacyPath: boolean; preferCached?: boolean },
     Omit<SmartListCounts, 'lastUpdated'>
   >(functions, 'refreshSmartListCounts')
 
   const result = await callable({
     spaceId: spaceStore.currentSpaceId,
     useLegacyPath: spaceStore.useLegacyPath,
+    preferCached: options.preferCached === true,
   })
   return result.data
 }

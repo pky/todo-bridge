@@ -104,42 +104,53 @@ export function categorizeTask(task: TaskData | null, now: Date): string[] {
   return categories
 }
 
-// ユーザーのスマートリストカウントを再計算
+// 差分更新時刻とは分け、全再集計の完了時刻で日付境界を判定する。
+export function canReuseSmartListCounts(data: admin.firestore.DocumentData | undefined, now: Date): boolean {
+  const counts = data?.smartListCounts
+  const calculatedAt = data?.smartListCountsRecalculatedAt
+  if (!counts || !(calculatedAt instanceof Timestamp)) return false
+  if (!['today', 'tomorrow', 'overdue', 'thisWeek', 'noDate'].every(
+    (key) => Number.isSafeInteger(counts[key]) && counts[key] >= 0
+  )) return false
+  const time = calculatedAt.toMillis()
+  return time >= getJstDayBoundaries(now).todayStart.getTime() && time <= now.getTime()
+}
+
+// 必要時だけ全件を読む。競合時は再試行で保存済みカウントを再確認する。
 async function recalculateSmartListCounts(
   userId: string,
   spaceId?: string,
-  options?: { filterByUserVisibility?: boolean }
+  options?: { filterByUserVisibility?: boolean; preferCached?: boolean }
 ): Promise<SmartListCounts> {
-  const tasksRef = db.collection(spaceId ? `spaces/${spaceId}/tasks` : `users/${userId}/tasks`)
-  const snapshot = await tasksRef.where('completed', '==', false).get()
+  const countsRef = db.doc(buildSmartListCountsDocPath(userId, spaceId))
+  const tasksQuery = db.collection(spaceId ? `spaces/${spaceId}/tasks` : `users/${userId}/tasks`)
+    .where('completed', '==', false)
 
-  const now = new Date()
-  const counts: SmartListCounts = {
-    today: 0,
-    tomorrow: 0,
-    overdue: 0,
-    thisWeek: 0,
-    noDate: 0,
-    lastUpdated: Timestamp.now(),
-  }
-
-  snapshot.docs.forEach((doc) => {
-    const task = doc.data() as TaskData
-    if (spaceId && options?.filterByUserVisibility !== false && !taskMatchesScope(task, userId, { spaceId, useLegacyPath: false })) return
-    if (task.parentId) return
-
-    const categories = categorizeTask(task, now)
-    categories.forEach((cat) => {
-      if (cat in counts) {
-        counts[cat as keyof Omit<SmartListCounts, 'lastUpdated'>]++
-      }
+  return db.runTransaction(async (transaction) => {
+    const saved = await transaction.get(countsRef)
+    const now = new Date()
+    if (options?.preferCached && canReuseSmartListCounts(saved.data(), now)) {
+      return saved.data()!.smartListCounts as SmartListCounts
+    }
+    const snapshot = await transaction.get(tasksQuery)
+    const counts: SmartListCounts = {
+      today: 0, tomorrow: 0, overdue: 0, thisWeek: 0, noDate: 0,
+      lastUpdated: Timestamp.fromDate(now),
+    }
+    snapshot.docs.forEach((doc) => {
+      const task = doc.data() as TaskData
+      if (spaceId && options?.filterByUserVisibility !== false && !taskMatchesScope(task, userId, { spaceId, useLegacyPath: false })) return
+      categorizeTask(task, now).forEach((category) => {
+        counts[category as keyof SmartListCountResponse]++
+      })
     })
+    transaction.set(countsRef, {
+      smartListCounts: counts,
+      smartListCountsRecalculatedAt: Timestamp.fromDate(now),
+      smartListCountsSnapshotAt: snapshot.readTime,
+    }, { merge: true })
+    return counts
   })
-
-  // ユーザードキュメントに保存
-  await db.doc(buildSmartListCountsDocPath(userId, spaceId)).set({ smartListCounts: counts }, { merge: true })
-
-  return counts
 }
 
 function toSmartListCountResponse(counts: SmartListCounts): SmartListCountResponse {
@@ -152,18 +163,29 @@ function toSmartListCountResponse(counts: SmartListCounts): SmartListCountRespon
   }
 }
 
-function buildIncrementUpdateData(delta: Record<string, number>): Record<string, admin.firestore.FieldValue | admin.firestore.Timestamp> {
-  const updateData: Record<string, admin.firestore.FieldValue | admin.firestore.Timestamp> = {
-    'smartListCounts.lastUpdated': Timestamp.now(),
-  }
+// 全再集計へ含まれた変更の遅延配信は加算しない。削除もイベントのcommit時刻で判定する。
+export function parseSmartListEventTime(value: string | undefined): Timestamp | undefined {
+  if (!value) return undefined
+  const millis = Date.parse(value)
+  if (!Number.isFinite(millis)) return undefined
+  const fraction = /\.(\d+)Z$/.exec(value)?.[1] ?? ''
+  return new Timestamp(Math.floor(millis / 1000), Number(fraction.padEnd(9, '0').slice(0, 9)))
+}
 
-  Object.entries(delta).forEach(([key, value]) => {
-    if (value !== 0) {
-      updateData[`smartListCounts.${key}`] = FieldValue.increment(value)
-    }
+async function applySmartListDelta(path: string, delta: Record<string, number>, eventTime?: Timestamp): Promise<void> {
+  const ref = db.doc(path)
+  await db.runTransaction(async (transaction) => {
+    const saved = await transaction.get(ref)
+    const snapshotAt = saved.data()?.smartListCountsSnapshotAt
+    if (eventTime && snapshotAt instanceof Timestamp &&
+      (eventTime.seconds < snapshotAt.seconds ||
+        (eventTime.seconds === snapshotAt.seconds && eventTime.nanoseconds <= snapshotAt.nanoseconds))) return
+    const counts: Record<string, admin.firestore.FieldValue | Timestamp> = { lastUpdated: Timestamp.now() }
+    Object.entries(delta).forEach(([key, value]) => {
+      if (value !== 0) counts[key] = FieldValue.increment(value)
+    })
+    transaction.set(ref, { smartListCounts: counts }, { merge: true })
   })
-
-  return updateData
 }
 
 export function taskMatchesScope(task: TaskData, userId: string, scope?: ScopedRequest): boolean {
@@ -240,9 +262,8 @@ export const updateSmartListCounts = functions
     const hasChanges = Object.values(delta).some((v) => v !== 0)
     if (!hasChanges) return
 
-    // FieldValue.incrementで差分更新（読み込みなし）
-    const userRef = db.doc(`users/${userId}`)
-    await userRef.update(buildIncrementUpdateData(delta))
+    await applySmartListDelta(`users/${userId}`, delta,
+      change.after.updateTime ?? parseSmartListEventTime(context.timestamp))
   })
 
 export const updateSpaceSmartListCounts = functions
@@ -271,7 +292,8 @@ export const updateSpaceSmartListCounts = functions
     const hasChanges = Object.values(delta).some((value) => value !== 0)
     if (!hasChanges) return
 
-    await db.doc(buildSmartListCountsDocPath('', spaceId)).set(buildIncrementUpdateData(delta), { merge: true })
+    await applySmartListDelta(buildSmartListCountsDocPath('', spaceId), delta,
+      change.after.updateTime ?? parseSmartListEventTime(context.timestamp))
   })
 
 // 毎日0時（JST）にスマートリストカウントを再計算（期限切れの更新用）
@@ -281,10 +303,9 @@ export async function runRecalculateAllSmartLists(): Promise<void> {
 
   const spacesSnapshot = await db.collection('spaces').get()
   const spacePromises = spacesSnapshot.docs.map(async (spaceDoc) => {
-    const counts = await recalculateSmartListCounts(spaceDoc.data().ownerUid ?? '', spaceDoc.id, {
+    await recalculateSmartListCounts(spaceDoc.data().ownerUid ?? '', spaceDoc.id, {
       filterByUserVisibility: false,
     })
-    await db.doc(buildSmartListCountsDocPath('', spaceDoc.id)).set({ smartListCounts: counts }, { merge: true })
   })
 
   await Promise.all([...userPromises, ...spacePromises])
@@ -366,15 +387,25 @@ export const refreshSmartListCounts = functions
       throw new functions.https.HttpsError('unauthenticated', '認証が必要です')
     }
 
-    const { spaceId, useLegacyPath = false } = data as {
+    const { spaceId, useLegacyPath = false, preferCached = false } = data as {
       spaceId?: string
       useLegacyPath?: boolean
+      preferCached?: boolean
     }
     const userId = context.auth.uid
+    if (spaceId && !useLegacyPath) {
+      if (typeof spaceId !== 'string' || spaceId.includes('/')) {
+        throw new functions.https.HttpsError('invalid-argument', '無効なスペースです')
+      }
+      const membership = await db.doc(`spaces/${spaceId}/members/${userId}`).get()
+      if (!membership.exists || membership.data()?.status !== 'active') {
+        throw new functions.https.HttpsError('permission-denied', 'スペースへのアクセス権がありません')
+      }
+    }
     const counts = await recalculateSmartListCounts(
       userId,
       useLegacyPath ? undefined : spaceId,
-      { filterByUserVisibility: false }
+      { filterByUserVisibility: false, preferCached: preferCached === true }
     )
 
     return toSmartListCountResponse(counts)
