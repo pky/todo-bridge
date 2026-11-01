@@ -7,9 +7,13 @@ export const itemKey = 'verification-security'
 export const itemTitle = '検証用セキュリティ更新の確認'
 
 type FirestoreValue = { stringValue: string } | { booleanValue: boolean }
+  | { nullValue: null } | { timestampValue: string } | { arrayValue: { values: FirestoreValue[] } }
   | { integerValue: string } | { mapValue: { fields: Record<string, FirestoreValue> } }
 
 function value(input: unknown): FirestoreValue {
+  if (input === null) return { nullValue: null }
+  if (input instanceof Date) return { timestampValue: input.toISOString() }
+  if (Array.isArray(input)) return { arrayValue: { values: input.map(value) } }
   if (typeof input === 'string') return { stringValue: input }
   if (typeof input === 'boolean') return { booleanValue: input }
   if (typeof input === 'number') return { integerValue: String(input) }
@@ -24,7 +28,7 @@ async function request(path: string, init?: RequestInit): Promise<Record<string,
   return await response.json()
 }
 
-async function seedDocument(path: string, document: Record<string, unknown>): Promise<void> {
+export async function seedDocument(path: string, document: Record<string, unknown>): Promise<void> {
   await request(`${firestore}/${path}`, {
     method: 'PATCH', headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
     body: JSON.stringify({ fields: Object.fromEntries(Object.entries(document).map(([key, entry]) => [key, value(entry)])) }),

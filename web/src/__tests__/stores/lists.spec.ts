@@ -4,6 +4,8 @@ import { useListsStore } from '@/stores/lists'
 import { useAuthStore } from '@/stores/auth'
 import { useSpaceStore } from '@/stores/space'
 
+const firestoreMocks = vi.hoisted(() => ({ getDocsFromServer: vi.fn() }))
+
 // Firebase Firestore のモック
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
@@ -13,7 +15,7 @@ vi.mock('firebase/firestore', () => ({
   deleteDoc: vi.fn(),
   getDocs: vi.fn(),
   getDocsFromCache: vi.fn(),
-  getDocsFromServer: vi.fn(),
+  getDocsFromServer: firestoreMocks.getDocsFromServer,
   onSnapshot: vi.fn(),
   serverTimestamp: vi.fn(() => ({ seconds: Date.now() / 1000 })),
   query: vi.fn(),
@@ -391,4 +393,22 @@ describe('Lists Store', () => {
     expect(store.lists[0]?.visibleToMemberIds).toEqual(['test-user-id', 'member-a', 'member-b'])
     expect(store.lists[0]?.editableByMemberIds).toEqual(['test-user-id', 'member-a', 'member-b'])
   })
+
+  it('通常購読は当日countの再利用を要求し、解除後の遅い応答を反映しない', async () => {
+    const { getDocsFromCache, onSnapshot } = await import('firebase/firestore')
+    const { refreshSmartListCounts } = await import('@/services/cloudFunctionsService')
+    vi.mocked(getDocsFromCache).mockRejectedValue(new Error('cache-miss'))
+    firestoreMocks.getDocsFromServer.mockResolvedValue({ docs: [] })
+    vi.mocked(onSnapshot).mockReturnValue(() => {})
+    let resolveCounts!: (counts: { today: number; tomorrow: number; overdue: number; thisWeek: number; noDate: number }) => void
+    vi.mocked(refreshSmartListCounts).mockReturnValueOnce(new Promise(resolve => { resolveCounts = resolve }))
+    const store = useListsStore()
+    await store.subscribe()
+    expect(refreshSmartListCounts).toHaveBeenCalledWith({ preferCached: true })
+    store.unsubscribe()
+    resolveCounts({ today: 9, tomorrow: 0, overdue: 0, thisWeek: 9, noDate: 0 })
+    await Promise.resolve()
+    expect(store.smartListCounts.today).toBe(0)
+  })
+
 })

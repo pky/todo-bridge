@@ -48,6 +48,8 @@ export const useListsStore = defineStore('lists', () => {
     noDate: 0,
   })
 
+  let subscriptionGeneration = 0
+  let countsRevision = 0
   let listsLoaded = false
   let tagsLoaded = false
   let listsUnsubscribe: Unsubscribe | null = null
@@ -311,6 +313,7 @@ export const useListsStore = defineStore('lists', () => {
         if (docSnapshot.exists()) {
           const data = docSnapshot.data()
           if (data.smartListCounts) {
+            countsRevision++
             smartListCounts.value = data.smartListCounts
           }
         }
@@ -368,13 +371,17 @@ export const useListsStore = defineStore('lists', () => {
         // モック状態のパースに失敗した場合は通常のFirestoreへ
       }
     }
+    const generation = ++subscriptionGeneration
     const spaceStore = useSpaceStore()
     await spaceStore.initSpace()
     await Promise.all([fetchLists(), fetchTags()])
+    if (generation !== subscriptionGeneration) return
     subscribeToLists()
     subscribeToSmartListCounts()
-    void refreshSmartListCounts()
+    const revision = countsRevision
+    void refreshSmartListCounts({ preferCached: true })
       .then((refreshedCounts) => {
+        if (generation !== subscriptionGeneration || revision !== countsRevision) return
         smartListCounts.value = {
           ...smartListCounts.value,
           ...refreshedCounts,
@@ -386,6 +393,7 @@ export const useListsStore = defineStore('lists', () => {
   }
 
   function unsubscribe() {
+    subscriptionGeneration++
     lists.value = []
     tags.value = []
     selectedListId.value = null
