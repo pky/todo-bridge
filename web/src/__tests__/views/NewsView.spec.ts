@@ -12,6 +12,10 @@ const bookmarkArticleMock = vi.hoisted(() => vi.fn())
 const loadMobileActionItemsMock = vi.hoisted(() => vi.fn())
 const resolveMobileActionItemMock = vi.hoisted(() => vi.fn())
 const restoreMobileActionItemMock = vi.hoisted(() => vi.fn())
+const aiLoadMock = vi.hoisted(() => vi.fn())
+const aiDismissMock = vi.hoisted(() => vi.fn())
+const aiReadLaterMock = vi.hoisted(() => vi.fn())
+const aiResetMock = vi.hoisted(() => vi.fn())
 const routeState = vi.hoisted(() => ({ name: 'news-ai' as string }))
 const pushMock = vi.hoisted(() => vi.fn())
 const authStoreState = reactive({
@@ -82,6 +86,24 @@ function actionItem(article: NewsArticle): MobileActionItem {
   }
 }
 
+const aiArticle = {
+  id: 'article-1',
+  title: 'OpenAI releases update',
+  sourceName: 'Example',
+  summary: '要約',
+  publishedAt: null as string | null,
+  url: 'https://example.com/article-1',
+}
+
+const aiStoreState = reactive({
+  visibleArticles: [aiArticle] as Array<typeof aiArticle>,
+  loading: false,
+  error: null as string | null,
+  feedDate: '2026-03-14' as string | null,
+  feed: {} as object | null,
+  canManage: true,
+})
+
 const newsStoreState = reactive({
   mobileActionItems: {} as Record<string, MobileActionItem>,
   mobileActionItemStates: {} as Record<string, MobileActionItemState>,
@@ -127,6 +149,16 @@ vi.mock('@/stores/news', () => ({
   }),
 }))
 
+vi.mock('@/stores/aiNews', () => ({
+  useAiNewsStore: () => ({
+    ...aiStoreState,
+    load: aiLoadMock,
+    dismiss: aiDismissMock,
+    readLater: aiReadLaterMock,
+    reset: aiResetMock,
+  }),
+}))
+
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => authStoreState,
 }))
@@ -157,6 +189,15 @@ describe('NewsView', () => {
       ai: { state: 'showing', message: 'ニュースを表示しています' },
       mobile: { state: 'showing', message: 'ニュースを表示しています' },
     }
+    aiStoreState.visibleArticles = [aiArticle]
+    aiStoreState.loading = false
+    aiStoreState.error = null
+    aiStoreState.feedDate = '2026-03-14'
+    aiStoreState.feed = {}
+    aiStoreState.canManage = true
+    aiLoadMock.mockResolvedValue(undefined)
+    aiDismissMock.mockResolvedValue(undefined)
+    aiReadLaterMock.mockResolvedValue(undefined)
     loadTodayFeedMock.mockResolvedValue(undefined)
     loadPreferencesMock.mockResolvedValue(undefined)
     dismissArticleMock.mockResolvedValue(undefined)
@@ -198,7 +239,7 @@ describe('NewsView', () => {
     })
   })
 
-  it('ヘッダーにフィード更新日を表示する', () => {
+  it('AIルートのヘッダーにaiNewsのフィード更新日を表示する', () => {
     const wrapper = mount(NewsView, {
       global: {
         stubs: {
@@ -210,7 +251,7 @@ describe('NewsView', () => {
     expect(wrapper.text()).toContain('更新日: 2026/03/14')
   })
 
-  it('認証待ちのあとに uid が入ったらニュース取得を開始する', async () => {
+  it('認証待ちのあとに uid が入ったらaiNewsのloadを開始する', async () => {
     authStoreState.user = null
     authStoreState.loading = true
 
@@ -222,18 +263,19 @@ describe('NewsView', () => {
       },
     })
 
-    expect(loadTodayFeedMock).not.toHaveBeenCalled()
+    expect(aiLoadMock).not.toHaveBeenCalled()
 
     authStoreState.user = { uid: 'user-1' }
     authStoreState.loading = false
     await nextTick()
     await nextTick()
 
-    expect(loadPreferencesMock).toHaveBeenCalledWith('ai')
-    expect(loadTodayFeedMock).toHaveBeenCalledWith('ai')
+    expect(aiLoadMock).toHaveBeenCalledWith('user-1')
+    expect(loadPreferencesMock).not.toHaveBeenCalled()
+    expect(loadTodayFeedMock).not.toHaveBeenCalled()
   })
 
-  it('日付が変わってから画面へ戻ったらニュースを再取得する', async () => {
+  it('AIルートは画面へ戻る（focus）たびにaiNewsのloadへ判断を委ね、旧取得は呼ばない', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-03-14T10:00:00+09:00'))
 
@@ -248,25 +290,26 @@ describe('NewsView', () => {
     await nextTick()
     await nextTick()
 
-    expect(loadTodayFeedMock).toHaveBeenCalledTimes(1)
+    expect(aiLoadMock).toHaveBeenCalledTimes(1)
 
     window.dispatchEvent(new Event('focus'))
     await nextTick()
     await nextTick()
 
-    expect(loadTodayFeedMock).toHaveBeenCalledTimes(1)
+    expect(aiLoadMock).toHaveBeenCalledTimes(2)
 
     vi.setSystemTime(new Date('2026-03-15T09:00:00+09:00'))
     window.dispatchEvent(new Event('focus'))
     await nextTick()
     await nextTick()
 
-    expect(loadPreferencesMock).toHaveBeenCalledTimes(2)
-    expect(loadTodayFeedMock).toHaveBeenCalledTimes(2)
-    expect(loadTodayFeedMock).toHaveBeenLastCalledWith('ai')
+    expect(aiLoadMock).toHaveBeenCalledTimes(3)
+    expect(aiLoadMock).toHaveBeenLastCalledWith('user-1')
+    expect(loadPreferencesMock).not.toHaveBeenCalled()
+    expect(loadTodayFeedMock).not.toHaveBeenCalled()
   })
 
-  it('日付が変わってからタブが再表示されたらニュースを再取得する', async () => {
+  it('AIルートはタブが再表示されたらaiNewsのloadを呼び、旧取得は呼ばない', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-03-14T10:00:00+09:00'))
 
@@ -286,16 +329,13 @@ describe('NewsView', () => {
     await nextTick()
     await nextTick()
 
-    expect(loadTodayFeedMock).toHaveBeenCalledTimes(2)
-    expect(loadTodayFeedMock).toHaveBeenLastCalledWith('ai')
+    expect(aiLoadMock).toHaveBeenCalledTimes(2)
+    expect(aiLoadMock).toHaveBeenLastCalledWith('user-1')
+    expect(loadTodayFeedMock).not.toHaveBeenCalled()
   })
 
-  it('記事がある間は loading 中でも一覧を隠さない', () => {
-    newsStoreState.loading = true
-    newsStoreState.feedDiagnosticsByTopic.ai = {
-      state: 'showing',
-      message: '保存済みの記事を表示しつつ、サーバーの更新を確認しています',
-    }
+  it('AIルートは記事がある間は loading 中でも一覧を隠さない', () => {
+    aiStoreState.loading = true
 
     const wrapper = mount(NewsView, {
       global: {
@@ -305,17 +345,13 @@ describe('NewsView', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('保存済みの記事を表示しつつ、サーバーの更新を確認しています')
     expect(wrapper.text()).toContain('OpenAI releases update')
     expect(wrapper.text()).not.toContain('読み込み中...')
   })
 
-  it('記事が空なら原因メッセージを表示する', () => {
-    newsStoreState.articles = []
-    newsStoreState.feedDiagnosticsByTopic.ai = {
-      state: 'fetch-failed',
-      message: 'サーバーからニュースを取得できませんでした',
-    }
+  it('AIルートは記事が空でaiNewsがエラーなら原因を表示し、再読み込みで強制loadする', async () => {
+    aiStoreState.visibleArticles = []
+    aiStoreState.error = 'ニュースを取得できませんでした'
 
     const wrapper = mount(NewsView, {
       global: {
@@ -325,11 +361,18 @@ describe('NewsView', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('サーバーからニュースを取得できませんでした')
-    expect(wrapper.text()).toContain('通信状態を確認して再読み込みしてください')
+    expect(wrapper.text()).toContain('ニュースを取得できませんでした')
+
+    aiLoadMock.mockClear()
+    const reload = wrapper.findAll('button').find((button) => button.text() === '再読み込み')
+    expect(reload).toBeTruthy()
+    await reload?.trigger('click')
+
+    expect(aiLoadMock).toHaveBeenCalledWith('user-1', true)
+    expect(loadTodayFeedMock).not.toHaveBeenCalled()
   })
 
-  it('興味なし押下時にURL付きで dismissArticle を呼ぶ', async () => {
+  it('AIルートの興味なし押下はarticleIdでaiNewsのdismissを呼び、旧dismissArticleは呼ばない', async () => {
     const wrapper = mount(NewsView, {
       global: {
         stubs: {
@@ -340,7 +383,8 @@ describe('NewsView', () => {
 
     await wrapper.get('[data-testid="dismiss"]').trigger('click')
 
-    expect(dismissArticleMock).toHaveBeenCalledWith(article.id, article.url, 'ai')
+    expect(aiDismissMock).toHaveBeenCalledWith(aiArticle.id)
+    expect(dismissArticleMock).not.toHaveBeenCalled()
   })
 
   it('mobile ではフィルタで iOS のみ表示できる', async () => {
