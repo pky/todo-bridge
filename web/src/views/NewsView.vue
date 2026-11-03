@@ -200,8 +200,16 @@ const goBack = () => {
   }
 }
 
+const logoutError = ref('')
+
 async function handleLogout(): Promise<void> {
-  await authStore.logout()
+  logoutError.value = ''
+  try {
+    await authStore.logout()
+  } catch {
+    logoutError.value = authStore.error || 'ログアウトに失敗しました'
+    return
+  }
   router.push({ name: 'login' })
 }
 
@@ -358,6 +366,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
       >
         ログアウト
       </button>
+      <p v-if="logoutError" role="alert" class="w-full text-right text-xs text-red-600">{{ logoutError }}</p>
     </header>
 
     <!-- 記事リスト -->
