@@ -455,3 +455,86 @@ describeWithEmulator('firestore rules', () => {
     await assertFails(setDoc(doc(aliceDb, 'topics/mobile/meta/other'), { items: {} }))
   })
 })
+
+describeWithEmulator('ニュース操作イベントと確定結果のクライアント権限', () => {
+  let newsEnv: RulesTestEnvironment
+  const ownerUid = 'fiction-news-owner'
+  const otherUid = 'fiction-news-other'
+
+  beforeAll(async () => {
+    const host = process.env.FIRESTORE_EMULATOR_HOST
+    if (!host) throw new Error('FIRESTORE_EMULATOR_HOST が必要です')
+    const [emulatorHost, emulatorPort] = host.split(':')
+    newsEnv = await initializeTestEnvironment({
+      projectId,
+      firestore: { host: emulatorHost, port: Number(emulatorPort), rules },
+    })
+  })
+
+  afterAll(async () => {
+    await newsEnv.cleanup()
+  })
+
+  async function seedNewsDoc(path: string): Promise<void> {
+    await newsEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), path), {
+        topic: 'ai', articleId: 'fiction-article', action: 'readLater',
+        receivedAt: Timestamp.fromMillis(1), title: '架空のニュース',
+      })
+    })
+  }
+
+  for (const collectionName of ['newsActionEvents', 'newsActionReceipts']) {
+    // 再帰ワイルドカード配下の子文書にも同じ保護を適用する。
+    for (const nested of [false, true]) {
+      const suffix = nested ? '/metadata/child' : ''
+      const label = `${collectionName}${nested ? 'の子文書' : 'の文書'}`
+
+      it(`本人も${label}をcreateできない`, async () => {
+        const db = newsEnv.authenticatedContext(ownerUid).firestore()
+        const path = `users/${ownerUid}/${collectionName}/create-test${suffix}`
+        await assertFails(setDoc(doc(db, path), {
+          topic: 'ai', articleId: 'fiction-article', action: 'dismiss', receivedAt: Timestamp.fromMillis(1),
+        }))
+      })
+
+      it(`本人も${label}をupdateできない`, async () => {
+        const path = `users/${ownerUid}/${collectionName}/update-test${suffix}`
+        await seedNewsDoc(path)
+        const db = newsEnv.authenticatedContext(ownerUid).firestore()
+        await assertFails(updateDoc(doc(db, path), { action: 'dismiss' }))
+      })
+
+      it(`本人も${label}をdeleteできない`, async () => {
+        const path = `users/${ownerUid}/${collectionName}/delete-test${suffix}`
+        await seedNewsDoc(path)
+        const db = newsEnv.authenticatedContext(ownerUid).firestore()
+        await assertFails(deleteDoc(doc(db, path)))
+      })
+
+      it(`本人は${label}をgetできる`, async () => {
+        const path = `users/${ownerUid}/${collectionName}/owner-read-test${suffix}`
+        await seedNewsDoc(path)
+        const db = newsEnv.authenticatedContext(ownerUid).firestore()
+        await assertSucceeds(getDoc(doc(db, path)))
+      })
+
+      it(`他人は${label}をgetできない`, async () => {
+        const path = `users/${ownerUid}/${collectionName}/other-read-test${suffix}`
+        await seedNewsDoc(path)
+        const db = newsEnv.authenticatedContext(otherUid).firestore()
+        await assertFails(getDoc(doc(db, path)))
+      })
+    }
+  }
+
+  for (const collectionName of ['tasks', 'lists', 'newsInteractions', 'newsPreferences', 'memberships']) {
+    it(`本人の${collectionName}への既存のcreate・update・delete権限を維持する`, async () => {
+      const db = newsEnv.authenticatedContext(ownerUid).firestore()
+      const ref = doc(db, `users/${ownerUid}/${collectionName}/existing-access-test`)
+      await assertSucceeds(setDoc(ref, { name: '架空のデータ', topic: 'ai' }))
+      await assertSucceeds(updateDoc(ref, { name: '更新後の架空データ' }))
+      await assertSucceeds(deleteDoc(ref))
+    })
+  }
+})
