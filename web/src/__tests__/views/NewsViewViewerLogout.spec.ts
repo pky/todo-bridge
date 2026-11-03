@@ -62,4 +62,27 @@ describe('viewerのAIニュース画面のログアウト', () => {
     await flushPromises()
     expect(logoutButtons(wrapper)).toHaveLength(0)
   })
+
+  it('logoutが失敗したらページに留まり、エラーを表示し、ボタンを再度押せる', async () => {
+    const message = 'ログアウトに失敗しました'
+    logout.mockImplementationOnce(async () => {
+      Object.assign(auth, { error: message })
+      throw new Error('network')
+    })
+    try {
+      const wrapper = mount(NewsView)
+      await flushPromises()
+      await logoutButtons(wrapper)[0]!.trigger('click')
+      await flushPromises()
+      expect(navigatedToLogin()).toBe(false)
+      expect(wrapper.text()).toContain(message)
+      const button = logoutButtons(wrapper)[0]!
+      expect(button.attributes('disabled')).toBeUndefined()
+      await button.trigger('click')
+      await flushPromises()
+      expect(logout).toHaveBeenCalledTimes(2)
+    } finally {
+      Object.assign(auth, { error: null })
+    }
+  })
 })
