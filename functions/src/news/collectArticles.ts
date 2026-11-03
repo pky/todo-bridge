@@ -355,14 +355,38 @@ export async function cleanupOldArticles(topic: NewsTopic): Promise<void> {
   }
 }
 
-export async function runCollectArticles(): Promise<void> {
+export interface AiCollectResult {
+  sourcesSucceeded: number
+  sourcesFailed: number
+}
+
+export function isAiCollectUsable(result: AiCollectResult): boolean {
+  return result.sourcesSucceeded >= 1
+}
+
+export async function runCollectArticles(): Promise<AiCollectResult> {
   console.log('[collectArticles] Starting...')
 
   // 1. 各ソースから記事を収集
+  let sourcesSucceeded = 0
+  let sourcesFailed = 0
+  const collectSource = async (name: string, run: (onSuccess: () => void) => Promise<RawArticle[]>): Promise<RawArticle[]> => {
+    try {
+      let succeeded = false
+      const articles = await run(() => { succeeded = true })
+      if (succeeded) sourcesSucceeded++
+      else sourcesFailed++
+      return articles
+    } catch (err) {
+      sourcesFailed++
+      console.error(`[${name}]`, err)
+      return []
+    }
+  }
   const [hnArticles, rssArticles, githubArticles] = await Promise.all([
-    fetchHNArticles().catch(e => { console.error('[hn]', e); return [] as RawArticle[] }),
-    fetchRSSArticles(10).catch(e => { console.error('[rss]', e); return [] as RawArticle[] }),
-    fetchGitHubTrending().catch(e => { console.error('[github]', e); return [] as RawArticle[] }),
+    collectSource('hn', onSuccess => fetchHNArticles(onSuccess)),
+    collectSource('rss', onSuccess => fetchRSSArticles(10, onSuccess)),
+    collectSource('github', onSuccess => fetchGitHubTrending(onSuccess)),
   ])
 
   console.log(`[collectArticles] Sources: hn=${hnArticles.length}, rss=${rssArticles.length}, github=${githubArticles.length}`)
@@ -404,7 +428,12 @@ export async function runCollectArticles(): Promise<void> {
   const relevant = relevantItems.length
   console.log(`[collectArticles:ai] reused=${reuse.length} fresh=${fresh.length} relevant=${relevant} irrelevant=${results.size - relevant} pending=${pendingIds.length} requestCount=${requestCount}`)
   if (pendingIds.length > 0) console.error(`[collectArticles:ai] triage pending count=${pendingIds.length}`)
-  await cleanupOldArticles('ai')
+  try {
+    await cleanupOldArticles('ai')
+  } catch {
+    console.error('[collectArticles:ai] cleanup failed')
+  }
+  return { sourcesSucceeded, sourcesFailed }
 }
 
 const APPLE_NEWS_HOST = 'developer.apple.com'

@@ -38,9 +38,10 @@ export function selectHnStories(items: Array<HNItem | null>, limit: number): Raw
   return articles
 }
 
-export async function fetchHNArticles(): Promise<RawArticle[]> {
+export async function fetchHNArticles(onSuccess?: () => void): Promise<RawArticle[]> {
   const { data: ids } = await axios.get<number[]>(`${HN_API}/topstories.json`, { timeout: TIMEOUT_MS })
   const top100 = ids.slice(0, 100)
+  if (top100.length === 0) onSuccess?.()
   const items: Array<HNItem | null> = []
 
   // 上位100件すべてを20件ずつ取得し、関連性は後段で判定する。
@@ -48,7 +49,7 @@ export async function fetchHNArticles(): Promise<RawArticle[]> {
     const batch = top100.slice(i, i + 20)
     items.push(...await Promise.all(
       batch.map(id => axios.get<HNItem | null>(`${HN_API}/item/${id}.json`, { timeout: TIMEOUT_MS })
-        .then(r => r.data)
+        .then(r => { onSuccess?.(); return r.data })
         .catch(() => null))
     ))
   }

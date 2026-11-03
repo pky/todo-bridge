@@ -88,7 +88,7 @@ function extractThumbnail(item: Record<string, unknown>): string | null {
   return null
 }
 
-export async function fetchRSSArticles(limitPerFeed = 10): Promise<RawArticle[]> {
+export async function fetchRSSArticles(limitPerFeed = 10, onSuccess?: () => void): Promise<RawArticle[]> {
   const articles: RawArticle[] = []
 
   for (let i = 0; i < AI_RSS_FEEDS.length; i += 5) {
@@ -96,6 +96,7 @@ export async function fetchRSSArticles(limitPerFeed = 10): Promise<RawArticle[]>
       const feedArticles: RawArticle[] = []
       try {
         const parsed = await parser.parseURL(feed.url)
+        onSuccess?.()
         const limit = feed.limit ?? limitPerFeed
 
         for (const item of parsed.items.slice(0, limit)) {

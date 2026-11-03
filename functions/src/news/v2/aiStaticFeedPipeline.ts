@@ -27,7 +27,15 @@ export async function runAiStaticFeedPipeline(deps: PipelineDependencies): Promi
   const learningCutoffAt = deps.now()
   const result = await deps.generate({ curatorUid: deps.curatorUid, learningCutoffAt })
   if (!result.ok) return { status: 'failed', reason: 'generate' }
-  const articles = result.curatorArticles.flatMap(article => {
+  return { status: 'published', publish: await publishCuratorArticles(deps, result.curatorArticles, learningCutoffAt) }
+}
+
+export async function publishCuratorArticles(
+  deps: Pick<PipelineDependencies, 'bucket' | 'feedDate' | 'now'>,
+  curatorArticles: NewsArticleWithId[],
+  learningCutoffAt: Date
+): Promise<PublishResult> {
+  const articles = curatorArticles.flatMap(article => {
     const dto = toAiFeedV2Article({ ...article })
     return dto ? [dto] : []
   })
@@ -35,7 +43,7 @@ export async function runAiStaticFeedPipeline(deps: PipelineDependencies): Promi
   const daily = await saveDailyIfAbsent(deps.bucket, {
     schemaVersion: 2, topic: 'ai', feedDate: deps.feedDate, learningCutoffAt: learningCutoffAt.toISOString(), feed,
     actionArticles: articles.map(article => {
-      const original = result.curatorArticles.find(value => value.id === article.id)!
+      const original = curatorArticles.find(value => value.id === article.id)!
       return {
         id: article.id, title: article.title, summary: article.summary,
         ...(article.url ? { url: article.url } : {}),
@@ -44,5 +52,5 @@ export async function runAiStaticFeedPipeline(deps: PipelineDependencies): Promi
       }
     }),
   })
-  return { status: 'published', publish: await publishDaily(deps.bucket, daily, deps.now().toISOString()) }
+  return publishDaily(deps.bucket, daily, deps.now().toISOString())
 }
