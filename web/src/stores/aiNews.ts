@@ -8,6 +8,7 @@ import { canManualRefresh, decideAutoFetch, refreshPeriodKey, type AiNewsFetchSt
 
 type PendingOperation = { operationId: string; payload: NewsActionBody }
 type Action = NewsActionBody['action']
+type FetchLease = { kind: 'acquired'; owner: string } | { kind: 'storage-unavailable' } | { kind: 'skipped' }
 interface Operation {
   dismissed?: boolean
   readLaterAdded?: boolean
@@ -16,6 +17,14 @@ interface Operation {
 }
 function pendingFor(state: Operation | undefined, action: Action): PendingOperation | undefined {
   return state?.pendingOperations?.[action] ?? (state?.pendingOperation?.payload.action === action ? state.pendingOperation : undefined)
+}
+function withPending(state: Operation | undefined, action: Action, pending: PendingOperation | undefined): Operation {
+  const remaining: Partial<Record<Action, PendingOperation>> = {}
+  for (const candidate of ['dismiss', 'readLater'] as const) {
+    const current = candidate === action ? pending : pendingFor(state, candidate)
+    if (current) remaining[candidate] = current
+  }
+  return { ...state, pendingOperations: remaining, pendingOperation: remaining.dismiss ?? remaining.readLater ?? null }
 }
 function isAuthRejection(failure: unknown): boolean {
   const code = typeof failure === 'object' && failure !== null && 'code' in failure ? failure.code : null
@@ -40,6 +49,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
   let generation = 0
   let active: Promise<void> | null = null
   let tokenRefresh: Promise<string> | null = null
+  const savingOperations = new Set<string>()
   let fetchState = emptyFetch()
   const key = () => `todobridge:aiNewsV2:v1:${uid}:ai`
   const valid = (session: number, user: string) => generation === session && uid === user
@@ -55,6 +65,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
     feed.value = null
     operations.value = {}
     sending.value = {}
+    savingOperations.clear()
     fetchState = emptyFetch()
     blocked.value = false
     canManage.value = false
@@ -106,30 +117,37 @@ export const useAiNewsStore = defineStore('aiNews', () => {
     if (role !== 'curator' && role !== 'viewer') stopAccess('unauthorized')
     else canManage.value = role === 'curator'
   }
-  async function acquireLease(user: string, session: number, cacheKey: string): Promise<string | null> {
-    const acquire = () => {
-      if (!valid(session, user)) return null
+  async function acquireLease(user: string, session: number, cacheKey: string): Promise<FetchLease> {
+    const acquire = (): FetchLease => {
+      if (!valid(session, user)) return { kind: 'skipped' }
       readCache()
-      const leaseKey = `${cacheKey}:lease`
-      const raw = localStorage.getItem(leaseKey)
-      if (raw) {
-        const current = JSON.parse(raw)
-        if (current.expiresAt > Date.now()) return null
+      try {
+        const leaseKey = `${cacheKey}:lease`
+        const raw = localStorage.getItem(leaseKey)
+        if (raw) {
+          const current = JSON.parse(raw)
+          if (current.expiresAt > Date.now()) return { kind: 'skipped' }
+        }
+        // 操作用UUIDとは分け、leaseの所有権だけを照合する。
+        const owner = `${Date.now()}:${Math.random()}`
+        save(leaseKey, JSON.stringify({ owner, expiresAt: Date.now() + LEASE_MS }))
+        return JSON.parse(localStorage.getItem(leaseKey) ?? 'null')?.owner === owner ? { kind: 'acquired', owner } : { kind: 'skipped' }
+      } catch {
+        // 端末保存が使えない場合だけ、永続化せずに取得する。
+        return { kind: 'storage-unavailable' }
       }
-      // 操作用UUIDとは分け、leaseの所有権だけを照合する。
-      const owner = `${Date.now()}:${Math.random()}`
-      save(leaseKey, JSON.stringify({ owner, expiresAt: Date.now() + LEASE_MS }))
-      return JSON.parse(localStorage.getItem(leaseKey) ?? 'null')?.owner === owner ? owner : null
     }
     try {
       if (navigator.locks) return await navigator.locks.request(`${cacheKey}:lock`, acquire)
       return acquire()
-    } catch { return null }
+    } catch { return { kind: 'skipped' } }
   }
   async function fetchFeed(user: string, session: number, manual: boolean) {
     const cacheKey = key()
-    const owner = await acquireLease(user, session, cacheKey)
-    if (!owner || !valid(session, user)) return
+    const lease = await acquireLease(user, session, cacheKey)
+    if (lease.kind === 'skipped' || !valid(session, user)) return
+    const memoryOnly = lease.kind === 'storage-unavailable'
+    if (memoryOnly) error.value = '端末にニュースを保存できません。取得した記事はこの画面だけで表示します。'
     try {
       if (!manual && !decideAutoFetch(fetchState, Date.now()).fetch) return
       if (manual && !canManualRefresh(fetchState.lastManualAt ?? null, Date.now())) return
@@ -140,7 +158,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
         lastAttemptAt: now, lastManualAt: manual ? now : fetchState.lastManualAt }
       attempted.nextAutoAttemptAt = now + (attempted.attemptsInPeriod === 1 ? 30 : 120) * 60_000
       // 失敗時にも試行予算を記録する。成功時刻は完全保存後だけ進める。
-      save(`${cacheKey}:fetch`, JSON.stringify(attempted))
+      if (!memoryOnly) save(`${cacheKey}:fetch`, JSON.stringify(attempted))
       fetchState = attempted
       loading.value = true
       if (typeof auth.authStateReady === 'function') await auth.authStateReady()
@@ -169,12 +187,19 @@ export const useAiNewsStore = defineStore('aiNews', () => {
         }
       }
       if (!valid(session, user) || blocked.value || auth.currentUser?.uid !== user) return
-      const lease = JSON.parse(localStorage.getItem(`${cacheKey}:lease`) ?? 'null')
-      if (lease?.owner !== owner || lease.expiresAt <= Date.now()) return
+      if (lease.kind === 'acquired') {
+        const current = JSON.parse(localStorage.getItem(`${cacheKey}:lease`) ?? 'null')
+        if (current?.owner !== lease.owner || current.expiresAt <= Date.now()) return
+      }
       const parsed = parseAiFeedV2(bytes)
       if (!parsed.ok) throw new Error('配信データを検証できませんでした')
       const nextState: AiNewsFetchState = { ...attempted, lastSuccessAt: Date.now(), feedDate: parsed.feed.feedDate,
         generationPending: parsed.feed.feedDate < periodKey, nextAutoAttemptAt: parsed.feed.feedDate >= periodKey ? null : attempted.nextAutoAttemptAt }
+      if (memoryOnly) {
+        feed.value = parsed.feed
+        fetchState = { ...nextState, lastSuccessAt: attempted.lastSuccessAt }
+        return
+      }
       const previousFeed = localStorage.getItem(cacheKey)
       const previousFetch = localStorage.getItem(`${cacheKey}:fetch`)
       try {
@@ -197,7 +222,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
       if (valid(session, user) && !blocked.value) error.value = 'ニュースを更新できませんでした。保存済みの記事を表示しています。'
     } finally {
       try {
-        if (JSON.parse(localStorage.getItem(`${cacheKey}:lease`) ?? 'null')?.owner === owner) localStorage.removeItem(`${cacheKey}:lease`)
+        if (lease.kind === 'acquired' && JSON.parse(localStorage.getItem(`${cacheKey}:lease`) ?? 'null')?.owner === lease.owner) localStorage.removeItem(`${cacheKey}:lease`)
       } catch { /* 期限切れでも再取得できる。 */ }
       if (valid(session, user)) loading.value = false
     }
@@ -234,6 +259,23 @@ export const useAiNewsStore = defineStore('aiNews', () => {
     if (state?.readLaterAdded) return 'added'
     return pendingFor(state, 'readLater') ? 'unknown' : 'idle'
   }
+  async function updateOperation(user: string, session: number, articleId: string,
+    update: (current: Operation | undefined) => Operation | undefined) {
+    const opsKey = `${key()}:ops`
+    const persist = () => {
+      if (!valid(session, user)) return
+      // 書き込み直前に永続化済みの全記事を読み、対象記事の変更だけを重ねる。
+      const latest: Record<string, Operation> = JSON.parse(localStorage.getItem(opsKey) ?? '{}')
+      const updated = update(latest[articleId])
+      if (updated) {
+        const next = { ...latest, [articleId]: updated }
+        save(opsKey, JSON.stringify(next))
+        operations.value = next
+      } else operations.value = latest
+    }
+    if (navigator.locks) await navigator.locks.request(`${opsKey}:lock`, persist)
+    else persist()
+  }
   async function retryPending(articleId: string, action?: Action) {
     if (!action) {
       await Promise.all([retryPending(articleId, 'dismiss'), retryPending(articleId, 'readLater')])
@@ -243,7 +285,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
     const pending = pendingFor(state, action)
     if (!pending || !uid || blocked.value) return
     const sendingKey = `${articleId}:${pending.payload.action}`
-    if (sending.value[sendingKey]) return
+    if (sending.value[sendingKey] || savingOperations.has(sendingKey)) return
     const user = uid
     const session = generation
     sending.value[sendingKey] = true
@@ -253,28 +295,25 @@ export const useAiNewsStore = defineStore('aiNews', () => {
     } })
     if (!valid(session, user) || auth.currentUser?.uid !== user) return
     sending.value[sendingKey] = false
-    const current = operations.value[articleId]
-    if (pendingFor(current, pending.payload.action)?.operationId !== pending.operationId) return
     if (result.kind === 'auth') { stopAccess(result.status === 401 ? 'unauthenticated' : 'unauthorized'); return }
     if (result.kind === 'unknown') { error.value = '操作結果が未確認です。再試行してください。'; return }
-    const remaining = { ...current?.pendingOperations }
-    // 旧形式の操作も取り込み、別actionの未確定操作を維持する。
-    if (current?.pendingOperation) remaining[current.pendingOperation.payload.action] ??= current.pendingOperation
-    delete remaining[pending.payload.action]
-    const updated: Operation = { ...current, pendingOperations: remaining,
-      pendingOperation: remaining.dismiss ?? remaining.readLater ?? null }
-    if (pending.payload.action === 'dismiss') updated.dismissed = result.kind === 'ok'
-    else updated.readLaterAdded = result.kind === 'ok'
     try {
-      const next = { ...operations.value, [articleId]: updated }
-      save(`${key()}:ops`, JSON.stringify(next))
-      operations.value = next
-    } catch { error.value = '操作結果を保存できませんでした。再試行してください。' }
+      await updateOperation(user, session, articleId, current => {
+        // 遅い応答で、別タブが保存した新しい同actionの操作を消さない。
+        if (pendingFor(current, action)?.operationId !== pending.operationId) return
+        const updated = withPending(current, action, undefined)
+        if (action === 'dismiss') updated.dismissed = result.kind === 'ok'
+        else updated.readLaterAdded = result.kind === 'ok'
+        return updated
+      })
+    } catch { if (valid(session, user)) error.value = '操作結果を保存できませんでした。再試行してください。' }
   }
   async function act(articleId: string, action: NewsActionBody['action']) {
     if (!feed.value || !uid || blocked.value || !feed.value.articles.some(article => article.id === articleId)) return
     if (pendingFor(operations.value[articleId], action)) { await retryPending(articleId, action); return }
     if (action === 'readLater' && operations.value[articleId]?.readLaterAdded) return
+    const user = uid
+    const session = generation
     const previous = operations.value
     const operationId = crypto.randomUUID()
     const payload: NewsActionBody = { schemaVersion: 2, topic: 'ai', feedDate: feed.value.feedDate,
@@ -283,8 +322,28 @@ export const useAiNewsStore = defineStore('aiNews', () => {
       dismissed: action === 'dismiss' || previous[articleId]?.dismissed,
       pendingOperation: previous[articleId]?.pendingOperation ?? { operationId, payload },
       pendingOperations: { ...previous[articleId]?.pendingOperations, [action]: { operationId, payload } } } }
-    try { save(`${key()}:ops`, JSON.stringify(operations.value)) }
-    catch { operations.value = previous; error.value = '操作を保存できませんでした。'; return }
+    const savingKey = `${articleId}:${action}`
+    savingOperations.add(savingKey)
+    try {
+      await updateOperation(user, session, articleId, current => {
+        if (pendingFor(current, action) || (action === 'readLater' && current?.readLaterAdded)) return
+        const updated = withPending(current, action, { operationId, payload })
+        if (action === 'dismiss') updated.dismissed = true
+        return updated
+      })
+    } catch {
+      if (valid(session, user)) {
+        const current = operations.value[articleId]
+        if (pendingFor(current, action)?.operationId === operationId) {
+          const restored = withPending(current, action, pendingFor(previous[articleId], action))
+          if (action === 'dismiss') restored.dismissed = previous[articleId]?.dismissed
+          operations.value = { ...operations.value, [articleId]: restored }
+        }
+        error.value = '操作を保存できませんでした。'
+      }
+      return
+    } finally { if (valid(session, user)) savingOperations.delete(savingKey) }
+    if (!valid(session, user)) return
     await retryPending(articleId, action)
   }
   return { feed, feedDate, visibleArticles, loading, error, canManage, pendingArticles,
