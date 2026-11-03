@@ -98,6 +98,8 @@ CLAUDE_AI_SUMMARY_DAILY_MAX_REQUESTS=6
 
 AI ニュースの呼び出し上限は日本時間の日付ごとに判定と要約を別々に数えます。API の再試行は同じ呼び出しとして数えます。
 
+AI 固定フィードの生成には `NEWS_CURATOR_UID` で選別に使う管理ユーザーを指定します。`NEWS_FEED_BUCKET` はフィードの保存先 Storage バケット名で、省略時は既定のバケットを使います。
+
 ### 開発コマンド
 
 フロントエンド:

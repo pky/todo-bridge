@@ -23,6 +23,8 @@ import {
   type LearnedKeywords,
 } from './interactionLearning'
 import type { NewsArticle, NewsPreferences, NewsTopic } from './types'
+import { selectCuratorAiFeed } from './v2/curatorSelection'
+import type { GenerateAiFeedResult } from './v2/aiStaticFeedPipeline'
 
 type NewsArticleWithId = NewsArticle & { id: string }
 
@@ -340,7 +342,9 @@ interface FeedUser {
   articles: NewsArticleWithId[]
 }
 
-export async function runGeneratePersonalizedFeed(): Promise<void> {
+export async function runGeneratePersonalizedFeed(
+  options: { curatorUid?: string; learningCutoffAt?: Date } = {}
+): Promise<GenerateAiFeedResult> {
     console.log('[generatePersonalizedFeed] Starting...')
     const topic: NewsTopic = 'ai'
 
@@ -348,13 +352,19 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
     const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
     // 1. 今日の記事を共有プールから取得
-    const articlesSnap = await db.collection(`topics/${topic}/articles`)
-      .where('date', '==', today)
-      .get()
+    let articlesSnap: FirebaseFirestore.QuerySnapshot
+    try {
+      articlesSnap = await db.collection(`topics/${topic}/articles`)
+        .where('date', '==', today)
+        .get()
+    } catch {
+      console.error('[generatePersonalizedFeed] Article loading failed')
+      return { ok: false }
+    }
 
     if (articlesSnap.empty) {
       console.log('[generatePersonalizedFeed] No articles for today')
-      return
+      return { ok: true, curatorArticles: [] }
     }
 
     // URL重複を排除
@@ -373,6 +383,24 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
       .filter(a => a.source === source && a.score !== null)
       .reduce((max, a) => Math.max(max, a.score ?? 0), 0)
     const scoreLimits = { maxHnScore: maxScore('hn'), maxGithubScore: maxScore('github') }
+
+    let curatorReady = true
+    let curatorPreferences: NewsPreferences = { keywords: [] }
+    let curatorInteractions: Record<string, unknown>[] = []
+    const learningCutoffMs = (options.learningCutoffAt ?? new Date()).getTime()
+    if (options.curatorUid) {
+      try {
+        const [preferences, interactions] = await Promise.all([
+          db.doc(`users/${options.curatorUid}/newsPreferences/${topic}`).get(),
+          db.collection(`users/${options.curatorUid}/newsInteractions`).get(),
+        ])
+        curatorPreferences = preferences.exists ? preferences.data() as NewsPreferences : { keywords: [] }
+        curatorInteractions = interactions.docs.map(doc => doc.data())
+      } catch {
+        curatorReady = false
+        console.error('[generatePersonalizedFeed] Curator loading failed')
+      }
+    }
 
     // 2. 全ユーザーのnewsPreferencesを取得
     const usersSnap = await db.collection('users').get()
@@ -457,6 +485,12 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
           * calcPreferenceMultiplier(article, user.preferences, user.learned),
       }))
     const select = (user: FeedUser) => selectAiFeed(rank(user))
+    const selectCurator = () => options.curatorUid && curatorReady
+      ? selectCuratorAiFeed({
+        articles: articles.filter(article => !skippedIds.has(article.id)),
+        preferences: curatorPreferences, interactions: curatorInteractions, learningCutoffMs, scoreLimits,
+      })
+      : []
 
     // 4. 選ばれた記事のうち未確認のものを確認（2段目）し、不採用が出たら選び直して補充する。
     // 要約に失敗してもフィード保存は止めない。
@@ -467,6 +501,7 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
     }
     let sentCount = 0
     let requestCount = 0
+    let summaryReady = true
     try {
       const summaryConfig = getAiSummaryConfig(process.env)
       const client = createClaudeMessagesClient(process.env.ANTHROPIC_API_KEY)
@@ -475,8 +510,8 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
 
       for (let round = 0; round < AI_SUMMARY_MAX_ROUNDS; round++) {
         const wanted = new Map<string, RankedFeedItem>()
-        for (const user of feedUsers) {
-          for (const item of select(user)) {
+        for (const selected of [...feedUsers.map(select), selectCurator()]) {
+          for (const item of selected) {
             const existing = wanted.get(item.article.id)
             if (needsAiSummary(item.article) && (!existing || item.displayScore > existing.displayScore)) {
               wanted.set(item.article.id, item)
@@ -539,6 +574,7 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
         }
       }
     } catch (err) {
+      summaryReady = false
       console.error('[generatePersonalizedFeed] Summary verification failed. Saving feeds with existing article data:', err)
     }
     try {
@@ -575,6 +611,9 @@ export async function runGeneratePersonalizedFeed(): Promise<void> {
     } catch (err) {
       console.error('[generatePersonalizedFeed] Failed to mark shared articles as feed eligible:', err)
     }
+    return curatorReady && summaryReady
+      ? { ok: true, curatorArticles: selectCurator().filter(item => isDisplayableAiArticle(item.article)).map(item => item.article) }
+      : { ok: false }
 }
 
 export async function runGenerateMobilePersonalizedFeed(): Promise<void> {
