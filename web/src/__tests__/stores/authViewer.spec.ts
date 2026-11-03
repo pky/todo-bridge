@@ -49,7 +49,8 @@ describe('閲覧専用ユーザーの認証', () => {
     expect.soft(mocks.token).toHaveBeenCalled()
     expect.soft(mocks.validate).not.toHaveBeenCalled()
     expect.soft(mocks.signOut).not.toHaveBeenCalled()
-    expect.soft(store).toEqual(expect.objectContaining({ accessMode: 'newsViewer', user: expect.objectContaining({ uid: 'viewer-demo' }) }))
+    expect.soft(store.accessMode).toBe('newsViewer')
+    expect.soft(store.user?.uid).toBe('viewer-demo')
   })
 
   it.each(['curator', undefined])('%sは既存の利用許可APIを通ってfullになる', async (newsRole) => {
@@ -58,7 +59,7 @@ describe('閲覧専用ユーザーの認証', () => {
     await store.loginWithGoogle()
     expect.soft(mocks.token).toHaveBeenCalled()
     expect.soft(mocks.validate).toHaveBeenCalledOnce()
-    expect(store).toEqual(expect.objectContaining({ accessMode: 'full' }))
+    expect(store.accessMode).toBe('full')
   })
 
   it('claim取得失敗は利用許可APIにフォールバックしviewerにしない', async () => {
@@ -67,7 +68,7 @@ describe('閲覧専用ユーザーの認証', () => {
     await store.loginWithGoogle()
     expect.soft(mocks.token).toHaveBeenCalled()
     expect.soft(mocks.validate).toHaveBeenCalledOnce()
-    expect(store).toEqual(expect.objectContaining({ accessMode: 'full' }))
+    expect(store.accessMode).toBe('full')
   })
 
   it.each(['curator', undefined, 'token-error'])('%sの利用許可拒否は既存の文言とsignOutを維持する', async (role) => {
@@ -85,10 +86,10 @@ describe('閲覧専用ユーザーの認証', () => {
   it('logoutはviewerモードとユーザーを解除する', async () => {
     const store = useAuthStore()
     await store.loginWithGoogle()
-    expect.soft(store).toEqual(expect.objectContaining({ accessMode: 'newsViewer' }))
+    expect.soft(store.accessMode).toBe('newsViewer')
     await store.logout()
     expect(store.user).toBeNull()
-    expect(store).not.toEqual(expect.objectContaining({ accessMode: 'newsViewer' }))
+    expect(store.accessMode).not.toBe('newsViewer')
     expect(mocks.signOut).toHaveBeenCalledOnce()
   })
 
@@ -97,12 +98,13 @@ describe('閲覧専用ユーザーの認証', () => {
     const ready = store.initAuth()
     await emitUser(firebaseUser())
     await ready
-    expect.soft(store).toEqual(expect.objectContaining({ accessMode: 'newsViewer' }))
+    expect.soft(store.accessMode).toBe('newsViewer')
     mocks.validate.mockClear()
     mocks.token.mockResolvedValue({ claims: {} })
     await emitUser(firebaseUser('full-demo'))
     expect(mocks.validate).toHaveBeenCalledOnce()
-    expect(store).toEqual(expect.objectContaining({ accessMode: 'full', user: expect.objectContaining({ uid: 'full-demo' }) }))
+    expect(store.accessMode).toBe('full')
+    expect(store.user?.uid).toBe('full-demo')
   })
 
   it('認証リスナーの未認証通知でもviewerモードを解除する', async () => {
@@ -110,9 +112,9 @@ describe('閲覧専用ユーザーの認証', () => {
     const ready = store.initAuth()
     await emitUser(firebaseUser())
     await ready
-    expect.soft(store).toEqual(expect.objectContaining({ accessMode: 'newsViewer' }))
+    expect.soft(store.accessMode).toBe('newsViewer')
     await emitUser(null)
     expect(store.user).toBeNull()
-    expect(store).not.toEqual(expect.objectContaining({ accessMode: 'newsViewer' }))
+    expect(store.accessMode).not.toBe('newsViewer')
   })
 })
