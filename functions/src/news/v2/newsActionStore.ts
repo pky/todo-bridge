@@ -69,13 +69,14 @@ export function createNewsActionStore({ db, serverTimestamp }: ReadLaterStoreDep
               list = db.doc(`${base}/lists/${listId}`)
               // v1との同時作成も検出し、Firestoreのtransaction再試行に任せる。
               const fixedList = await tx.get(list)
-              if (fixedList.exists) throw new Error('あとで読むリストの名前が一致しません')
-              const latest = await tx.get(db.collection(`${base}/lists`).orderBy('position', 'desc').limit(1))
-              const lastPosition: unknown = latest.docs[0]?.data().position
-              listData = {
-                name: 'あとで読む', position: typeof lastPosition === 'number' ? lastPosition + 1 : 1,
-                spaceId, visibleToMemberIds: [uid], editableByMemberIds: [uid],
-                dateCreated: serverTimestamp(), dateModified: serverTimestamp(),
+              if (!fixedList.exists) {
+                const latest = await tx.get(db.collection(`${base}/lists`).orderBy('position', 'desc').limit(1))
+                const lastPosition: unknown = latest.docs[0]?.data().position
+                listData = {
+                  name: 'あとで読む', position: typeof lastPosition === 'number' ? lastPosition + 1 : 1,
+                  spaceId, visibleToMemberIds: [uid], editableByMemberIds: [uid],
+                  dateCreated: serverTimestamp(), dateModified: serverTimestamp(),
+                }
               }
             }
             taskData = {

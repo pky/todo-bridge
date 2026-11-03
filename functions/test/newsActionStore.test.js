@@ -236,3 +236,23 @@ test('transaction fakeはv1のbatchとクエリも再現し、既存タスクを
   assert.equal(await addReadLaterTask(deps, UID, 'ai', ARTICLE), 'already')
   assert.equal(db.writes.filter(w => w.path === `users/${UID}/tasks/${taskId}`).length, 1)
 })
+
+// 利用者が固定IDのリスト名を変更した場合(名前検索では見つからない)。
+for (const spaced of [false, true]) test(`名前が変わった固定IDのあとで読むリストを再利用する: memberships=${spaced}`, async () => {
+  const base = spaced ? `spaces/personal_${UID}` : `users/${UID}`
+  const listPath = `${base}/lists/readlater_list`
+  const list = { name: '架空の改名済みリスト', position: 3 }
+  const seed = { ...(spaced ? { [`users/${UID}/memberships/fictional-membership`]: { spaceId: `personal_${UID}` } } : {}), [listPath]: list }
+  const ctx = setup(seed); const first = input({ action: 'readLater' })
+  assert.deepEqual(await ctx.store.apply(first), expected(first, 'created'))
+  assert.equal(ctx.db.docs.get(`${base}/tasks/${taskId}`).listId, 'readlater_list')
+  assert.deepEqual(ctx.db.docs.get(listPath), list)
+  assert.ok(!ctx.db.writes.some(w => w.path === listPath), '既存リストを書き換えない')
+  assert.ok(ctx.db.docs.has(eventPath('readLater'))); assert.ok(ctx.db.docs.has(receiptPath()))
+  assertAtomic(ctx.db); noInteractions(ctx.db)
+
+  const count = ctx.db.writes.length; const second = input({ action: 'readLater', operationId: OP2 })
+  assert.deepEqual(await ctx.store.apply(second), expected(second, 'already'))
+  assert.deepEqual(ctx.db.writes.slice(count).map(w => w.path), [receiptPath(OP2)])
+  assert.deepEqual(ctx.db.docs.get(listPath), list)
+})
