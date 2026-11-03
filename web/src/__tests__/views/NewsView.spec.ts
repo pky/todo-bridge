@@ -346,7 +346,15 @@ describe('NewsView', () => {
     })
 
     expect(wrapper.text()).toContain('OpenAI releases update')
+    expect(wrapper.text()).toContain('保存済みの記事を表示しつつ、サーバーの更新を確認しています')
     expect(wrapper.text()).not.toContain('読み込み中...')
+  })
+
+  it('AIルートの見出しは8時以降の更新を案内し、毎朝6時更新とは表示しない', () => {
+    const wrapper = mount(NewsView, { global: { stubs: { Transition: false } } })
+
+    expect(wrapper.text()).toContain('8時')
+    expect(wrapper.text()).not.toContain('毎朝6時更新')
   })
 
   it('AIルートは記事が空でaiNewsがエラーなら原因を表示し、再読み込みで強制loadする', async () => {

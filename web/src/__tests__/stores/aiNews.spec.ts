@@ -356,4 +356,116 @@ describe('AI専用storeの原本・取得・管理操作', () => {
     expect(ids(second)).toEqual(['demo-first', 'demo-second'])
     expect(deps.fetch).toHaveBeenCalledTimes(1)
   })
+
+  describe('オフラインのトークン更新', () => {
+    const networkError = { code: 'auth/network-request-failed' }
+    const withTokenResult = (impl: () => Promise<unknown>) => Object.assign(deps.currentUser, { getIdTokenResult: vi.fn(impl) })
+    afterEach(() => { Reflect.deleteProperty(deps.currentUser, 'getIdTokenResult') })
+
+    it.each(['getIdTokenResult', 'getIdToken(true)'])('%sがネットワークで失敗しても保存済み記事を表示し続け、通信回復後に再取得できる', async point => {
+      const previous = seedCache()
+      if (point === 'getIdTokenResult') withTokenResult(() => Promise.reject(networkError))
+      else {
+        withTokenResult(() => Promise.resolve({ claims: {} }))
+        deps.currentUser.getIdToken.mockRejectedValue(networkError)
+      }
+      deps.fetch.mockRejectedValue({ code: 'storage/retry-limit-exceeded' })
+      const store = useAiNewsStore()
+      await store.load(demoUid)
+      expect(ids(store)).toEqual(previous.articles.map(article => article.id))
+      expect(store.error ?? '').not.toContain('再ログイン')
+      expect(savedFeed()).toEqual(previous)
+      expect(savedFetch()).toMatchObject({ periodKey: '2026-11-03', attemptsInPeriod: 1 })
+
+      // 通信が戻り、30分の間隔を過ぎた後のloadは再取得できる。
+      withTokenResult(() => Promise.resolve({ claims: { newsRole: 'viewer' } }))
+      deps.currentUser.getIdToken.mockResolvedValue('demo-refreshed-token')
+      deps.fetch.mockResolvedValue(feedBytes())
+      vi.setSystemTime(nowMs + 31 * 60_000)
+      const fetchCallsBefore = deps.fetch.mock.calls.length
+      await store.load(demoUid)
+      expect(deps.fetch.mock.calls.length).toBe(fetchCallsBefore + 1)
+      expect(ids(store)).toEqual(['demo-first', 'demo-second'])
+      expect(store.error ?? '').not.toContain('再ログイン')
+    })
+
+    it.each(['auth/user-token-expired', 'auth/user-disabled'])('%sは本物の認証拒否としてキャッシュ利用を止める', async code => {
+      seedCache()
+      withTokenResult(() => Promise.reject({ code }))
+      const store = useAiNewsStore()
+      await store.load(demoUid)
+      expect(ids(store)).toEqual([])
+    })
+  })
+
+  describe('キャッシュなしの取得試行上限', () => {
+    it.each([
+      ['not-found', { code: 'storage/object-not-found' }],
+      ['transient', { code: 'storage/retry-limit-exceeded' }],
+    ])('%sで失敗が続く場合、同じ期間内は30分後・2時間後の最大3回で止まり、手動更新だけ60秒間隔で許可する', async (_name, failure) => {
+      deps.fetch.mockRejectedValue(failure)
+      const store = useAiNewsStore()
+      const loadAt = async (minutes: number, manual = false) => {
+        vi.setSystemTime(nowMs + minutes * 60_000)
+        await store.load(demoUid, manual)
+        return deps.fetch.mock.calls.length
+      }
+      expect(await loadAt(0)).toBe(1)
+      expect(await loadAt(0)).toBe(1)
+      expect(await loadAt(29)).toBe(1)
+      expect(await loadAt(30)).toBe(2)
+      expect(await loadAt(31)).toBe(2)
+      expect(await loadAt(30 + 119)).toBe(2)
+      expect(await loadAt(30 + 120)).toBe(3)
+      expect(await loadAt(30 + 120 + 600)).toBe(3)
+      expect(await loadAt(30 + 120 + 601, true)).toBe(4)
+      expect(await loadAt(30 + 120 + 601, true)).toBe(4)
+      expect(await loadAt(30 + 120 + 602, true)).toBe(5)
+      expect(ids(store)).toEqual([])
+    })
+  })
+
+  describe('結果不明のあとで読むがある記事の興味なし', () => {
+    it('readLaterのpendingが残っていても楽観的に隠し、新しいoperationIdでdismissを送り、readLaterは再送可能なまま残す', async () => {
+      const store = useAiNewsStore()
+      await store.load(demoUid)
+      deps.post.mockResolvedValueOnce({ kind: 'unknown' })
+      await store.readLater('demo-first')
+      expect(store.readLaterState('demo-first')).toBe('unknown')
+      const dismissResult = deferred<ReturnType<typeof ok>>()
+      deps.post.mockReturnValueOnce(dismissResult.promise)
+
+      const action = store.dismiss('demo-first')
+      expect(ids(store)).toEqual(['demo-second'])
+      await flushPromises()
+      expect(deps.post.mock.calls[1]?.[0]).toEqual({ ...makeAction('dismiss'), operationId: '00000000-0000-4000-8000-000000000002' })
+      dismissResult.resolve(ok(deps.post.mock.calls[1]?.[0]))
+      await action
+
+      expect(ids(store)).toEqual(['demo-second'])
+      expect(store.readLaterState('demo-first')).toBe('unknown')
+      await store.retryPending('demo-first')
+      expect(deps.post.mock.calls[2]?.[0]).toEqual(makeAction('readLater'))
+    })
+  })
+
+  describe('newsActionの認証結果', () => {
+    it('401は再ログイン状態、403は権限エラー状態にする', async () => {
+      const first = useAiNewsStore()
+      await first.load(demoUid)
+      deps.post.mockResolvedValue({ kind: 'auth', status: 401 })
+      await first.dismiss('demo-first')
+      expect(ids(first)).toEqual([])
+      expect(first.error).toContain('再ログイン')
+
+      first.reset()
+      localStorage.clear()
+      await first.load(demoUid)
+      deps.post.mockResolvedValue({ kind: 'auth', status: 403 })
+      await first.dismiss('demo-first')
+      expect(ids(first)).toEqual([])
+      expect(first.error).toContain('権限')
+      expect(first.error).not.toContain('再ログイン')
+    })
+  })
 })
