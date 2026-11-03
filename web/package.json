@@ -16,6 +16,7 @@
     "test:run": "vitest run",
     "test:auth": "vitest run src/__tests__/stores/auth.spec.ts src/__tests__/views/LoginView.spec.ts",
     "test:rules": "firebase emulators:exec --project demo-rertm --only firestore \"vitest run src/__tests__/firestore.rules.test.ts\"",
+    "test:storage-rules": "firebase emulators:exec --config ../firebase.json --project demo-rertm --only storage \"vitest run src/__tests__/storage.rules.test.ts\"",
     "test:documents:emulator": "npm --prefix ../functions run build && firebase emulators:exec --config ../firebase.json --project demo-rertm --only auth,firestore,functions \"vitest run src/__tests__/documents.emulator.test.ts\"",
     "test:e2e": "playwright test",
     "test:responsive": "playwright test e2e/responsive.spec.ts",
