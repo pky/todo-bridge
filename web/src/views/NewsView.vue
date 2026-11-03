@@ -200,6 +200,11 @@ const goBack = () => {
   }
 }
 
+async function handleLogout(): Promise<void> {
+  await authStore.logout()
+  router.push({ name: 'login' })
+}
+
 const openReadLaterInTodo = () => {
   router.push({
     name: 'home',
@@ -344,6 +349,14 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
         @click="openReadLaterInTodo"
       >
         あとで読むを開く
+      </button>
+      <button
+        v-if="authStore.accessMode === 'newsViewer'"
+        type="button"
+        class="ml-auto rounded-full border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+        @click="handleLogout"
+      >
+        ログアウト
       </button>
     </header>
 
