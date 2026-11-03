@@ -71,8 +71,9 @@ describe('認証初期化のclaim取得待ち', () => {
     expect(store.loading).toBe(false)
   })
 
-  it('claimが10秒間届かなければ従来の利用許可検証へフォールバックしviewerにしない', async () => {
-    mocks.token.mockReturnValue(new Promise(() => {}))
+  it('claimが10秒間届かなければinitAuthだけ解放しuserを設定せず、後から届いた通常claimで従来の検証へ進む', async () => {
+    const claim = deferredClaim()
+    mocks.token.mockReturnValue(claim.promise)
     const store = useAuthStore()
     let resolved = false
     const ready = store.initAuth().then(() => { resolved = true })
@@ -84,9 +85,78 @@ describe('認証初期化のclaim取得待ち', () => {
 
     await vi.advanceTimersByTimeAsync(200)
     await ready
+    expect(resolved).toBe(true)
+    expect(store.user).toBeNull()
+    expect(mocks.validate).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(5000)
+    claim.resolve({ claims: {} })
+    await vi.advanceTimersByTimeAsync(0)
     expect(mocks.validate).toHaveBeenCalledOnce()
     expect(store.accessMode).toBe('full')
     expect(store.user?.uid).toBe('claim-demo')
+  })
+
+  it('10秒の待機解放後の15秒にviewer claimが届いても、fullを経由せずnewsViewerになり検証しない', async () => {
+    const claim = deferredClaim()
+    mocks.token.mockReturnValue(claim.promise)
+    const store = useAuthStore()
+    const seen: Array<{ uid: string, mode: string | null }> = []
+    watch(() => [store.user, store.accessMode] as const, ([u, mode]) => {
+      if (u) seen.push({ uid: u.uid, mode })
+    }, { flush: 'sync' })
+    const ready = store.initAuth()
+    void emit(firebaseUser())
+
+    await vi.advanceTimersByTimeAsync(10100)
+    await ready
+    expect(store.user).toBeNull()
+    expect(seen).toEqual([])
+
+    await vi.advanceTimersByTimeAsync(4900)
+    claim.resolve({ claims: { newsRole: 'viewer' } })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mocks.validate).not.toHaveBeenCalled()
+    expect(store.accessMode).toBe('newsViewer')
+    expect(store.user?.uid).toBe('claim-demo')
+    expect(seen.length).toBeGreaterThan(0)
+    expect(seen.every((s) => s.mode === 'newsViewer')).toBe(true)
+  })
+
+  it('getIdTokenResultが3秒でrejectされたら従来の利用許可検証へ進む', async () => {
+    let reject!: (reason: unknown) => void
+    const tokenPromise = new Promise((_res, rej) => { reject = rej })
+    mocks.token.mockReturnValue(tokenPromise)
+    const store = useAuthStore()
+    const ready = store.initAuth()
+    void emit(firebaseUser())
+
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(mocks.validate).not.toHaveBeenCalled()
+    reject(new Error('token-unavailable'))
+    await vi.advanceTimersByTimeAsync(0)
+    await ready
+    expect(mocks.validate).toHaveBeenCalledOnce()
+    expect(store.accessMode).toBe('full')
+  })
+
+  it('ログイン処理が進行中でclaimが届かなくても、同じuidのonAuthStateChangedは10秒でinitAuthを解放する', async () => {
+    mocks.token.mockReturnValue(new Promise(() => {}))
+    mocks.popup.mockResolvedValue({ user: firebaseUser() })
+    const store = useAuthStore()
+    let resolved = false
+    const ready = store.initAuth().then(() => { resolved = true })
+    void store.loginWithGoogle().catch(() => {})
+    await vi.advanceTimersByTimeAsync(0)
+    void emit(firebaseUser())
+
+    await vi.advanceTimersByTimeAsync(9900)
+    expect(resolved).toBe(false)
+    await vi.advanceTimersByTimeAsync(200)
+    await ready
+    expect(resolved).toBe(true)
+    expect(store.user).toBeNull()
+    expect(mocks.validate).not.toHaveBeenCalled()
   })
 
   it('viewer claimが届くまでuserを設定せず、設定時点でnewsViewerになっている', async () => {
