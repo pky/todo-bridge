@@ -86,7 +86,10 @@ export const useAiNewsStore = defineStore('aiNews', () => {
       // 原本が利用できない場合も試行予算は保持し、取得済みの短絡だけ避ける。
       if (!feed.value) fetchState = { ...fetchState, feedDate: null }
       const ops = localStorage.getItem(`${key()}:ops`)
-      if (ops) operations.value = JSON.parse(ops)
+      if (ops) {
+        try { operations.value = JSON.parse(ops) }
+        catch { /* 壊れた保存データでメモリ上の操作を失わない。 */ }
+      }
     } catch { error.value = '保存済みニュースを読み込めませんでした。' }
   }
   function stopAccess(kind: string) {
@@ -125,8 +128,10 @@ export const useAiNewsStore = defineStore('aiNews', () => {
         const leaseKey = `${cacheKey}:lease`
         const raw = localStorage.getItem(leaseKey)
         if (raw) {
-          const current = JSON.parse(raw)
-          if (current.expiresAt > Date.now()) return { kind: 'skipped' }
+          try {
+            const current = JSON.parse(raw)
+            if (current?.expiresAt > Date.now()) return { kind: 'skipped' }
+          } catch { /* 壊れたleaseは未取得として次の保存で上書きする。 */ }
         }
         // 操作用UUIDとは分け、leaseの所有権だけを照合する。
         const owner = `${Date.now()}:${Math.random()}`
@@ -260,12 +265,19 @@ export const useAiNewsStore = defineStore('aiNews', () => {
     return pendingFor(state, 'readLater') ? 'unknown' : 'idle'
   }
   async function updateOperation(user: string, session: number, articleId: string,
-    update: (current: Operation | undefined) => Operation | undefined) {
+    update: (current: Operation | undefined) => Operation | undefined,
+    fallback = operations.value) {
     const opsKey = `${key()}:ops`
     const persist = () => {
       if (!valid(session, user)) return
       // 書き込み直前に永続化済みの全記事を読み、対象記事の変更だけを重ねる。
-      const latest: Record<string, Operation> = JSON.parse(localStorage.getItem(opsKey) ?? '{}')
+      const raw = localStorage.getItem(opsKey)
+      let latest: Record<string, Operation>
+      try { latest = JSON.parse(raw ?? '{}') }
+      catch {
+        // 壊れたJSONは空として扱い、保持中の他記事の操作も復旧する。
+        latest = { ...fallback }
+      }
       const updated = update(latest[articleId])
       if (updated) {
         const next = { ...latest, [articleId]: updated }
@@ -295,6 +307,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
     } })
     if (!valid(session, user) || auth.currentUser?.uid !== user) return
     sending.value[sendingKey] = false
+    if (pendingFor(operations.value[articleId], action)?.operationId !== pending.operationId) return
     if (result.kind === 'auth') { stopAccess(result.status === 401 ? 'unauthenticated' : 'unauthorized'); return }
     if (result.kind === 'unknown') { error.value = '操作結果が未確認です。再試行してください。'; return }
     try {
@@ -306,6 +319,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
         else updated.readLaterAdded = result.kind === 'ok'
         return updated
       })
+      if (valid(session, user) && !blocked.value) error.value = null
     } catch { if (valid(session, user)) error.value = '操作結果を保存できませんでした。再試行してください。' }
   }
   async function act(articleId: string, action: NewsActionBody['action']) {
@@ -330,7 +344,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
         const updated = withPending(current, action, { operationId, payload })
         if (action === 'dismiss') updated.dismissed = true
         return updated
-      })
+      }, previous)
     } catch {
       if (valid(session, user)) {
         const current = operations.value[articleId]
