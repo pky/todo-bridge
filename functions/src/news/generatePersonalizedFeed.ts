@@ -8,7 +8,6 @@ import {
   calcAiBaseScore,
   isAiFeedCandidate,
   isDisplayableAiArticle,
-  isSyntheticGithubDescription,
   needsAiSummary,
   selectAiFeed,
 } from './aiSelection'
@@ -26,7 +25,7 @@ import {
 import type { NewsArticle, NewsPreferences, NewsTopic } from './types'
 import { selectCuratorAiFeed } from './v2/curatorSelection'
 import type { GenerateAiFeedResult } from './v2/aiStaticFeedPipeline'
-import { evaluateCuratorSummaryOutcome, type CuratorSummarySkipReason } from './v2/curatorSummaryOutcome'
+import { evaluateCuratorSummaryOutcome, getCuratorSummarySkipReason, getSummaryEvidence, type CuratorSummarySkipReason } from './v2/curatorSummaryOutcome'
 
 type NewsArticleWithId = NewsArticle & { id: string }
 
@@ -39,7 +38,6 @@ export const MOBILE_FEED_MAX_ARTICLES = 15
 export const AI_SUMMARY_DEADLINE_MS = 60000
 const AI_SUMMARY_MAX_ROUNDS = 3
 const AI_SUMMARY_DAILY_LIMIT = 40
-const AI_SUMMARY_TEXT_LIMIT = 2000
 const WRITE_BATCH_LIMIT = 400
 
 export function isEligibleAiFeedArticle(article: Parameters<typeof isAiFeedCandidate>[0]): boolean {
@@ -290,16 +288,6 @@ async function findReusableSummary(
     }
   }
   return best
-}
-
-function getSummaryEvidence(article: NewsArticle): { text: string; basis: 'content' | 'description' } | null {
-  const content = article.content ?? ''
-  if (content.trim()) return { text: content.slice(0, AI_SUMMARY_TEXT_LIMIT), basis: 'content' }
-  // GitHub は README 本文が根拠で、合成説明文や短い説明だけでは要約しない。
-  if (article.source === 'github') return null
-  const description = article.description ?? ''
-  if (!description.trim() || isSyntheticGithubDescription(description)) return null
-  return { text: description.slice(0, AI_SUMMARY_TEXT_LIMIT), basis: 'description' }
 }
 
 async function saveRankedFeed(
@@ -556,12 +544,14 @@ export async function runGeneratePersonalizedFeed(
             continue
           }
           const evidence = getSummaryEvidence(article)
-          if (!evidence) {
-            // 取得失敗と根拠なしを区別できないため rejected で固定せず、今回だけ飛ばす
+          const skipReason = getCuratorSummarySkipReason(article)
+          if (!evidence && skipReason) {
+            // 根拠がない記事は今回だけ飛ばし、取得障害では固定JSONの公開を止める。
             skippedIds.add(article.id)
-            curatorSkipped.set(article.id, 'no-evidence')
+            curatorSkipped.set(article.id, skipReason)
             continue
           }
+          if (!evidence) continue
           inputs.push({ id: article.id, title: article.title, sourceName: article.sourceName, text: evidence.text, basis: evidence.basis })
           inputArticles.set(article.id, article)
         }
