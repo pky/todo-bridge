@@ -23,3 +23,11 @@ test('viewerはHomeのURLを直接開いてもAIニュースへ戻る', async ({
   expect(viewerDemo.actions).toEqual([])
   await app.screenshot('02-viewer-redirect')
 })
+
+test('viewerはAIニュース画面からログアウトしてログイン画面へ移る', async ({ app, screen, browser }) => {
+  await app.open('/news/ai')
+  await expect(screen.getByText(dismissTitle, { visible: true })).toBeVisible()
+  await screen.getByRole('button', 'ログアウト').click()
+  await expect(browser).toHaveURL(/\/login$/)
+  await app.screenshot('03-viewer-logout')
+})
