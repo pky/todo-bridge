@@ -12,6 +12,7 @@ const isEmulator = import.meta.env.VITE_USE_EMULATOR === 'true'
 
 export const useAuthStore = defineStore('auth', () => {
   const ACCESS_VALIDATION_TIMEOUT_MS = 5000
+  const INITIAL_CLAIMS_TIMEOUT_MS = 10000
   const user = ref<AppUser | null>(null)
   const loading = ref(true)
   const error = ref<string | null>(null)
@@ -20,6 +21,7 @@ export const useAuthStore = defineStore('auth', () => {
   let validationGeneration = 0
   let validatingUid: string | null = null
   let accessValidationPromise: Promise<void> | null = null
+  let initialClaimsPromise: Promise<void> | null = null
 
   const isAuthenticated = computed(() => !!user.value)
 
@@ -41,7 +43,11 @@ export const useAuthStore = defineStore('auth', () => {
     return error instanceof Error ? error : new Error('ログインに失敗しました')
   }
 
-  async function validateAuthorizedUser(firebaseUser: User | null, allowInitialDisplay = false) {
+  async function validateAuthorizedUser(
+    firebaseUser: User | null,
+    allowInitialDisplay = false,
+    onInitialClaimsResolved?: () => void,
+  ) {
     if (!firebaseUser) {
       validationGeneration += 1
       validatingUid = null
@@ -59,7 +65,10 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     if (accessValidationPromise && validatingUid === firebaseUser.uid) {
-      await accessValidationPromise
+      const validationPromise = accessValidationPromise
+      await initialClaimsPromise
+      onInitialClaimsResolved?.()
+      await validationPromise
       return
     }
 
@@ -71,14 +80,29 @@ export const useAuthStore = defineStore('auth', () => {
 
     const generation = ++validationGeneration
     validatingUid = firebaseUser.uid
+    let resolveInitialClaims!: () => void
+    initialClaimsPromise = new Promise<void>((resolve) => { resolveInitialClaims = resolve })
     accessValidationPromise = (async () => {
       try {
         let isNewsViewer = false
+        let claimsTimeout: number | undefined
         try {
-          const token = await firebaseUser.getIdTokenResult()
-          isNewsViewer = token.claims.newsRole === 'viewer'
+          const tokenPromise = firebaseUser.getIdTokenResult()
+          const token = allowInitialDisplay
+            ? await Promise.race([
+              tokenPromise,
+              new Promise<null>((resolve) => {
+                claimsTimeout = window.setTimeout(() => resolve(null), INITIAL_CLAIMS_TIMEOUT_MS)
+              }),
+            ])
+            : await tokenPromise
+          isNewsViewer = token?.claims.newsRole === 'viewer'
         } catch {
           // claimを確認できない場合は従来の利用許可検証へ進む。
+        } finally {
+          window.clearTimeout(claimsTimeout)
+          resolveInitialClaims()
+          onInitialClaimsResolved?.()
         }
         // ログアウト・UID切替前のclaimや利用許可の応答を破棄する。
         if (generation !== validationGeneration) return
@@ -117,10 +141,15 @@ export const useAuthStore = defineStore('auth', () => {
       return
     }
 
-    const validationPromise = validateAuthorizedUser(firebaseUser, true).catch((validationError) => {
+    let resolveClaims!: () => void
+    const claimsResolved = new Promise<void>((resolve) => { resolveClaims = resolve })
+    const validationPromise = validateAuthorizedUser(firebaseUser, true, resolveClaims).catch((validationError) => {
       error.value = validationError instanceof Error ? validationError.message : 'ログインに失敗しました'
       throw validationError
     })
+
+    // claim待機を終えてから、従来の利用許可検証に5秒の猶予を与える。
+    await Promise.race([claimsResolved, validationPromise])
 
     const timeoutPromise = new Promise<void>((resolve) => {
       window.setTimeout(() => resolve(), ACCESS_VALIDATION_TIMEOUT_MS)
