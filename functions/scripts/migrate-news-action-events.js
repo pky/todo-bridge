@@ -27,6 +27,15 @@ function parseArgs(argv, env = {}) {
   return { uid, project, dryRun, refuse: invalid || !uid || (!emulator && !project) }
 }
 
+function describeTarget(_options, env = process.env) {
+  return typeof env.FIRESTORE_EMULATOR_HOST === 'string' && env.FIRESTORE_EMULATOR_HOST.trim() !== ''
+    ? 'emulator' : 'project'
+}
+
+function formatSummary({ target, planned, created, skippedExisting, dryRun }) {
+  return `target=${target} planned=${planned} created=${created} skippedExisting=${skippedExisting} dryRun=${dryRun}`
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2), process.env)
   if (args.refuse) {
@@ -44,13 +53,13 @@ async function main() {
       uid: args.uid, interactions: snapshot.docs.map(doc => ({ id: doc.id, data: doc.data() })), nowMs: Date.now(),
     })
     const result = await applyNewsActionEventMigration({ db, uid: args.uid, plan, dryRun: args.dryRun })
-    console.log(JSON.stringify(result))
+    console.log(formatSummary({ target: describeTarget(args), ...result, dryRun: args.dryRun }))
   } finally {
     await db.terminate()
   }
 }
 
-module.exports = { parseArgs }
+module.exports = { parseArgs, describeTarget, formatSummary }
 if (require.main === module) {
   main().catch(() => {
     // 例外に記事情報や接続先が含まれる可能性があるため詳細を出さない。

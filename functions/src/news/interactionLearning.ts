@@ -93,7 +93,8 @@ export function buildEventSignals(data: Record<string, unknown>): InteractionSig
   if (atMs === null) return []
   // イベントは単一操作なので、旧履歴の自動dismissやクリックは参照しない。
   const signals = buildInteractionSignals({
-    titleEn: data.title,
+    // 両方の題名を単一信号に含め、学習時のSetで同じ語の重複加算を防ぐ。
+    titleEn: [data.title, data.titleEn].filter((title): title is string => typeof title === 'string').join(' '),
     summaryJa: data.summary,
     tags: data.tags,
     ...(data.action === 'readLater'
