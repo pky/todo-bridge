@@ -100,6 +100,8 @@ AI ニュースの呼び出し上限は日本時間の日付ごとに判定と�
 
 AI 固定フィードの生成には `NEWS_CURATOR_UID` で選別に使う管理ユーザーを指定します。`NEWS_FEED_BUCKET` はフィードの保存先 Storage バケット名で、省略時は既定のバケットを使います。 `NEWS_ACTION_ALLOWED_ORIGINS` は管理操作 API の CORS で許可するオリジンをカンマ区切りで指定します。
 
+AI 固定フィードは管理ユーザーの直近90日の操作イベントから学習し、後で読むを +2、興味なしを -1 として30日で重みを半減します。クリックと表示回数は使いません。旧履歴の移行には、`functions` で `npm run build` 後に `node scripts/migrate-news-action-events.js --uid <uid> --project <project-id>` を実行します。既定は件数確認だけの dry-run で、`--apply` を付けた場合だけ新規イベントを保存します。既存イベントと旧履歴は上書き・削除しません。Emulator を使う場合は `FIRESTORE_EMULATOR_HOST` を設定します。本番では dry-run の確認、`--apply` による移行を先に済ませてから、イベント学習への切替をデプロイしてください。
+
 ### 開発コマンド
 
 フロントエンド:

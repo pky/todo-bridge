@@ -87,6 +87,22 @@ export function buildInteractionSignals(data: Record<string, unknown>): Interact
   return signals
 }
 
+export function buildEventSignals(data: Record<string, unknown>): InteractionSignal[] {
+  if (data.topic !== 'ai' || (data.action !== 'dismiss' && data.action !== 'readLater')) return []
+  const atMs = toMillis(data.receivedAt)
+  if (atMs === null) return []
+  // イベントは単一操作なので、旧履歴の自動dismissやクリックは参照しない。
+  const signals = buildInteractionSignals({
+    titleEn: data.title,
+    summaryJa: data.summary,
+    tags: data.tags,
+    ...(data.action === 'readLater'
+      ? { readLaterAt: new Date(atMs) }
+      : { dismissed: true, dismissedAt: new Date(atMs) }),
+  })
+  return signals
+}
+
 export function learnKeywordPreferences(signals: InteractionSignal[], nowMs: number): LearnedKeywords {
   const totals = new Map<string, number>()
   for (const signal of signals) {
