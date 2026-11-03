@@ -6,5 +6,13 @@ service firebase.storage {
     match /backups/{userId}/{allPaths=**} {
       allow read, write: if false;
     }
+
+    // AIニュース v2 の latest.json は newsRole カスタムクレームが
+    // curator または viewer のログインユーザーだけが get できる。
+    // list と write は許可しない（read は list を含むため get のみ使う）
+    match /news/v2/ai/latest.json {
+      allow get: if request.auth != null
+        && request.auth.token.newsRole in ['curator', 'viewer'];
+    }
   }
 }
