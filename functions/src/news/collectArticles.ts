@@ -164,6 +164,7 @@ export function planAiArticleProcessing(
 ): { reuse: Array<{ raw: RawArticle; source: NewsArticle }>; fresh: RawArticle[] } {
   const doneByUrl = new Map<string, NewsArticle[]>()
   for (const article of existing) {
+    if (article.contentFetchFailed === true) continue
     if (article.triageStatus !== 'done' || article.triageVersion !== AI_TRIAGE_VERSION) continue
     if (typeof article.triagedAt !== 'number' || now - article.triagedAt > AI_REUSE_MAX_AGE_MS) continue
     const key = normalizeUrl(article.url)
@@ -246,8 +247,8 @@ export function buildReusedAiArticle(
     ...(source.developerValue ? { developerValue: source.developerValue, readReason: source.readReason ?? '' } : {}),
     ...(source.importance ? { importance: source.importance } : {}),
     ...(source.tags ? { tags: source.tags } : {}),
-    ...(source.content !== undefined ? { content: source.content } : {}),
-    ...(typeof source.contentFetchFailed === 'boolean' ? { contentFetchFailed: source.contentFetchFailed } : {}),
+    ...(source.content !== undefined && (source.contentFetchFailed !== true || source.content.trim()) ? { content: source.content } : {}),
+    ...(source.contentFetchFailed === false ? { contentFetchFailed: false } : {}),
     ...(source.titleJa !== undefined ? { titleJa: source.titleJa } : {}),
     ...(source.summaryJa !== undefined ? { summaryJa: source.summaryJa } : {}),
     ...(source.summaryVersion ? { summaryVersion: source.summaryVersion } : {}),

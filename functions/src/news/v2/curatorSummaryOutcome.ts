@@ -25,8 +25,11 @@ export function evaluateCuratorSummaryOutcome(input: {
   selectedIds: string[]
   skipped: Map<string, CuratorSummarySkipReason>
 }): { ok: boolean } {
-  return { ok: !input.selectedIds.some(id => {
+  let evidenceUnavailableCount = 0
+  for (const id of input.selectedIds) {
     const reason = input.skipped.get(id)
-    return reason === 'summary-unavailable' || reason === 'evidence-unavailable'
-  }) }
+    if (reason === 'summary-unavailable') return { ok: false }
+    if (reason === 'evidence-unavailable') evidenceUnavailableCount++
+  }
+  return { ok: evidenceUnavailableCount === 0 || evidenceUnavailableCount * 2 < input.selectedIds.length }
 }
