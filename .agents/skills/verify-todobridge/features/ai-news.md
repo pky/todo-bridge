@@ -19,3 +19,15 @@
 ## 起動の前提条件
 
 `verification/start.mjs` のEmulator起動対象 `--only` に `storage` を含め、19199番も既存プロセス確認の対象にする必要がある。`verification/environment.mjs` からStorageの接続ポートを渡し、アプリのStorage SDKを専用Emulatorへ接続する。Functions用のHTTP送信先は15001番を使う。
+
+## 閲覧専用ユーザー
+
+| 対象 | 実行 | 確認する挙動 |
+| --- | --- | --- |
+| viewer のログインと閲覧 | `cd web && npm run verify:e2e:ai-news-viewer` | 記事表示、管理ボタン非表示、Home の直接表示を AI ニュースへ転送、`newsAction` への POST が0件 |
+
+`ai-news-viewer.fixture.ts` は既存の AI ニュース fixture と同じ Auth・Storage Emulator の準備方法を使い、架空ユーザーへ `newsRole: viewer` を設定して再発行したトークンを SDK の認証ストレージへ渡す。`mock-auth-state` は使わず、通常の認証初期化を通す。既存の利用許可 API が呼ばれた場合は記録し、権限拒否を返す。
+
+記事が実際に表示されることと Storage の取得を確認し、「あとで読む」「興味なし」「あとで読むを開く」が無いことを検証する。Home の URL を直接開いた場合も `/news/ai` で記事を表示する。管理操作の POST と外部通信が0件であることは fixture の終了時にも確認する。Functions の実処理と本番の権限設定は対象外。
+
+証跡は `.e2e/proof/ai-news-viewer/` に保存する。状態は成功実行後にだけ `tested` にする。
