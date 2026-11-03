@@ -1,0 +1,1162 @@
+{
+  "validFeeds": [
+    {
+      "name": "正常0件",
+      "expectedRevision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "name": "正常3件と任意項目と閏日",
+      "expectedRevision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-a",
+            "imageUrl": "https://images.example.com/a.png",
+            "publishedAt": "2028-02-28T12:34:56.000Z",
+            "publisherDomain": "example.com",
+            "readReason": "架空の実装例を確認できる",
+            "sourceName": "架空技術通信",
+            "summary": "架空の推論ツールの仕組みを説明します。",
+            "tags": [
+              "推論",
+              "検証"
+            ],
+            "title": "架空の推論ツール",
+            "url": "https://example.com/articles/a"
+          },
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-c",
+            "publishedAt": "2028-02-28T10:00:00+09:00",
+            "sourceName": "架空研究通信",
+            "summary": "Unicodeの表記を保ちます: é / é / 😀",
+            "title": "架空の文字列処理",
+            "url": "https://news.example.com/articles/c"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 3,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    }
+  ],
+  "invalidFeeds": [
+    {
+      "reason": "schemaVersion が欠落",
+      "expectedParseReason": "unsupported-version",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "topic が欠落",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "feedDate が欠落",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "generatedAt が欠落",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "revision が欠落",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z"
+      }
+    },
+    {
+      "reason": "totalCount が欠落",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "articles が欠落",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "schemaVersion が未知の版",
+      "expectedParseReason": "unsupported-version",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 3,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "schemaVersion が文字列",
+      "expectedParseReason": "unsupported-version",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": "2",
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "topic が ai 以外",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "mobile",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "日付がゼロ埋めされていない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-2-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "平年に2月29日が存在しない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2027-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "2月30日が存在しない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-30",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "4月31日が存在しない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-04-31",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "13月が存在しない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-13-01",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "生成時刻が日付のみ",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-29",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "生成時刻がUTCのZ表記でない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-29T08:00:00+09:00",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "生成時刻が不正な文字列",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "not-a-date",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "revision が63桁",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "reason": "revision が65桁",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "reason": "revision が大文字",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      }
+    },
+    {
+      "reason": "revision が16進数でない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg"
+      }
+    },
+    {
+      "reason": "件数が負数",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": -1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "件数が整数でない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0.5,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "件数が数値でない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": "0",
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "件数と記事数が一致しない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "記事数が21件",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-0",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-1",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-2",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-3",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-4",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-5",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-6",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-7",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-8",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-9",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-10",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-11",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-12",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-13",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-14",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-15",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-16",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-17",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-18",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-19",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-20",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 21,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "articles が配列でない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": {},
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 0,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "beea2405f311056215fd6ddb17361926d52bbbb17cea7efd1d25b55d2a65c37c"
+      }
+    },
+    {
+      "reason": "記事IDが重複",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-a",
+            "imageUrl": "https://images.example.com/a.png",
+            "publishedAt": "2028-02-28T12:34:56.000Z",
+            "publisherDomain": "example.com",
+            "readReason": "架空の実装例を確認できる",
+            "sourceName": "架空技術通信",
+            "summary": "架空の推論ツールの仕組みを説明します。",
+            "tags": [
+              "推論",
+              "検証"
+            ],
+            "title": "架空の推論ツール",
+            "url": "https://example.com/articles/a"
+          },
+          {
+            "id": "fictional-a",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          },
+          {
+            "id": "fictional-c",
+            "publishedAt": "2028-02-28T10:00:00+09:00",
+            "sourceName": "架空研究通信",
+            "summary": "Unicodeの表記を保ちます: é / é / 😀",
+            "title": "架空の文字列処理",
+            "url": "https://news.example.com/articles/c"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 3,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "記事の id が欠落",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "記事の title が欠落",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "記事の sourceName が欠落",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "記事の summary が欠落",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "title": "架空の評価手法"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "記事の publishedAt が欠落",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "記事の id が空文字",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "記事の id が文字列でない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": 42,
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "記事の title が空文字",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": ""
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "記事の title が文字列でない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": 42
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "記事の sourceName が空文字",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "記事の sourceName が文字列でない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": 42,
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "記事の summary が空文字",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "",
+            "title": "架空の評価手法"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "記事の summary が文字列でない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": 42,
+            "title": "架空の評価手法"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "掲載時刻がISO文字列でない",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": "not-a-date",
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "掲載時刻がTimestampのまま",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": {
+              "seconds": 1,
+              "nanoseconds": 0
+            },
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "url が HTTP",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法",
+            "url": "http://example.com/a"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "url が 相対URL",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法",
+            "url": "/articles/a"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "url が 不正なURL",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法",
+            "url": "https://"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "url が 文字列以外",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法",
+            "url": 42
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "imageUrl が HTTP",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法",
+            "imageUrl": "http://example.com/a"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "imageUrl が 相対URL",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法",
+            "imageUrl": "/articles/a"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "imageUrl が 不正なURL",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法",
+            "imageUrl": "https://"
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    },
+    {
+      "reason": "imageUrl が 文字列以外",
+      "expectedParseReason": "invalid-feed",
+      "feed": {
+        "articles": [
+          {
+            "id": "fictional-b",
+            "publishedAt": null,
+            "sourceName": "架空開発便り",
+            "summary": "公開契約を確認するための架空の記事です。",
+            "title": "架空の評価手法",
+            "imageUrl": 42
+          }
+        ],
+        "feedDate": "2028-02-29",
+        "schemaVersion": 2,
+        "topic": "ai",
+        "totalCount": 1,
+        "generatedAt": "2028-02-28T23:00:00.000Z",
+        "revision": "f6efac9de8c21cf5aef0322b4dd7c17f057e0e0264d9aadf5747c6c988097654"
+      }
+    }
+  ],
+  "canonicalizationVectors": [
+    {
+      "name": "RFC 8785 Appendix B の整数と負のゼロ",
+      "value": [
+        0,
+        -0,
+        1,
+        -1
+      ],
+      "expected": "[0,0,1,-1]"
+    },
+    {
+      "name": "RFC 8785 3.2.2 の原文文字列とUnicodeエスケープ",
+      "value": "€$\u000f\nA'B\"\\\\\"/",
+      "expected": "\"€$\\u000f\\nA'B\\\"\\\\\\\\\\\"/\""
+    },
+    {
+      "name": "RFC 8785 3.2.2 のリテラルと再帰構造",
+      "value": {
+        "z": [
+          null,
+          true,
+          false,
+          {
+            "b": 2,
+            "a": 1
+          }
+        ],
+        "a": "値"
+      },
+      "expected": "{\"a\":\"値\",\"z\":[null,true,false,{\"a\":1,\"b\":2}]}"
+    },
+    {
+      "name": "RFC 8785 3.2.2.2 の制御文字と引用符とバックスラッシュ",
+      "value": "\u0000\b\t\n\f\r\u001f\"\\/€",
+      "expected": "\"\\u0000\\b\\t\\n\\f\\r\\u001f\\\"\\\\/€\""
+    },
+    {
+      "name": "RFC 8785 3.2.3 のUTF-16コード単位順",
+      "value": {
+        "1": "One",
+        "€": "Euro Sign",
+        "\r": "Carriage Return",
+        "דּ": "Hebrew Letter Dalet With Dagesh",
+        "😀": "Emoji: Grinning Face",
+        "": "Control",
+        "ö": "Latin Small Letter O With Diaeresis"
+      },
+      "expected": "{\"\\r\":\"Carriage Return\",\"1\":\"One\",\"\":\"Control\",\"ö\":\"Latin Small Letter O With Diaeresis\",\"€\":\"Euro Sign\",\"😀\":\"Emoji: Grinning Face\",\"דּ\":\"Hebrew Letter Dalet With Dagesh\"}"
+    },
+    {
+      "name": "Unicode正規化を行わず合成済みと結合文字を保持",
+      "value": [
+        "é",
+        "é",
+        "€",
+        "😀"
+      ],
+      "expected": "[\"é\",\"é\",\"€\",\"😀\"]"
+    }
+  ]
+}
