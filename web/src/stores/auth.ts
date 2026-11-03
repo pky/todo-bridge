@@ -85,22 +85,12 @@ export const useAuthStore = defineStore('auth', () => {
     accessValidationPromise = (async () => {
       try {
         let isNewsViewer = false
-        let claimsTimeout: number | undefined
         try {
-          const tokenPromise = firebaseUser.getIdTokenResult()
-          const token = allowInitialDisplay
-            ? await Promise.race([
-              tokenPromise,
-              new Promise<null>((resolve) => {
-                claimsTimeout = window.setTimeout(() => resolve(null), INITIAL_CLAIMS_TIMEOUT_MS)
-              }),
-            ])
-            : await tokenPromise
-          isNewsViewer = token?.claims.newsRole === 'viewer'
+          const token = await firebaseUser.getIdTokenResult()
+          isNewsViewer = token.claims.newsRole === 'viewer'
         } catch {
           // claimを確認できない場合は従来の利用許可検証へ進む。
         } finally {
-          window.clearTimeout(claimsTimeout)
           resolveInitialClaims()
           onInitialClaimsResolved?.()
         }
@@ -148,14 +138,30 @@ export const useAuthStore = defineStore('auth', () => {
       throw validationError
     })
 
+    let claimsTimeout: number | undefined
+    try {
+      // 初期化だけを10秒で解放し、同じclaim取得と利用許可判定は継続する。
+      const claimsReady = await Promise.race([
+        Promise.race([claimsResolved, validationPromise]).then(() => true),
+        new Promise<boolean>((resolve) => {
+          claimsTimeout = window.setTimeout(() => resolve(false), INITIAL_CLAIMS_TIMEOUT_MS)
+        }),
+      ])
+      if (!claimsReady) return
+    } finally {
+      window.clearTimeout(claimsTimeout)
+    }
+
     // claim待機を終えてから、従来の利用許可検証に5秒の猶予を与える。
-    await Promise.race([claimsResolved, validationPromise])
-
-    const timeoutPromise = new Promise<void>((resolve) => {
-      window.setTimeout(() => resolve(), ACCESS_VALIDATION_TIMEOUT_MS)
-    })
-
-    await Promise.race([validationPromise, timeoutPromise])
+    let validationTimeout: number | undefined
+    try {
+      const timeoutPromise = new Promise<void>((resolve) => {
+        validationTimeout = window.setTimeout(() => resolve(), ACCESS_VALIDATION_TIMEOUT_MS)
+      })
+      await Promise.race([validationPromise, timeoutPromise])
+    } finally {
+      window.clearTimeout(validationTimeout)
+    }
   }
 
   function initAuth() {
