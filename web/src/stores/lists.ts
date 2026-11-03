@@ -55,6 +55,12 @@ export const useListsStore = defineStore('lists', () => {
   let listsUnsubscribe: Unsubscribe | null = null
   let smartListCountsUnsubscribe: (() => void) | null = null
 
+  function isCurrentSubscription(userId: string, generation: number): boolean {
+    const authStore = useAuthStore()
+    return generation === subscriptionGeneration
+      && authStore.user?.uid === userId && authStore.accessMode !== 'newsViewer'
+  }
+
   const selectedList = computed(() =>
     lists.value.find((l) => l.id === selectedListId.value) || null
   )
@@ -115,10 +121,11 @@ export const useListsStore = defineStore('lists', () => {
     }
   }
 
-  async function getServerFirstSnapshot(source: ReturnType<typeof getListsCollection> | ReturnType<typeof query>) {
+  async function getServerFirstSnapshot(source: ReturnType<typeof getListsCollection> | ReturnType<typeof query>, userId: string, generation: number) {
     try {
       return await getDocsFromServer(source)
     } catch (error) {
+      if (!isCurrentSubscription(userId, generation)) return null
       console.warn('[lists] Server fetch failed, falling back to cached snapshot:', error)
       return await getDocs(source)
     }
@@ -141,7 +148,9 @@ export const useListsStore = defineStore('lists', () => {
   async function fetchLists() {
     const authStore = useAuthStore()
     const spaceStore = useSpaceStore()
-    if (!authStore.user) return
+    if (!authStore.user || authStore.accessMode === 'newsViewer') return
+    const userId = authStore.user.uid
+    const generation = subscriptionGeneration
 
     // E2Eテスト用のモックリストチェック
     const mockListsData = localStorage.getItem('mock-lists-data')
@@ -164,6 +173,7 @@ export const useListsStore = defineStore('lists', () => {
     }
 
     await spaceStore.initSpace()
+    if (!isCurrentSubscription(userId, generation)) return
 
     // 既に読み込み済みで、リストが存在する場合は何もしない（重複防止）
     // リストが空の場合は再取得を試みる（オフライン復帰時対策）
@@ -181,6 +191,7 @@ export const useListsStore = defineStore('lists', () => {
           )
 
       const cachedSnapshot = await getCachedSnapshot(targetQuery)
+      if (!isCurrentSubscription(userId, generation)) return
       if (cachedSnapshot && cachedSnapshot.docs.length > 0) {
         console.log('[lists] fetchLists:', cachedSnapshot.docs.length, 'from CACHE')
         const cachedLists = cachedSnapshot.docs.map((d) => ({
@@ -192,7 +203,8 @@ export const useListsStore = defineStore('lists', () => {
         return
       }
 
-      const snapshot = await getServerFirstSnapshot(targetQuery)
+      const snapshot = await getServerFirstSnapshot(targetQuery, userId, generation)
+      if (!snapshot || !isCurrentSubscription(userId, generation)) return
       console.log('[lists] fetchLists:', snapshot.docs.length, 'from SERVER')
       const rawLists = snapshot.docs.map((d) => ({
         id: d.id,
@@ -220,6 +232,7 @@ export const useListsStore = defineStore('lists', () => {
           }
           const tasksQuery = query(tasksCollection, ...taskConstraints)
           const tasksSnapshot = await getDocs(tasksQuery)
+          if (!isCurrentSubscription(userId, generation)) return
           
           tasksSnapshot.docs.forEach((docSnap) => {
             batch.update(docSnap.ref, { listId: primaryInbox.id })
@@ -233,6 +246,7 @@ export const useListsStore = defineStore('lists', () => {
         
         if (hasChanges) {
           await batch.commit()
+          if (!isCurrentSubscription(userId, generation)) return
         }
         
         const duplicateIds = duplicateInboxes.map(l => l.id)
@@ -240,20 +254,24 @@ export const useListsStore = defineStore('lists', () => {
       } else if (inboxes.length === 0) {
         // Inboxがなければ作成
         await createList({ name: 'Inbox' })
+        if (!isCurrentSubscription(userId, generation)) return
       }
 
       restoreSelectedList()
     } catch (err) {
+      if (!isCurrentSubscription(userId, generation)) return
       error.value = (err as Error).message
     } finally {
-      loading.value = false
+      if (isCurrentSubscription(userId, generation)) loading.value = false
     }
   }
 
   function subscribeToLists() {
     const authStore = useAuthStore()
     const spaceStore = useSpaceStore()
-    if (!authStore.user) return
+    if (!authStore.user || authStore.accessMode === 'newsViewer') return
+    const userId = authStore.user.uid
+    const generation = subscriptionGeneration
 
     if (listsUnsubscribe) {
       listsUnsubscribe()
@@ -280,6 +298,7 @@ export const useListsStore = defineStore('lists', () => {
     listsUnsubscribe = onSnapshot(
       targetQuery,
       (snapshot) => {
+        if (!isCurrentSubscription(userId, generation)) return
         const rawLists = snapshot.docs.map((d) => ({
           id: d.id,
           ...d.data(),
@@ -297,7 +316,9 @@ export const useListsStore = defineStore('lists', () => {
   function subscribeToSmartListCounts() {
     const authStore = useAuthStore()
     const spaceStore = useSpaceStore()
-    if (!authStore.user) return
+    if (!authStore.user || authStore.accessMode === 'newsViewer') return
+    const userId = authStore.user.uid
+    const generation = subscriptionGeneration
 
     // 既存リスナーがあれば解除（重複登録防止）
     if (smartListCountsUnsubscribe) {
@@ -310,6 +331,7 @@ export const useListsStore = defineStore('lists', () => {
     smartListCountsUnsubscribe = onSnapshot(
       targetDocRef,
       (docSnapshot) => {
+        if (!isCurrentSubscription(userId, generation)) return
         if (docSnapshot.exists()) {
           const data = docSnapshot.data()
           if (data.smartListCounts) {
@@ -328,8 +350,11 @@ export const useListsStore = defineStore('lists', () => {
   async function fetchTags() {
     const authStore = useAuthStore()
     const spaceStore = useSpaceStore()
-    if (!authStore.user) return
+    if (!authStore.user || authStore.accessMode === 'newsViewer') return
+    const userId = authStore.user.uid
+    const generation = subscriptionGeneration
     await spaceStore.initSpace()
+    if (!isCurrentSubscription(userId, generation)) return
 
     // 既に読み込み済みなら何もしない（重複防止）
     // ただしタグが0件の場合は再取得を試みる
@@ -345,7 +370,9 @@ export const useListsStore = defineStore('lists', () => {
             where('visibleToMemberIds', 'array-contains', authStore.user.uid)
           )
       const cachedSnapshot = await getCachedSnapshot(q)
-      const snapshot = cachedSnapshot ?? await getServerFirstSnapshot(q)
+      if (!isCurrentSubscription(userId, generation)) return
+      const snapshot = cachedSnapshot ?? await getServerFirstSnapshot(q, userId, generation)
+      if (!snapshot || !isCurrentSubscription(userId, generation)) return
       console.log('[lists] fetchTags:', snapshot.docs.length, cachedSnapshot ? 'from CACHE' : 'from SERVER')
       tags.value = snapshot.docs.map((d) => ({
         id: d.id,
@@ -354,11 +381,15 @@ export const useListsStore = defineStore('lists', () => {
       tags.value = [...tags.value].sort((a, b) => a.name.localeCompare(b.name, 'ja'))
       tagsLoaded = true
     } catch (err) {
+      if (!isCurrentSubscription(userId, generation)) return
       error.value = (err as Error).message
     }
   }
 
   async function subscribe() {
+    const authStore = useAuthStore()
+    if (!authStore.user || authStore.accessMode === 'newsViewer') return
+    const userId = authStore.user.uid
     // E2E用リストの取得は、実認証を伴うスペース初期化を待たない。
     const mockListsData = localStorage.getItem('mock-lists-data')
     if (mockListsData) {
@@ -374,14 +405,15 @@ export const useListsStore = defineStore('lists', () => {
     const generation = ++subscriptionGeneration
     const spaceStore = useSpaceStore()
     await spaceStore.initSpace()
+    if (!isCurrentSubscription(userId, generation)) return
     await Promise.all([fetchLists(), fetchTags()])
-    if (generation !== subscriptionGeneration) return
+    if (!isCurrentSubscription(userId, generation)) return
     subscribeToLists()
     subscribeToSmartListCounts()
     const revision = countsRevision
     void refreshSmartListCounts({ preferCached: true })
       .then((refreshedCounts) => {
-        if (generation !== subscriptionGeneration || revision !== countsRevision) return
+        if (!isCurrentSubscription(userId, generation) || revision !== countsRevision) return
         smartListCounts.value = {
           ...smartListCounts.value,
           ...refreshedCounts,
@@ -400,6 +432,7 @@ export const useListsStore = defineStore('lists', () => {
     selectedSmartList.value = null
     listsLoaded = false
     tagsLoaded = false
+    loading.value = false
     if (smartListCountsUnsubscribe) {
       smartListCountsUnsubscribe()
       smartListCountsUnsubscribe = null
@@ -428,6 +461,8 @@ export const useListsStore = defineStore('lists', () => {
     const authStore = useAuthStore()
     const spaceStore = useSpaceStore()
     if (!authStore.user) throw new Error('認証が必要です')
+    const userId = authStore.user.uid
+    const generation = subscriptionGeneration
     if (input.name === 'Inbox') {
       const existingInbox = lists.value.find((list) => list.name === 'Inbox')
       if (existingInbox) {
@@ -448,6 +483,7 @@ export const useListsStore = defineStore('lists', () => {
       dateCreated: now,
       dateModified: now,
     })
+    if (!isCurrentSubscription(userId, generation)) return
     const currentScopeSpaceId = spaceStore.currentSpaceId
     const isCurrentScopeTarget = targetSpaceId === currentScopeSpaceId
       || (spaceStore.useLegacyPath && (!targetSpaceId || targetSpaceId === currentScopeSpaceId))

@@ -1,11 +1,21 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import ToastNotification from '@/components/ToastNotification.vue'
 import { useAuthStore } from '@/stores/auth'
 // import { useCalendarStore } from '@/stores/calendar' // TODO: カレンダー機能を一時無効化
 import { useRegisterSW } from 'virtual:pwa-register/vue'
 
 const authStore = useAuthStore()
+const route = useRoute()
+const router = useRouter()
+
+// 認証中のUID切替でも、viewerにタスク画面を引き継がない。
+watch(() => authStore.accessMode, (mode) => {
+  if (mode === 'newsViewer' && route.name !== 'news-ai') {
+    void router.replace({ name: 'news-ai' })
+  }
+}, { immediate: true })
 // const calendarStore = useCalendarStore() // TODO: カレンダー機能を一時無効化
 
 // PWA更新検知
@@ -54,7 +64,7 @@ onMounted(async () => {
   <div v-if="authStore.loading" class="min-h-screen flex items-center justify-center">
     <div class="text-gray-500">読み込み中...</div>
   </div>
-  <router-view v-else />
+  <router-view v-else-if="authStore.accessMode !== 'newsViewer' || route.name === 'news-ai'" />
 
   <!-- PWA更新通知 -->
   <Transition name="slide-up">

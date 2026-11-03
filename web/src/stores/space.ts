@@ -28,6 +28,13 @@ export const useSpaceStore = defineStore('space', () => {
   const useLegacyPath = ref(true)
   const personalSpaceMigrationChecked = ref(false)
   const initializedUserId = ref<string | null>(null)
+  let initializationGeneration = 0
+
+  function isCurrentUser(userId: string, generation: number): boolean {
+    const authStore = useAuthStore()
+    return generation === initializationGeneration
+      && authStore.user?.uid === userId && authStore.accessMode !== 'newsViewer'
+  }
 
   async function getCachedSnapshot(collectionRef: ReturnType<typeof collection>) {
     try {
@@ -38,10 +45,11 @@ export const useSpaceStore = defineStore('space', () => {
     }
   }
 
-  async function getServerFirstSnapshot(collectionRef: ReturnType<typeof collection>) {
+  async function getServerFirstSnapshot(collectionRef: ReturnType<typeof collection>, userId: string, generation: number) {
     try {
       return await getDocsFromServer(collectionRef)
     } catch (error) {
+      if (!isCurrentUser(userId, generation)) return null
       console.warn('[spaceStore] Server fetch failed, falling back to cached snapshot:', error)
       return await getDocs(collectionRef)
     }
@@ -83,18 +91,18 @@ export const useSpaceStore = defineStore('space', () => {
   }
 
   async function refreshMembershipsInBackground(userId: string, force = false) {
-    const authStore = useAuthStore()
-    if (!authStore.user || authStore.user.uid !== userId) return
+    const generation = initializationGeneration
+    if (!isCurrentUser(userId, generation)) return
 
     const membershipCollection = collection(db, 'users', userId, 'memberships')
-    const snapshot = await getServerFirstSnapshot(membershipCollection)
+    const snapshot = await getServerFirstSnapshot(membershipCollection, userId, generation)
 
-    if (!authStore.user || authStore.user.uid !== userId) return
+    if (!snapshot || !isCurrentUser(userId, generation)) return
 
     applyMembershipSnapshot(snapshot, userId)
 
     try {
-      await maybeMigratePersonalSpace(force)
+      await maybeMigratePersonalSpace(userId, generation, force)
     } catch (error) {
       console.warn('[spaceStore] Failed to migrate personal space:', error)
     }
@@ -102,7 +110,7 @@ export const useSpaceStore = defineStore('space', () => {
 
   async function initSpace(force = false) {
     const authStore = useAuthStore()
-    if (!authStore.user) {
+    if (!authStore.user || authStore.accessMode === 'newsViewer') {
       clear()
       return
     }
@@ -116,10 +124,12 @@ export const useSpaceStore = defineStore('space', () => {
     }
 
     const userId = authStore.user.uid
+    const generation = initializationGeneration
     const membershipCollection = collection(db, 'users', userId, 'memberships')
 
     if (!force) {
       const cachedSnapshot = await getCachedSnapshot(membershipCollection)
+      if (!isCurrentUser(userId, generation)) return
       if (cachedSnapshot && !cachedSnapshot.empty) {
         applyMembershipSnapshot(cachedSnapshot, userId)
         void refreshMembershipsInBackground(userId)
@@ -127,11 +137,12 @@ export const useSpaceStore = defineStore('space', () => {
       }
     }
 
-    const snapshot = await getServerFirstSnapshot(membershipCollection)
+    const snapshot = await getServerFirstSnapshot(membershipCollection, userId, generation)
+    if (!snapshot || !isCurrentUser(userId, generation)) return
     applyMembershipSnapshot(snapshot, userId)
 
     try {
-      await maybeMigratePersonalSpace(force)
+      await maybeMigratePersonalSpace(userId, generation, force)
     } catch (error) {
       console.warn('[spaceStore] Failed to migrate personal space:', error)
     }
@@ -149,6 +160,7 @@ export const useSpaceStore = defineStore('space', () => {
   }
 
   function clear() {
+    initializationGeneration += 1
     currentSpaceId.value = null
     memberships.value = []
     initialized.value = false
@@ -158,11 +170,10 @@ export const useSpaceStore = defineStore('space', () => {
     localStorage.removeItem(CURRENT_SPACE_KEY)
   }
 
-  async function maybeMigratePersonalSpace(force = false) {
-    const authStore = useAuthStore()
-    if (!authStore.user) return
+  async function maybeMigratePersonalSpace(userId: string, generation: number, force = false) {
+    if (!isCurrentUser(userId, generation)) return
 
-    const migrationKey = `${PERSONAL_SPACE_MIGRATION_KEY_PREFIX}-${authStore.user.uid}`
+    const migrationKey = `${PERSONAL_SPACE_MIGRATION_KEY_PREFIX}-${userId}`
     const alreadyMigrated = localStorage.getItem(migrationKey) === 'true'
 
     if ((personalSpaceMigrationChecked.value || alreadyMigrated) && !force) {
@@ -170,6 +181,7 @@ export const useSpaceStore = defineStore('space', () => {
     }
 
     await migrateCurrentUserToPersonalSpaceApi()
+    if (!isCurrentUser(userId, generation)) return
 
     personalSpaceMigrationChecked.value = true
     localStorage.setItem(migrationKey, 'true')

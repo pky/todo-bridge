@@ -12,7 +12,7 @@ watch(
   () => authStore.isAuthenticated,
   (isAuthenticated) => {
     if (!isAuthenticated) return
-    void router.replace({ name: 'home' })
+    void router.replace({ name: authStore.accessMode === 'newsViewer' ? 'news-ai' : 'home' })
   },
   { immediate: true }
 )
@@ -20,7 +20,7 @@ watch(
 async function handleGoogleLogin() {
   try {
     await authStore.loginWithGoogle()
-    await router.replace({ name: 'home' })
+    await router.replace({ name: authStore.accessMode === 'newsViewer' ? 'news-ai' : 'home' })
   } catch (e) {
     console.error('Login failed:', e)
   }
@@ -29,7 +29,7 @@ async function handleGoogleLogin() {
 async function handleLocalLogin() {
   try {
     await authStore.loginForLocalDevelopment()
-    await router.replace({ name: 'home' })
+    await router.replace({ name: authStore.accessMode === 'newsViewer' ? 'news-ai' : 'home' })
   } catch (e) {
     console.error('Local login failed:', e)
   }

@@ -16,6 +16,8 @@ export const useAuthStore = defineStore('auth', () => {
   const loading = ref(true)
   const error = ref<string | null>(null)
   const accessValidatedUid = ref<string | null>(null)
+  const accessMode = ref<'full' | 'newsViewer' | null>(null)
+  let validationGeneration = 0
   let validatingUid: string | null = null
   let accessValidationPromise: Promise<void> | null = null
 
@@ -39,11 +41,15 @@ export const useAuthStore = defineStore('auth', () => {
     return error instanceof Error ? error : new Error('ログインに失敗しました')
   }
 
-  async function validateAuthorizedUser(firebaseUser: User | null) {
+  async function validateAuthorizedUser(firebaseUser: User | null, allowInitialDisplay = false) {
     if (!firebaseUser) {
-      await clearSearchCacheSafely()
+      validationGeneration += 1
+      validatingUid = null
+      accessValidationPromise = null
       user.value = null
       accessValidatedUid.value = null
+      accessMode.value = null
+      await clearSearchCacheSafely()
       return
     }
 
@@ -57,15 +63,39 @@ export const useAuthStore = defineStore('auth', () => {
       return
     }
 
+    if (user.value?.uid !== firebaseUser.uid) {
+      user.value = null
+      accessValidatedUid.value = null
+      accessMode.value = null
+    }
+
+    const generation = ++validationGeneration
     validatingUid = firebaseUser.uid
     accessValidationPromise = (async () => {
       try {
-        await validateCurrentUserAccessApi()
+        let isNewsViewer = false
+        try {
+          const token = await firebaseUser.getIdTokenResult()
+          isNewsViewer = token.claims.newsRole === 'viewer'
+        } catch {
+          // claimを確認できない場合は従来の利用許可検証へ進む。
+        }
+        // ログアウト・UID切替前のclaimや利用許可の応答を破棄する。
+        if (generation !== validationGeneration) return
+        accessMode.value = isNewsViewer ? 'newsViewer' : 'full'
+        if (!isNewsViewer) {
+          // claim確認後に限り、従来の初期表示と利用許可検証を並行する。
+          if (allowInitialDisplay) user.value = mapFirebaseUser(firebaseUser)
+          await validateCurrentUserAccessApi()
+        }
+        if (generation !== validationGeneration) return
         user.value = mapFirebaseUser(firebaseUser)
         accessValidatedUid.value = firebaseUser.uid
       } catch (error) {
+        if (generation !== validationGeneration) return
         user.value = null
         accessValidatedUid.value = null
+        accessMode.value = null
         await signOut(auth)
         throw formatAccessError(error)
       }
@@ -74,7 +104,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       await accessValidationPromise
     } finally {
-      if (validatingUid === firebaseUser.uid) {
+      if (generation === validationGeneration) {
         validatingUid = null
         accessValidationPromise = null
       }
@@ -87,10 +117,7 @@ export const useAuthStore = defineStore('auth', () => {
       return
     }
 
-    // 初期表示は先に進めつつ、権限チェックは裏で継続する
-    user.value = mapFirebaseUser(firebaseUser)
-
-    const validationPromise = validateAuthorizedUser(firebaseUser).catch((validationError) => {
+    const validationPromise = validateAuthorizedUser(firebaseUser, true).catch((validationError) => {
       error.value = validationError instanceof Error ? validationError.message : 'ログインに失敗しました'
       throw validationError
     })
@@ -174,6 +201,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
+    validationGeneration += 1
+    validatingUid = null
+    accessValidationPromise = null
     loading.value = true
     error.value = null
     try {
@@ -181,6 +211,7 @@ export const useAuthStore = defineStore('auth', () => {
       await signOut(auth)
       user.value = null
       accessValidatedUid.value = null
+      accessMode.value = null
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'ログアウトに失敗しました'
       throw e
@@ -194,6 +225,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading,
     error,
     isAuthenticated,
+    accessMode,
     initAuth,
     loginWithGoogle,
     loginForLocalDevelopment,

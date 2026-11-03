@@ -35,6 +35,7 @@ const currentTopic = computed<NewsTopic>(() => route.name === 'news-mobile' ? 'm
 const pageTitle = computed(() => currentTopic.value === 'mobile' ? 'モバイルニュース' : 'AIニュース')
 const pageSubtitle = computed(() => currentTopic.value === 'mobile' ? 'Apple / Android の公式情報を優先表示' : '毎朝8時以降に更新')
 const isMobileTopic = computed(() => currentTopic.value === 'mobile')
+const canManage = computed(() => authStore.accessMode !== 'newsViewer' && (isMobileTopic.value || aiNewsStore.value.canManage))
 const latestFeedDate = computed(() => isMobileTopic.value ? newsStore.latestFeedDateByTopic.mobile : aiNewsStore.value.feedDate)
 const newsLoading = computed(() => isMobileTopic.value ? newsStore.loading : aiNewsStore.value.loading)
 const newsError = computed(() => isMobileTopic.value ? newsStore.error : aiNewsStore.value.error)
@@ -322,6 +323,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
     <!-- ヘッダー (fixed で固定) -->
     <header class="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 shadow-sm">
       <button
+        v-if="authStore.accessMode !== 'newsViewer'"
         @click="goBack"
         class="text-gray-500 hover:text-gray-700 p-1 -ml-1"
         aria-label="戻る"
@@ -338,7 +340,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
       <button
         type="button"
         class="ml-auto inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-white hover:text-gray-900"
-        v-if="isMobileTopic || aiNewsStore.canManage"
+        v-if="canManage"
         @click="openReadLaterInTodo"
       >
         あとで読むを開く
@@ -376,7 +378,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
       <div v-if="!isMobileTopic" class="px-3 py-2">
         <button class="text-sm text-blue-600" @click="aiNewsStore.load(authStore.user!.uid, true)">ニュースを更新</button>
         <p v-if="aiNewsStore.error" role="alert" class="text-sm text-red-600">{{ aiNewsStore.error }}</p>
-        <button v-for="id in aiNewsStore.pendingArticles" :key="id" class="block text-sm text-blue-600" @click="aiNewsStore.retryPending(id)">操作結果が未確認・再試行</button>
+        <button v-for="id in canManage ? aiNewsStore.pendingArticles : []" :key="id" class="block text-sm text-blue-600" @click="aiNewsStore.retryPending(id)">操作結果が未確認・再試行</button>
       </div>
       <!-- ローディング -->
       <div v-if="newsLoading && !hasVisibleArticles" class="flex justify-center items-center py-12">
@@ -560,7 +562,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
             <NewsCard
               v-if="heroArticles[0]"
               :article="heroArticles[0]"
-              :can-manage="isMobileTopic || aiNewsStore.canManage"
+              :can-manage="canManage"
               :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(heroArticles[0].id)"
               variant="hero"
               class="xl:col-span-2"
@@ -571,7 +573,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
             <NewsCard
               v-if="heroArticles[1]"
               :article="heroArticles[1]"
-              :can-manage="isMobileTopic || aiNewsStore.canManage"
+              :can-manage="canManage"
               :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(heroArticles[1].id)"
               variant="featured"
               @bookmark="handleBookmark"
@@ -581,7 +583,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
             <NewsCard
               v-if="heroArticles[2]"
               :article="heroArticles[2]"
-              :can-manage="isMobileTopic || aiNewsStore.canManage"
+              :can-manage="canManage"
               :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(heroArticles[2].id)"
               variant="featured"
               @bookmark="handleBookmark"
@@ -598,7 +600,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
               v-for="article in sideArticles"
               :key="article.id"
               :article="article"
-              :can-manage="isMobileTopic || aiNewsStore.canManage"
+              :can-manage="canManage"
               :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(article.id)"
               variant="default"
               @bookmark="handleBookmark"
@@ -616,7 +618,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
             v-for="article in remainingArticles"
             :key="article.id"
             :article="article"
-              :can-manage="isMobileTopic || aiNewsStore.canManage"
+              :can-manage="canManage"
               :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(article.id)"
             variant="default"
             @bookmark="handleBookmark"

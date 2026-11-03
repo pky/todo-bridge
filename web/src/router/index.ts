@@ -67,8 +67,10 @@ router.beforeEach(async (to, _from, next) => {
 
   if (to.meta.requiresAuth && !isAuthenticated) {
     next({ name: 'login' })
+  } else if (to.meta.requiresAuth && authStore.accessMode === 'newsViewer' && to.name !== 'news-ai') {
+    next({ name: 'news-ai' })
   } else if (to.meta.requiresGuest && isAuthenticated) {
-    next({ name: 'home' })
+    next({ name: authStore.accessMode === 'newsViewer' ? 'news-ai' : 'home' })
   } else {
     next()
   }
