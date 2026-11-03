@@ -1,3 +1,4 @@
+import { getStorage, connectStorageEmulator } from 'firebase/storage'
 import { getAuth, GoogleAuthProvider, connectAuthEmulator } from 'firebase/auth'
 import {
   initializeFirestore,
@@ -7,7 +8,7 @@ import {
   memoryLocalCache,
 } from 'firebase/firestore'
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions'
-import app, { authEmulatorPort, emulatorHost, firestoreEmulatorPort, functionsEmulatorPort, isEmulator } from './firebaseApp'
+import app, { authEmulatorPort, emulatorHost, firestoreEmulatorPort, functionsEmulatorPort, storageEmulatorPort, isEmulator } from './firebaseApp'
 
 export const auth = getAuth(app)
 export const googleProvider = new GoogleAuthProvider()
@@ -22,10 +23,13 @@ export const db = initializeFirestore(app, {
       })
 })
 
+export const storage = getStorage(app)
+
 export const functions = getFunctions(app, 'asia-northeast1')
 
 // エミュレータ接続（開発・テスト環境用）
 if (isEmulator) {
+  connectStorageEmulator(storage, emulatorHost, storageEmulatorPort)
   connectAuthEmulator(auth, `http://${emulatorHost}:${authEmulatorPort}`, { disableWarnings: true })
   connectFirestoreEmulator(db, emulatorHost, firestoreEmulatorPort)
   connectFunctionsEmulator(functions, emulatorHost, functionsEmulatorPort)

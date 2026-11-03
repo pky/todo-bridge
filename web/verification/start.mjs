@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { createConnection } from 'node:net'
 import { build } from 'vite'
@@ -12,7 +12,7 @@ const webRoot = resolve(import.meta.dirname, '..')
 process.chdir(webRoot)
 
 // 専用ポートの既存プロセスには接続せず、並行実行も拒否する。
-for (const emulatorPort of [19099, 18080, 14400, 14500]) {
+for (const emulatorPort of [19099, 18080, 19199, 14400, 14500]) {
   const occupied = await new Promise((accept) => {
     const socket = createConnection({ host: '127.0.0.1', port: emulatorPort })
     socket.once('connect', () => { socket.destroy(); accept(true) })
@@ -28,11 +28,21 @@ const viteOptions = {
   build: { outDir: '.e2e/dist', emptyOutDir: true },
 }
 await mkdir('.e2e/emulators', { recursive: true })
+// CLIのプロジェクト外ルール参照を避け、専用ディレクトリへ同じルールを用意する。
+const emulatorRoot = resolve('.e2e/emulators')
+const emulatorConfig = JSON.parse(await readFile(resolve('e2e.firebase.json'), 'utf8'))
+for (const service of ['firestore', 'storage']) {
+  const ruleName = `${service}.rules`
+  await copyFile(resolve(webRoot, emulatorConfig[service].rules), resolve(emulatorRoot, ruleName))
+  emulatorConfig[service].rules = ruleName
+}
+const runtimeConfig = resolve(emulatorRoot, 'firebase.runtime.json')
+await writeFile(runtimeConfig, JSON.stringify(emulatorConfig))
 await build(viteOptions)
 
 const emulator = spawn(process.execPath, [
   resolve('node_modules/firebase-tools/lib/bin/firebase.js'), 'emulators:exec',
-  '--config', resolve('e2e.firebase.json'), '--project', 'demo-rertm', '--only', 'auth,firestore',
+  '--config', runtimeConfig, '--project', 'demo-rertm', '--only', 'auth,firestore,storage',
   'node ../../verification/serve.mjs',
 ], {
   cwd: resolve('.e2e/emulators'),

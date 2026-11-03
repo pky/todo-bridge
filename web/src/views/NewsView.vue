@@ -4,6 +4,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Timestamp } from 'firebase/firestore'
 import { useAuthStore } from '@/stores/auth'
+import { useAiNewsStore } from '@/stores/aiNews'
 import { useNewsStore } from '@/stores/news'
 import NewsCard from '@/components/NewsCard.vue'
 import MobileSummary from '@/components/MobileSummary.vue'
@@ -16,6 +17,7 @@ const route = useRoute()
 
 const authStore = useAuthStore()
 const newsStore = useNewsStore()
+const aiNewsStore = computed(() => useAiNewsStore())
 const bookmarkToast = ref(false)
 const showScrollTop = ref(false)
 const listContainerRef = ref<HTMLElement | null>(null)
@@ -33,8 +35,21 @@ const currentTopic = computed<NewsTopic>(() => route.name === 'news-mobile' ? 'm
 const pageTitle = computed(() => currentTopic.value === 'mobile' ? 'モバイルニュース' : 'AIニュース')
 const pageSubtitle = computed(() => currentTopic.value === 'mobile' ? 'Apple / Android の公式情報を優先表示' : '毎朝6時更新')
 const isMobileTopic = computed(() => currentTopic.value === 'mobile')
-const latestFeedDate = computed(() => newsStore.latestFeedDateByTopic[currentTopic.value])
-const feedDiagnostic = computed(() => newsStore.feedDiagnosticsByTopic[currentTopic.value])
+const latestFeedDate = computed(() => isMobileTopic.value ? newsStore.latestFeedDateByTopic.mobile : aiNewsStore.value.feedDate)
+const newsLoading = computed(() => isMobileTopic.value ? newsStore.loading : aiNewsStore.value.loading)
+const newsError = computed(() => isMobileTopic.value ? newsStore.error : aiNewsStore.value.error)
+const aiArticles = computed<NewsArticle[]>(() => aiNewsStore.value.visibleArticles.map(article => ({
+  ...article, topic: 'ai', source: 'rss', url: article.url ?? '', summaryJa: article.summary,
+  thumbnailUrl: article.imageUrl ?? null, score: null,
+  publishedAt: Timestamp.fromMillis(article.publishedAt ? Date.parse(article.publishedAt) : 0),
+  fetchedAt: Timestamp.fromMillis(0), date: aiNewsStore.value.feedDate ?? '',
+})))
+const feedDiagnostic = computed(() => isMobileTopic.value ? newsStore.feedDiagnosticsByTopic.mobile : {
+  state: aiNewsStore.value.error ? 'fetch-failed' : aiNewsStore.value.feed ? 'showing' : 'no-feed',
+  message: aiNewsStore.value.error ?? (aiNewsStore.value.visibleArticles.length > 0
+    ? aiNewsStore.value.loading ? '保存済みの記事を表示しつつ、サーバーの更新を確認しています' : 'ニュースを表示しています'
+    : aiNewsStore.value.feed ? '表示する記事はありません' : 'ニュースはまだ公開されていません'),
+})
 const hasVisibleArticles = computed(() => filteredArticles.value.length > 0
   || importantArticles.value.length > 0 || resolvedActionItems.value.length > 0)
 
@@ -57,6 +72,7 @@ async function refreshFeedForCurrentTopic(): Promise<void> {
   if (authStore.loading || !uid) return
 
   const topic = currentTopic.value
+  if (topic === 'ai') { await aiNewsStore.value.load(uid); return }
   if (activeFeedRefreshByTopic[topic]) {
     await activeFeedRefreshByTopic[topic]
     return
@@ -86,6 +102,7 @@ async function refreshFeedIfDateChanged(): Promise<void> {
   if (authStore.loading || !uid) return
 
   const topic = currentTopic.value
+  if (topic === 'ai') { await aiNewsStore.value.load(uid); return }
   const today = getLocalDateKey()
   if (lastFeedCheckDateByTopic.value[topic] === today) return
 
@@ -93,7 +110,7 @@ async function refreshFeedIfDateChanged(): Promise<void> {
 }
 
 const preferenceFilteredArticles = computed(() => {
-  if (!isMobileTopic.value) return newsStore.articles
+  if (!isMobileTopic.value) return aiArticles.value
 
   return newsStore.articles.filter((article) => {
     const preferredPlatforms = newsStore.preferences.platforms ?? ['ios', 'android']
@@ -111,7 +128,7 @@ const preferenceFilteredArticles = computed(() => {
 })
 
 const filteredArticles = computed(() => {
-  if (!isMobileTopic.value) return newsStore.articles
+  if (!isMobileTopic.value) return aiArticles.value
 
   switch (mobileFilter.value) {
     case 'ios':
@@ -222,6 +239,7 @@ watch(
       mobileFilter.value = 'all'
     }
 
+    if (uid !== previousUid && (topic === 'ai' || previousTopic === 'ai')) aiNewsStore.value.reset()
     if (authLoading || !uid) return
     if (topic === previousTopic && uid === previousUid) return
 
@@ -241,6 +259,7 @@ onUnmounted(() => {
 })
 
 async function handleBookmark(article: NewsArticle): Promise<void> {
+  if (!isMobileTopic.value) { await aiNewsStore.value.readLater(article.id); return }
   try {
     await newsStore.bookmarkArticle(article)
     bookmarkToast.value = true
@@ -251,6 +270,7 @@ async function handleBookmark(article: NewsArticle): Promise<void> {
 }
 
 async function handleDismiss(article: NewsArticle): Promise<void> {
+  if (!isMobileTopic.value) { await aiNewsStore.value.dismiss(article.id); return }
   try {
     actionItemError.value = null
     await newsStore.dismissArticle(article.id, article.url, currentTopic.value)
@@ -260,7 +280,7 @@ async function handleDismiss(article: NewsArticle): Promise<void> {
 }
 
 async function handleArticleClick(article: NewsArticle): Promise<void> {
-  await newsStore.trackClick(article, currentTopic.value)
+  if (isMobileTopic.value) await newsStore.trackClick(article, currentTopic.value)
 }
 
 function actionItemArticle(item: MobileActionItem): NewsArticle {
@@ -318,6 +338,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
       <button
         type="button"
         class="ml-auto inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-white hover:text-gray-900"
+        v-if="isMobileTopic || aiNewsStore.canManage"
         @click="openReadLaterInTodo"
       >
         あとで読むを開く
@@ -352,17 +373,22 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
         </div>
       </div>
 
+      <div v-if="!isMobileTopic" class="px-3 py-2">
+        <button class="text-sm text-blue-600" @click="aiNewsStore.load(authStore.user!.uid, true)">ニュースを更新</button>
+        <p v-if="aiNewsStore.error" role="alert" class="text-sm text-red-600">{{ aiNewsStore.error }}</p>
+        <button v-for="id in aiNewsStore.pendingArticles" :key="id" class="block text-sm text-blue-600" @click="aiNewsStore.retryPending(id)">操作結果が未確認・再試行</button>
+      </div>
       <!-- ローディング -->
-      <div v-if="newsStore.loading && !hasVisibleArticles" class="flex justify-center items-center py-12">
+      <div v-if="newsLoading && !hasVisibleArticles" class="flex justify-center items-center py-12">
         <div class="text-sm text-gray-400">読み込み中...</div>
       </div>
 
       <!-- エラー -->
-      <div v-else-if="newsStore.error && !hasVisibleArticles" class="px-4 py-8 text-center">
-        <p class="text-sm text-red-500">{{ newsStore.error }}</p>
+      <div v-else-if="newsError && !hasVisibleArticles" class="px-4 py-8 text-center">
+        <p class="text-sm text-red-500">{{ newsError }}</p>
         <button
           class="mt-3 text-sm text-blue-500"
-          @click="newsStore.loadTodayFeed(currentTopic)"
+          @click="isMobileTopic ? newsStore.loadTodayFeed(currentTopic) : aiNewsStore.load(authStore.user!.uid, true)"
         >
           再読み込み
         </button>
@@ -389,7 +415,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
       <!-- 記事一覧 -->
       <div v-else class="px-3 py-3 pb-20">
         <p v-if="actionItemError" role="alert" class="mb-3 text-sm text-red-600">{{ actionItemError }}</p>
-        <div v-if="newsStore.loading && hasVisibleArticles" class="pb-2 text-right">
+        <div v-if="newsLoading && hasVisibleArticles" class="pb-2 text-right">
           <p class="text-xs text-gray-400">{{ feedDiagnostic.message }}</p>
         </div>
 
@@ -534,6 +560,8 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
             <NewsCard
               v-if="heroArticles[0]"
               :article="heroArticles[0]"
+              :can-manage="isMobileTopic || aiNewsStore.canManage"
+              :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(heroArticles[0].id)"
               variant="hero"
               class="xl:col-span-2"
               @bookmark="handleBookmark"
@@ -543,6 +571,8 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
             <NewsCard
               v-if="heroArticles[1]"
               :article="heroArticles[1]"
+              :can-manage="isMobileTopic || aiNewsStore.canManage"
+              :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(heroArticles[1].id)"
               variant="featured"
               @bookmark="handleBookmark"
               @dismiss="handleDismiss"
@@ -551,6 +581,8 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
             <NewsCard
               v-if="heroArticles[2]"
               :article="heroArticles[2]"
+              :can-manage="isMobileTopic || aiNewsStore.canManage"
+              :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(heroArticles[2].id)"
               variant="featured"
               @bookmark="handleBookmark"
               @dismiss="handleDismiss"
@@ -566,6 +598,8 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
               v-for="article in sideArticles"
               :key="article.id"
               :article="article"
+              :can-manage="isMobileTopic || aiNewsStore.canManage"
+              :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(article.id)"
               variant="default"
               @bookmark="handleBookmark"
               @dismiss="handleDismiss"
@@ -582,6 +616,8 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
             v-for="article in remainingArticles"
             :key="article.id"
             :article="article"
+              :can-manage="isMobileTopic || aiNewsStore.canManage"
+              :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(article.id)"
             variant="default"
             @bookmark="handleBookmark"
             @dismiss="handleDismiss"
