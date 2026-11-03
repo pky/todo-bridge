@@ -181,8 +181,11 @@ service cloud.firestore {
       allow read, write: if isSelf(userId);
     }
 
-    match /users/{userId}/{document=**} {
-      allow read, write: if isSelf(userId);
+    match /users/{userId}/{collection}/{document=**} {
+      allow read: if isSelf(userId);
+      // 学習イベントと操作結果はサーバーで確定し、本人による改変も防ぐ。
+      allow write: if isSelf(userId)
+        && collection != 'newsActionEvents' && collection != 'newsActionReceipts';
     }
 
     match /spaces/{spaceId} {
