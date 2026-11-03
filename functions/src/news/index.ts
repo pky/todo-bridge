@@ -4,3 +4,5 @@ export {
 } from './mobileNotifications'
 export { widgetNews } from './widgetNewsApi'
 export { widgetReadLater } from './widgetReadLaterApi'
+
+export { newsAction } from './v2/newsActionApi'
