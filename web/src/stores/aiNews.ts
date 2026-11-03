@@ -6,10 +6,20 @@ import { postNewsAction, type NewsActionBody } from '@/services/newsActionClient
 import { parseAiFeedV2, type AiFeedV2 } from '@/utils/newsFeedV2'
 import { canManualRefresh, decideAutoFetch, refreshPeriodKey, type AiNewsFetchState } from '@/utils/aiNewsRefreshPolicy'
 
+type PendingOperation = { operationId: string; payload: NewsActionBody }
+type Action = NewsActionBody['action']
 interface Operation {
   dismissed?: boolean
   readLaterAdded?: boolean
-  pendingOperation?: { operationId: string; payload: NewsActionBody } | null
+  pendingOperation?: PendingOperation | null
+  pendingOperations?: Partial<Record<Action, PendingOperation>>
+}
+function pendingFor(state: Operation | undefined, action: Action): PendingOperation | undefined {
+  return state?.pendingOperations?.[action] ?? (state?.pendingOperation?.payload.action === action ? state.pendingOperation : undefined)
+}
+function isAuthRejection(failure: unknown): boolean {
+  const code = typeof failure === 'object' && failure !== null && 'code' in failure ? failure.code : null
+  return ['auth/user-token-expired', 'auth/user-disabled', 'auth/invalid-user-token', 'auth/user-not-found', 'auth/requires-recent-login'].includes(String(code))
 }
 const emptyFetch = (): AiNewsFetchState => ({ periodKey: '', attemptsInPeriod: 0, lastAttemptAt: null,
   lastSuccessAt: null, feedDate: null, generationPending: false, nextAutoAttemptAt: null })
@@ -36,7 +46,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
   const visibleArticles = computed(() => blocked.value ? [] : (feed.value?.articles ?? []).filter(article => !operations.value[article.id]?.dismissed))
   const feedDate = computed(() => feed.value?.feedDate ?? null)
   const pendingArticles = computed(() => blocked.value ? [] : Object.entries(operations.value)
-    .filter(([, state]) => state.pendingOperation && !sending.value[state.pendingOperation.payload.articleId])
+    .filter(([articleId, state]) => (['dismiss', 'readLater'] as const).some(action => pendingFor(state, action) && !sending.value[`${articleId}:${action}`]))
     .map(([articleId]) => articleId))
 
   function reset() {
@@ -62,7 +72,8 @@ export const useAiNewsStore = defineStore('aiNews', () => {
       }
       const saved = localStorage.getItem(`${key()}:fetch`)
       if (saved) fetchState = { ...emptyFetch(), ...JSON.parse(saved) }
-      if (!feed.value) fetchState = emptyFetch()
+      // 原本が利用できない場合も試行予算は保持し、取得済みの短絡だけ避ける。
+      if (!feed.value) fetchState = { ...fetchState, feedDate: null }
       const ops = localStorage.getItem(`${key()}:ops`)
       if (ops) operations.value = JSON.parse(ops)
     } catch { error.value = '保存済みニュースを読み込めませんでした。' }
@@ -144,7 +155,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
           if (auth.currentUser?.uid !== user) { stopAccess(kind); return }
           try { await refreshToken(user) }
           catch (refreshFailure) {
-            if (valid(session, user)) stopAccess('unauthenticated')
+            if (valid(session, user) && isAuthRejection(refreshFailure)) stopAccess('unauthenticated')
             throw refreshFailure
           }
           if (!valid(session, user)) return
@@ -181,7 +192,8 @@ export const useAiNewsStore = defineStore('aiNews', () => {
       feed.value = parsed.feed
       fetchState = nextState
       error.value = null
-    } catch {
+    } catch (failure) {
+      if (valid(session, user) && isAuthRejection(failure)) stopAccess('unauthenticated')
       if (valid(session, user) && !blocked.value) error.value = 'ニュースを更新できませんでした。保存済みの記事を表示しています。'
     } finally {
       try {
@@ -204,7 +216,11 @@ export const useAiNewsStore = defineStore('aiNews', () => {
     const session = generation
     tokenRefresh = null
     // SDKが保持するclaimを使用し、閲覧権限と管理権限を分ける。
-    const roleTask = checkRole(user, session).catch(() => { if (valid(session, user)) stopAccess('unauthenticated') })
+    const roleTask = checkRole(user, session).catch(failure => {
+      if (!valid(session, user)) return
+      if (isAuthRejection(failure)) stopAccess('unauthenticated')
+      else error.value = 'ニュースの権限を確認できませんでした。通信回復後に再試行してください。'
+    })
     readCache()
     const shouldFetch = manual || decideAutoFetch(fetchState, Date.now()).fetch
     const task = Promise.all([roleTask, shouldFetch ? fetchFeed(user, session, manual) : Promise.resolve()])
@@ -214,27 +230,39 @@ export const useAiNewsStore = defineStore('aiNews', () => {
   }
   function readLaterState(articleId: string): 'idle' | 'sending' | 'added' | 'unknown' {
     const state = operations.value[articleId]
-    if (sending.value[articleId]) return 'sending'
+    if (sending.value[`${articleId}:readLater`]) return 'sending'
     if (state?.readLaterAdded) return 'added'
-    return state?.pendingOperation?.payload.action === 'readLater' ? 'unknown' : 'idle'
+    return pendingFor(state, 'readLater') ? 'unknown' : 'idle'
   }
-  async function retryPending(articleId: string) {
-    const pending = operations.value[articleId]?.pendingOperation
-    if (!pending || !uid || blocked.value || sending.value[articleId]) return
+  async function retryPending(articleId: string, action?: Action) {
+    if (!action) {
+      await Promise.all([retryPending(articleId, 'dismiss'), retryPending(articleId, 'readLater')])
+      return
+    }
+    const state = operations.value[articleId]
+    const pending = pendingFor(state, action)
+    if (!pending || !uid || blocked.value) return
+    const sendingKey = `${articleId}:${pending.payload.action}`
+    if (sending.value[sendingKey]) return
     const user = uid
     const session = generation
-    sending.value[articleId] = true
+    sending.value[sendingKey] = true
     const result = await postNewsAction(pending.payload, { getIdToken: async () => {
       if (auth.currentUser?.uid !== user) throw new Error('ログインが必要です')
       return auth.currentUser.getIdToken()
     } })
     if (!valid(session, user) || auth.currentUser?.uid !== user) return
-    sending.value[articleId] = false
-    const state = operations.value[articleId]
-    if (!state) return
-    if (result.kind === 'auth') { stopAccess('unauthorized'); return }
+    sending.value[sendingKey] = false
+    const current = operations.value[articleId]
+    if (pendingFor(current, pending.payload.action)?.operationId !== pending.operationId) return
+    if (result.kind === 'auth') { stopAccess(result.status === 401 ? 'unauthenticated' : 'unauthorized'); return }
     if (result.kind === 'unknown') { error.value = '操作結果が未確認です。再試行してください。'; return }
-    const updated: Operation = { ...state, pendingOperation: null }
+    const remaining = { ...current?.pendingOperations }
+    // 旧形式の操作も取り込み、別actionの未確定操作を維持する。
+    if (current?.pendingOperation) remaining[current.pendingOperation.payload.action] ??= current.pendingOperation
+    delete remaining[pending.payload.action]
+    const updated: Operation = { ...current, pendingOperations: remaining,
+      pendingOperation: remaining.dismiss ?? remaining.readLater ?? null }
     if (pending.payload.action === 'dismiss') updated.dismissed = result.kind === 'ok'
     else updated.readLaterAdded = result.kind === 'ok'
     try {
@@ -245,7 +273,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
   }
   async function act(articleId: string, action: NewsActionBody['action']) {
     if (!feed.value || !uid || blocked.value || !feed.value.articles.some(article => article.id === articleId)) return
-    if (operations.value[articleId]?.pendingOperation) { await retryPending(articleId); return }
+    if (pendingFor(operations.value[articleId], action)) { await retryPending(articleId, action); return }
     if (action === 'readLater' && operations.value[articleId]?.readLaterAdded) return
     const previous = operations.value
     const operationId = crypto.randomUUID()
@@ -253,10 +281,11 @@ export const useAiNewsStore = defineStore('aiNews', () => {
       revision: feed.value.revision, articleId, action, operationId }
     operations.value = { ...previous, [articleId]: { ...previous[articleId],
       dismissed: action === 'dismiss' || previous[articleId]?.dismissed,
-      pendingOperation: { operationId, payload } } }
+      pendingOperation: previous[articleId]?.pendingOperation ?? { operationId, payload },
+      pendingOperations: { ...previous[articleId]?.pendingOperations, [action]: { operationId, payload } } } }
     try { save(`${key()}:ops`, JSON.stringify(operations.value)) }
     catch { operations.value = previous; error.value = '操作を保存できませんでした。'; return }
-    await retryPending(articleId)
+    await retryPending(articleId, action)
   }
   return { feed, feedDate, visibleArticles, loading, error, canManage, pendingArticles,
     load, reset, dismiss: (id: string) => act(id, 'dismiss'), readLater: (id: string) => act(id, 'readLater'), retryPending, readLaterState }

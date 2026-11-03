@@ -15,8 +15,8 @@ export function refreshPeriodKey(nowMs: number): string {
 export function decideAutoFetch(state: AiNewsFetchState, nowMs: number): { fetch: boolean; nextAttemptAt: number | null } {
   const period = refreshPeriodKey(nowMs)
   const nextPeriod = Date.parse(`${period}T08:00:00+09:00`) + DAY
-  if (state.lastSuccessAt === null || state.feedDate === null) return { fetch: true, nextAttemptAt: null }
-  if (state.feedDate >= period && !state.generationPending) return { fetch: false, nextAttemptAt: nextPeriod }
+  if (state.feedDate !== null && state.feedDate >= period && !state.generationPending) return { fetch: false, nextAttemptAt: nextPeriod }
+  if (state.lastAttemptAt === null) return { fetch: true, nextAttemptAt: null }
   if (state.periodKey !== period || state.attemptsInPeriod === 0) return { fetch: true, nextAttemptAt: null }
   if (state.attemptsInPeriod >= 3) return { fetch: false, nextAttemptAt: nextPeriod }
   const delay = state.attemptsInPeriod === 1 ? 30 * 60_000 : 120 * 60_000

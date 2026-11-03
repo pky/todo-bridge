@@ -24,6 +24,7 @@ export const db = initializeFirestore(app, {
 })
 
 export const storage = getStorage(app)
+storage.maxOperationRetryTime = 30_000
 
 export const functions = getFunctions(app, 'asia-northeast1')
 

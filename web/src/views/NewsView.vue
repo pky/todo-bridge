@@ -33,7 +33,7 @@ const activeFeedRefreshByTopic: Partial<Record<NewsTopic, Promise<void>>> = {}
 
 const currentTopic = computed<NewsTopic>(() => route.name === 'news-mobile' ? 'mobile' : 'ai')
 const pageTitle = computed(() => currentTopic.value === 'mobile' ? 'モバイルニュース' : 'AIニュース')
-const pageSubtitle = computed(() => currentTopic.value === 'mobile' ? 'Apple / Android の公式情報を優先表示' : '毎朝6時更新')
+const pageSubtitle = computed(() => currentTopic.value === 'mobile' ? 'Apple / Android の公式情報を優先表示' : '毎朝8時以降に更新')
 const isMobileTopic = computed(() => currentTopic.value === 'mobile')
 const latestFeedDate = computed(() => isMobileTopic.value ? newsStore.latestFeedDateByTopic.mobile : aiNewsStore.value.feedDate)
 const newsLoading = computed(() => isMobileTopic.value ? newsStore.loading : aiNewsStore.value.loading)
