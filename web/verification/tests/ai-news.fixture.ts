@@ -62,8 +62,9 @@ export const test = base.extend<{ aiDemo: { actions: ActionBody[]; storageGets: 
       ],
     }
     // 画面キャッシュには注入せず、認証付きStorage SDKが読む原本をEmulatorへ置く。
+    // Storage Emulator は application/json の本文を先に読み込みアップロードが終わらないため、octet-stream で送る。
     await emulatorJson(`${storage}/v0/b/demo-rertm.appspot.com/o?name=news%2Fv2%2Fai%2Flatest.json&uploadType=media`, {
-      method: 'POST', headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' }, body: JSON.stringify(feed),
+      method: 'POST', headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/octet-stream' }, body: JSON.stringify(feed),
     })
     if (!app.baseUrl) throw new Error('検証アプリのURLがありません')
     const appOrigin = new URL(app.baseUrl).origin
