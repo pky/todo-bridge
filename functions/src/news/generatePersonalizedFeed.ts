@@ -359,8 +359,8 @@ export async function runGeneratePersonalizedFeed(
       articlesSnap = await db.collection(`topics/${topic}/articles`)
         .where('date', '==', today)
         .get()
-    } catch {
-      console.error('[generatePersonalizedFeed] Article loading failed')
+    } catch (err) {
+      console.error('[generatePersonalizedFeed] Article loading failed', err)
       return { ok: false }
     }
 
@@ -404,9 +404,9 @@ export async function runGeneratePersonalizedFeed(
         ])
         curatorPreferences = preferences.exists ? preferences.data() as NewsPreferences : { keywords: [] }
         curatorInteractions = interactions.docs.map(doc => doc.data())
-      } catch {
+      } catch (err) {
         curatorReady = false
-        console.error('[generatePersonalizedFeed] Curator loading failed')
+        console.error('[generatePersonalizedFeed] Curator loading failed', err)
       }
     }
 

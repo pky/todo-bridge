@@ -430,8 +430,8 @@ export async function runCollectArticles(): Promise<AiCollectResult> {
   if (pendingIds.length > 0) console.error(`[collectArticles:ai] triage pending count=${pendingIds.length}`)
   try {
     await cleanupOldArticles('ai')
-  } catch {
-    console.error('[collectArticles:ai] cleanup failed')
+  } catch (err) {
+    console.error('[collectArticles:ai] cleanup failed', err)
   }
   return { sourcesSucceeded, sourcesFailed }
 }

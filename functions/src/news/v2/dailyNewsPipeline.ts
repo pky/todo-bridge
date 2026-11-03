@@ -16,15 +16,15 @@ interface DailyNewsDependencies {
   generateMobile: () => Promise<unknown>
   sendMobileUrgent: () => Promise<unknown>
   sendMobileDigest: () => Promise<unknown>
-  log: { info: (message: string) => void; warn: (message: string) => void; error: (message: string) => void }
+  log: { info: (message: string) => void; warn: (message: string) => void; error: (message: string, err?: unknown) => void }
 }
 
 export async function runDailyNewsPipeline(deps: DailyNewsDependencies): Promise<void> {
   const step = async (name: string, run: () => Promise<unknown>): Promise<void> => {
     try {
       await run()
-    } catch {
-      deps.log.error(`[dailyNewsPipeline] ${name} failed`)
+    } catch (err) {
+      deps.log.error(`[dailyNewsPipeline] ${name} failed`, err)
     }
   }
   const mobile = async () => {
@@ -51,9 +51,9 @@ export async function runDailyNewsPipeline(deps: DailyNewsDependencies): Promise
           await step('recoverPublish', deps.recoverPublish)
           return
         }
-      } catch {
+      } catch (err) {
         canPublish = false
-        deps.log.warn('[dailyNewsPipeline] daily probe unavailable')
+        deps.log.error('[dailyNewsPipeline] daily probe unavailable', err)
       } finally {
         if (timer !== undefined) clearTimeout(timer)
       }
@@ -64,8 +64,8 @@ export async function runDailyNewsPipeline(deps: DailyNewsDependencies): Promise
     try {
       collected = (await deps.collectAi()).sourcesSucceeded >= 1
       if (!collected) deps.log.warn('[dailyNewsPipeline] AI collection unavailable')
-    } catch {
-      deps.log.error('[dailyNewsPipeline] AI collection failed')
+    } catch (err) {
+      deps.log.error('[dailyNewsPipeline] AI collection failed', err)
     }
     const learningCutoffAt = deps.now()
     try {
@@ -74,8 +74,8 @@ export async function runDailyNewsPipeline(deps: DailyNewsDependencies): Promise
       if (canPublish && collected && generated.ok) {
         await step('publish', () => deps.publish(generated.curatorArticles, learningCutoffAt))
       }
-    } catch {
-      deps.log.error('[dailyNewsPipeline] AI generation failed')
+    } catch (err) {
+      deps.log.error('[dailyNewsPipeline] AI generation failed', err)
     }
   }
   await Promise.all([mobile(), ai()])
