@@ -39,7 +39,7 @@ export function parseGitHubTrending(html: string): RawArticle[] {
   return articles
 }
 
-export async function fetchGitHubTrending(): Promise<RawArticle[]> {
+export async function fetchGitHubTrending(onSuccess?: () => void): Promise<RawArticle[]> {
   try {
     const { data } = await axios.get<string>(TRENDING_URL, {
       timeout: TIMEOUT_MS,
@@ -49,6 +49,7 @@ export async function fetchGitHubTrending(): Promise<RawArticle[]> {
       },
     })
 
+    onSuccess?.()
     const articles = parseGitHubTrending(data)
     console.log(`[github-trending] fetched ${articles.length} repositories`)
     return articles

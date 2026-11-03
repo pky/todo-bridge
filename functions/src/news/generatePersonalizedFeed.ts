@@ -4,6 +4,7 @@ import { summarizeAiArticles, getAiSummaryConfig, type SummaryInput } from './ai
 import {
   AI_REUSE_MAX_AGE_MS,
   AI_SUMMARY_VERSION,
+  AI_TRIAGE_VERSION,
   calcAiBaseScore,
   isAiFeedCandidate,
   isDisplayableAiArticle,
@@ -25,6 +26,7 @@ import {
 import type { NewsArticle, NewsPreferences, NewsTopic } from './types'
 import { selectCuratorAiFeed } from './v2/curatorSelection'
 import type { GenerateAiFeedResult } from './v2/aiStaticFeedPipeline'
+import { evaluateCuratorSummaryOutcome, type CuratorSummarySkipReason } from './v2/curatorSummaryOutcome'
 
 type NewsArticleWithId = NewsArticle & { id: string }
 
@@ -367,6 +369,12 @@ export async function runGeneratePersonalizedFeed(
       return { ok: true, curatorArticles: [] }
     }
 
+    // 未判定の途中結果を正常な空配信へ変換しない。v1保存は継続する。
+    const curatorTriageReady = !options.curatorUid || articlesSnap.docs.every(doc => {
+      const article = doc.data() as NewsArticle
+      return article.triageStatus === 'done' && article.triageVersion === AI_TRIAGE_VERSION
+    })
+
     // URL重複を排除
     const seenUrls = new Set<string>()
     const articles = articlesSnap.docs
@@ -492,6 +500,14 @@ export async function runGeneratePersonalizedFeed(
       })
       : []
 
+    const curatorSelectedIds = new Set<string>()
+    const curatorSkipped = new Map<string, CuratorSummarySkipReason>()
+    const trackCuratorSelection = () => {
+      const selected = selectCurator()
+      for (const item of selected) curatorSelectedIds.add(item.article.id)
+      return selected
+    }
+
     // 4. 選ばれた記事のうち未確認のものを確認（2段目）し、不採用が出たら選び直して補充する。
     // 要約に失敗してもフィード保存は止めない。
     const updates = new Map<string, Partial<NewsArticle>>()
@@ -510,7 +526,7 @@ export async function runGeneratePersonalizedFeed(
 
       for (let round = 0; round < AI_SUMMARY_MAX_ROUNDS; round++) {
         const wanted = new Map<string, RankedFeedItem>()
-        for (const selected of [...feedUsers.map(select), selectCurator()]) {
+        for (const selected of [...feedUsers.map(select), trackCuratorSelection()]) {
           for (const item of selected) {
             const existing = wanted.get(item.article.id)
             if (needsAiSummary(item.article) && (!existing || item.displayScore > existing.displayScore)) {
@@ -527,6 +543,7 @@ export async function runGeneratePersonalizedFeed(
           const now = Date.now()
           const reusable = await findReusableSummary(topic, article, now)
           if (reusable?.status === 'generated') {
+            curatorSkipped.delete(article.id)
             applyUpdate(article, {
               titleJa: reusable.titleJa, summaryJa: reusable.summaryJa, summaryVersion: AI_SUMMARY_VERSION,
               summaryStatus: 'generated', summarySource: reusable.summarySource, summarizedAt: reusable.summarizedAt,
@@ -534,6 +551,7 @@ export async function runGeneratePersonalizedFeed(
             continue
           }
           if (reusable?.status === 'rejected') {
+            curatorSkipped.delete(article.id)
             applyUpdate(article, { summaryVersion: AI_SUMMARY_VERSION, summaryStatus: 'rejected', summarizedAt: reusable.summarizedAt })
             continue
           }
@@ -541,6 +559,7 @@ export async function runGeneratePersonalizedFeed(
           if (!evidence) {
             // 取得失敗と根拠なしを区別できないため rejected で固定せず、今回だけ飛ばす
             skippedIds.add(article.id)
+            curatorSkipped.set(article.id, 'no-evidence')
             continue
           }
           inputs.push({ id: article.id, title: article.title, sourceName: article.sourceName, text: evidence.text, basis: evidence.basis })
@@ -548,6 +567,9 @@ export async function runGeneratePersonalizedFeed(
         }
 
         const sendable = inputs.slice(0, Math.max(AI_SUMMARY_DAILY_LIMIT - sentCount, 0))
+        for (const input of inputs.slice(sendable.length)) {
+          curatorSkipped.set(input.id, 'summary-unavailable')
+        }
         if (sendable.length === 0) {
           if (inputs.length === 0) continue
           break
@@ -562,16 +584,23 @@ export async function runGeneratePersonalizedFeed(
           const summary = outcome.results.get(input.id)
           if (!article) continue
           if (summary?.include === false) {
+            curatorSkipped.delete(article.id)
             applyUpdate(article, { summaryVersion: AI_SUMMARY_VERSION, summaryStatus: 'rejected', summarizedAt: Date.now() })
           } else if (summary && summary.summaryJa.trim() !== '') {
+            curatorSkipped.delete(article.id)
             applyUpdate(article, {
               titleJa: summary.titleJa, summaryJa: summary.summaryJa, summaryVersion: AI_SUMMARY_VERSION,
               summaryStatus: 'generated', summarySource: input.basis ?? 'description', summarizedAt: Date.now(),
             })
           } else {
             skippedIds.add(article.id)
+            curatorSkipped.set(article.id, 'summary-unavailable')
           }
         }
+      }
+      // ラウンド・日次上限で未送信の候補も、正常な空フィードとは区別する。
+      for (const { article } of trackCuratorSelection()) {
+        if (needsAiSummary(article)) curatorSkipped.set(article.id, 'summary-unavailable')
       }
     } catch (err) {
       summaryReady = false
@@ -611,7 +640,8 @@ export async function runGeneratePersonalizedFeed(
     } catch (err) {
       console.error('[generatePersonalizedFeed] Failed to mark shared articles as feed eligible:', err)
     }
-    return curatorReady && summaryReady
+    const curatorOutcome = evaluateCuratorSummaryOutcome({ selectedIds: [...curatorSelectedIds], skipped: curatorSkipped })
+    return curatorReady && curatorTriageReady && summaryReady && curatorOutcome.ok
       ? { ok: true, curatorArticles: selectCurator().filter(item => isDisplayableAiArticle(item.article)).map(item => item.article) }
       : { ok: false }
 }
