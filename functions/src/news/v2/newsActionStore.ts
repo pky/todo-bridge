@@ -1,8 +1,9 @@
-import { createHash } from 'crypto'
 import { readLaterTaskId, type ReadLaterStoreDeps } from '../widgetReadLaterStore'
 import type { AiFeedDaily } from './publishAiFeed'
+import { newsActionEventId, type NewsAction } from './newsActionEventId'
 
-export type NewsAction = 'dismiss' | 'readLater'
+export { newsActionEventId, type NewsAction } from './newsActionEventId'
+
 export interface NewsActionResult {
   operationId: string
   articleId: string
@@ -22,9 +23,6 @@ export interface NewsActionInput {
   article: AiFeedDaily['actionArticles'][number]
 }
 export class NewsActionConflictError extends Error {}
-export function newsActionEventId(uid: string, topic: string, articleId: string, action: NewsAction): string {
-  return createHash('sha256').update(`${uid}:${topic}:${articleId}:${action}`).digest('hex').slice(0, 32)
-}
 
 export function createNewsActionStore({ db, serverTimestamp }: ReadLaterStoreDeps): {
   findReceipt(uid: string, operationId: string): Promise<StoredReceipt | null>

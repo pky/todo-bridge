@@ -214,7 +214,7 @@ test('競合: 固定IDのリストが既にあって create が失敗しタス�
 
   const retry = db.commitOps[1]
   assert.equal(listOps(retry, base).length, 0, 'やり直しでリストを create してはいけない')
-  assert.equal(retry.length, 2)
+  assert.equal(retry.length, 3)
   const task = retry.find(w => w.path === taskPath)
   assert.ok(task, 'やり直しでタスクを書いていない')
   assert.equal(task.op, 'create')
@@ -222,6 +222,9 @@ test('競合: 固定IDのリストが既にあって create が失敗しタス�
   const interaction = retry.find(w => w.path === `users/${UID}/newsInteractions/ai_${ARTICLE.id}`)
   assert.ok(interaction, 'やり直しで interaction を書いていない')
   assert.equal(interaction.op, 'set')
+  const event = retry.find(w => w.path.startsWith(`users/${UID}/newsActionEvents/`))
+  assert.ok(event, 'やり直しで学習イベントを書いていない')
+  assert.equal(event.op, 'create')
 
   const lookups = db.calls.filter(c => c.kind === 'where' && c.path === `${base}/lists`)
   assert.equal(lookups.length, 2, 'やり直しで名前検索をしていない')

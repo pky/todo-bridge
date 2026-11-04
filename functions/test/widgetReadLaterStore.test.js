@@ -353,17 +353,17 @@ test('url が null のときは newsInteractions に url キーを含めない',
   })
 })
 
-test('リスト作成・タスク作成・interaction の set は1回の commit にまとまる', async () => {
+test('リスト作成・タスク作成・interaction の set・学習イベント作成は1回の commit にまとまる', async () => {
   const deps = createDeps()
   await add(deps)
-  assert.deepEqual(deps.db.commits, [3])
+  assert.deepEqual(deps.db.commits, [4])
 })
 
-test('既存リストを使う場合も commit は1回（タスクと interaction の2書き込み）', async () => {
+test('既存リストを使う場合も commit は1回（タスクと interaction と学習イベントの3書き込み）', async () => {
   const base = basePath(UID, false)
   const deps = createDeps({ collections: { [`${base}/lists`]: [{ id: 'list-readlater', data: { name: LIST_NAME, position: 1 } }] } })
   await add(deps)
-  assert.deepEqual(deps.db.commits, [2])
+  assert.deepEqual(deps.db.commits, [3])
 })
 
 test('commit が {code: 6} で reject したら already を返す', async () => {

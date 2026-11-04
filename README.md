@@ -100,7 +100,7 @@ AI ニュースの呼び出し上限は日本時間の日付ごとに判定と�
 
 AI 固定フィードの生成には `NEWS_CURATOR_UID` で選別に使う管理ユーザーを指定します。`NEWS_FEED_BUCKET` はフィードの保存先 Storage バケット名で、省略時は既定のバケットを使います。 `NEWS_ACTION_ALLOWED_ORIGINS` は管理操作 API の CORS で許可するオリジンをカンマ区切りで指定します。
 
-AI 固定フィードは管理ユーザーの直近90日の操作イベントから学習し、後で読むを +2、興味なしを -1 として30日で重みを半減します。クリックと表示回数は使いません。旧履歴の移行には、`functions` で `npm run build` 後に `node scripts/migrate-news-action-events.js --uid <uid> --project <project-id>` を実行します。既定は件数確認だけの dry-run で、`--apply` を付けた場合だけ新規イベントを保存します。既存イベントと旧履歴は上書き・削除しません。Emulator を使う場合は `FIRESTORE_EMULATOR_HOST` を設定します。本番では `newsActionEvents` の複合 index を事前にデプロイして構築完了を待ち、dry-run の確認、`--apply` による移行を済ませてから、イベント学習への切替をデプロイしてください。切替のデプロイ直後に移行スクリプトをもう一度 `--apply` 付きで実行し、最初の移行から切替までに旧経路で記録された操作を回収してください。
+AI 固定フィードは管理ユーザーの直近90日の操作イベントから学習し、後で読むを +2、興味なしを -1 として30日で重みを半減します。iOS の「あとで読む」も学習に使います。クリックと表示回数は使いません。旧履歴の移行には、`functions` で `npm run build` 後に `node scripts/migrate-news-action-events.js --uid <uid> --project <project-id>` を実行します。既定は件数確認だけの dry-run で、`--apply` を付けた場合だけ新規イベントを保存します。既存イベントと旧履歴は上書き・削除しません。Emulator を使う場合は `FIRESTORE_EMULATOR_HOST` を設定します。本番では `newsActionEvents` の複合 index を事前にデプロイして構築完了を待ち、dry-run の確認、`--apply` による移行を済ませてから、イベント学習への切替をデプロイしてください。切替のデプロイ直後に移行スクリプトをもう一度 `--apply` 付きで実行し、最初の移行から切替までに旧経路で記録された操作を回収してください。
 
 ### 開発コマンド
 

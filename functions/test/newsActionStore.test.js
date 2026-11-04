@@ -180,14 +180,30 @@ for (const spaced of [false, true]) test(`v1 addReadLaterTaskの既存タスク�
   const seed = spaced ? { [`users/${UID}/memberships/fictional-membership`]: {} } : {}
   const ctx = setup(seed)
   await addReadLaterTask(ctx.deps, UID, 'ai', ARTICLE)
+  assert.ok(ctx.db.docs.has(eventPath('readLater')), 'iOSのあとで読むが学習イベントを書く')
   const base = spaced ? `spaces/personal_${UID}` : `users/${UID}`
   const original = structuredClone(ctx.db.docs.get(`${base}/tasks/${taskId}`)); const count = ctx.db.writes.length
   const value = input({ action: 'readLater', article: { ...ARTICLE, title: '更新された架空記事' } })
   assert.deepEqual(await ctx.store.apply(value), expected(value, 'already'))
   assert.deepEqual(ctx.db.docs.get(`${base}/tasks/${taskId}`), original)
   const added = ctx.db.writes.slice(count)
-  assert.deepEqual(added.map(w => w.path).sort(), [eventPath('readLater'), receiptPath()].sort())
+  assert.deepEqual(added.map(w => w.path), [receiptPath()])
   assert.ok(!added.some(w => w.path.includes('/newsInteractions/')))
+})
+// iOSのあとで読むが学習イベントを書く前に作られたタスク(eventが無い)へのweb操作。
+for (const spaced of [false, true]) test(`既存タスクがありeventが無い状態のreadLaterはalreadyでeventとreceiptを作りタスクを変えない: memberships=${spaced}`, async () => {
+  const base = spaced ? `spaces/personal_${UID}` : `users/${UID}`
+  const task = { title: '架空の既存タスク', listId: 'readlater_list', fictional: 'preserved' }
+  const seed = { ...(spaced ? { [`users/${UID}/memberships/fictional-membership`]: { spaceId: `personal_${UID}` } } : {}), [`${base}/tasks/${taskId}`]: task }
+  const ctx = setup(seed)
+  assert.ok(!ctx.db.docs.has(eventPath('readLater')))
+  const value = input({ action: 'readLater' })
+  assert.deepEqual(await ctx.store.apply(value), expected(value, 'already'))
+  assert.ok(ctx.db.docs.has(eventPath('readLater')), '既存タスクがあってもeventを作る')
+  assert.ok(ctx.db.docs.has(receiptPath()))
+  assert.deepEqual(ctx.db.docs.get(`${base}/tasks/${taskId}`), task)
+  assert.deepEqual(ctx.db.writes.map(w => w.path).sort(), [eventPath('readLater'), receiptPath()].sort())
+  assertAtomic(ctx.db); noInteractions(ctx.db)
 })
 test('dismissとreadLaterは独立イベントになり、旧interactionを変更しない', async () => {
   const path = `users/${UID}/newsInteractions/ai_${ARTICLE.id}`
