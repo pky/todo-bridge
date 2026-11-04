@@ -60,7 +60,7 @@ export interface NewsArticle {
   mobileSummary?: MobileSummary
   score: number | null
   displayScore?: number
-  publishedAt: Timestamp
+  publishedAt: Timestamp | null
   fetchedAt: Timestamp
   date: string
 }
