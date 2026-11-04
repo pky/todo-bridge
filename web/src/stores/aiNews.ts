@@ -6,6 +6,8 @@ import { postNewsAction, type NewsActionBody } from '@/services/newsActionClient
 import { parseAiFeedV2, type AiFeedV2 } from '@/utils/newsFeedV2'
 import { canManualRefresh, decideAutoFetch, refreshPeriodKey, type AiNewsFetchState } from '@/utils/aiNewsRefreshPolicy'
 
+const UNCONFIRMED_MESSAGE = '操作結果が未確認です。再試行してください。'
+const REJECTED_PREFIX = '操作できませんでした'
 type PendingOperation = { operationId: string; payload: NewsActionBody }
 type Action = NewsActionBody['action']
 type FetchLease = { kind: 'acquired'; owner: string } | { kind: 'storage-unavailable' } | { kind: 'skipped' }
@@ -309,7 +311,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
     sending.value[sendingKey] = false
     if (pendingFor(operations.value[articleId], action)?.operationId !== pending.operationId) return
     if (result.kind === 'auth') { stopAccess(result.status === 401 ? 'unauthenticated' : 'unauthorized'); return }
-    if (result.kind === 'unknown') { error.value = '操作結果が未確認です。再試行してください。'; return }
+    if (result.kind === 'unknown') { error.value = UNCONFIRMED_MESSAGE; return }
     try {
       await updateOperation(user, session, articleId, current => {
         // 遅い応答で、別タブが保存した新しい同actionの操作を消さない。
@@ -319,7 +321,13 @@ export const useAiNewsStore = defineStore('aiNews', () => {
         else updated.readLaterAdded = result.kind === 'ok'
         return updated
       })
-      if (valid(session, user) && !blocked.value) error.value = null
+      if (valid(session, user) && !blocked.value) {
+        if (result.kind === 'rejected') {
+          error.value = result.status === 404 || result.status === 410
+            ? `${REJECTED_PREFIX}。記事が古い可能性があるため、ニュースを更新してください。`
+            : `${REJECTED_PREFIX}。時間をおいて再度お試しください。`
+        } else if (error.value === UNCONFIRMED_MESSAGE || error.value?.startsWith(REJECTED_PREFIX)) error.value = null
+      }
     } catch { if (valid(session, user)) error.value = '操作結果を保存できませんでした。再試行してください。' }
   }
   async function act(articleId: string, action: NewsActionBody['action']) {
