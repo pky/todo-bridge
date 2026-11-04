@@ -19,7 +19,7 @@ Codex と Claude Code の共通ルール。CLAUDE.md はこのファイルを読
 - テストは Firebase Emulator を使う。ルールテストはデモ用プロジェクト `demo-rertm` で動く（`test:rules` に設定済み）
 - Firebase / GCP / Gemini / Google Calendar のキー、トークン、secret、環境変数の値をコードやファイルに書かない
 - Google Calendar の refresh token はサーバー側だけで扱い、ログやテスト出力に出さない
-- エージェントはデプロイ、rm、git reset、ブランチ削除、本番データに触れる操作を実行しない。人が行う。git push とマージ後の片付けは「Git と PR」「Worktrunk による作業分離」に従う
+- エージェントはデプロイ、rm、git reset、ブランチ削除、本番データに触れる操作を実行しない。人が行う。git push、PR、マージ後の片付けは各エージェントの全体設定に従う
 
 ## 公開安全性
 このリポジトリは公開されている。
@@ -61,9 +61,8 @@ functions/:
 - `feature/<topic>` ブランチで作業し、PR 経由で `main` にマージする。`main` に直接コミットしない。開発者は1人で、マージは本人が行う
 - コミットメッセージは簡潔な1行の日本語
 - force push と履歴の書き換えはしない
-- push 前のローカルゲート: リポジトリ直下の `npm run verify` は毎回通す。PR を開く前の push では、差分を書いていないレビュアー（Claude の fresh-reviewer エージェントまたは Codex CLI review）のレビューも通す。PR を開いた後、Codex の指摘を直すだけの push は `npm run verify` だけでよい。ドキュメント（Markdown など、ビルドやテストに関わらない文書）だけの変更は、`npm run verify` もレビューも省略してよい。通ってから Claude Code が `feature/<topic>` に push し、PR を作成する。Codex は push しない
-- PR を作った後は、Claude Code が CI と Codex の自動レビューを5分ごとに確認し、指摘を直すか、直さない理由を返信する。マージは人が行う。マージ可能と報告したあとも確認を続け、マージされたら「Worktrunk による作業分離」の手順で片付ける
-- PR のゲート: GitHub Actions（.github/workflows/ci.yml）が web の lint / type-check / test:run / build、functions の lint / test、Firestore ルールテストを実行する。PR 作成時に Codex の自動レビューが走る。CI が green で、Codex の指摘がすべて修正済みか理由付きで回答済みのときだけマージする
+- push 前の検証コマンドは、リポジトリ直下の `npm run verify`。push、PR、レビュー対応、マージ後の片付けの流れは、各エージェントの全体設定に従う
+- CI: GitHub Actions（.github/workflows/ci.yml）が web の lint / type-check / test:run / build、functions の lint / test、Firestore ルールテストを実行する
 - ローカル専用ファイルの引き継ぎは、次の Worktrunk 運用に従う
 
 ## Worktrunk による作業分離
@@ -75,7 +74,6 @@ functions/:
 - `node_modules` を worktree 間の共有 symlink にしない。必要なパッケージだけ、lockfile に対応した独立コピーまたは `npm ci` で準備する
 - 非公開の `doc/ROADMAP.md` と `progress.txt` は元の worktree を正本とする。コピーは参照用とし、並行作業から正本を同時更新したり、コピーで正本を上書きしたりしない。計画・履歴の更新は元の worktree で担当者を1人に絞って行う
 - 完了時はブランチ・worktree の場所・変更内容・検証結果と未検証範囲を報告する。既存の禁止操作に加え、`wt merge` は実行しない。統合は人が行う
-- PR がマージされたら、Claude Code が `gh pr view <番号> --json state` で `MERGED` を確かめ、先に元の worktree の `main` を `git pull --ff-only` で最新にしてから、元の worktree から `wt remove <branch> --foreground --no-hooks --format json` で worktree とローカルブランチを消す。`main` が古いままだと、squash マージしたブランチを未マージと判定して残すため、順番を守る。`-f` と `-D` は付けない。未コミットの変更があると何も消さずに止まる。出力の `branch_outcome` が `deleted` でなければ、worktree は消えてもブランチは残っているので、`-D` で消さずに理由を報告する。マージ前の worktree とブランチは消さない
 
 ## コードレビュー
 上から順に見る。指摘には必ず失敗シナリオ（どの入力でどう壊れるか）を付ける。
