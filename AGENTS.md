@@ -75,7 +75,7 @@ functions/:
 - `node_modules` を worktree 間の共有 symlink にしない。必要なパッケージだけ、lockfile に対応した独立コピーまたは `npm ci` で準備する
 - 非公開の `doc/ROADMAP.md` と `progress.txt` は元の worktree を正本とする。コピーは参照用とし、並行作業から正本を同時更新したり、コピーで正本を上書きしたりしない。計画・履歴の更新は元の worktree で担当者を1人に絞って行う
 - 完了時はブランチ・worktree の場所・変更内容・検証結果と未検証範囲を報告する。既存の禁止操作に加え、`wt merge` は実行しない。統合は人が行う
-- PR がマージされたら、Claude Code が `gh pr view <番号> --json state` で `MERGED` を確かめ、元の worktree から `wt remove <branch> --foreground --no-hooks` で worktree とローカルブランチを消し、元の worktree の `main` を `git pull --ff-only` で最新にする。`-f` と `-D` は付けない。未コミットの変更や `main` に入っていないコミットがあって止まったら、消さずに理由を報告する。マージ前の worktree とブランチは消さない
+- PR がマージされたら、Claude Code が `gh pr view <番号> --json state` で `MERGED` を確かめ、先に元の worktree の `main` を `git pull --ff-only` で最新にしてから、元の worktree から `wt remove <branch> --foreground --no-hooks --format json` で worktree とローカルブランチを消す。`main` が古いままだと、squash マージしたブランチを未マージと判定して残すため、順番を守る。`-f` と `-D` は付けない。未コミットの変更があると何も消さずに止まる。出力の `branch_outcome` が `deleted` でなければ、worktree は消えてもブランチは残っているので、`-D` で消さずに理由を報告する。マージ前の worktree とブランチは消さない
 
 ## コードレビュー
 上から順に見る。指摘には必ず失敗シナリオ（どの入力でどう壊れるか）を付ける。
