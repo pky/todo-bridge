@@ -201,6 +201,10 @@ const goBack = () => {
 }
 
 const logoutError = ref('')
+// logout 中は App.vue が router-view を外すため、再表示後も残るストアの error を優先して表示する
+const viewerLogoutError = computed(() =>
+  authStore.accessMode === 'newsViewer' ? authStore.error || logoutError.value : '',
+)
 
 async function handleLogout(): Promise<void> {
   logoutError.value = ''
@@ -366,7 +370,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
       >
         ログアウト
       </button>
-      <p v-if="logoutError" role="alert" class="w-full text-right text-xs text-red-600">{{ logoutError }}</p>
+      <p v-if="viewerLogoutError" role="alert" class="w-full text-right text-xs text-red-600">{{ viewerLogoutError }}</p>
     </header>
 
     <!-- 記事リスト -->
