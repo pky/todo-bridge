@@ -42,7 +42,7 @@ const newsError = computed(() => isMobileTopic.value ? newsStore.error : aiNewsS
 const aiArticles = computed<NewsArticle[]>(() => aiNewsStore.value.visibleArticles.map(article => ({
   ...article, topic: 'ai', source: 'rss', url: article.url ?? '', summaryJa: article.summary,
   thumbnailUrl: article.imageUrl ?? null, score: null,
-  publishedAt: Timestamp.fromMillis(article.publishedAt ? Date.parse(article.publishedAt) : 0),
+  publishedAt: article.publishedAt ? Timestamp.fromMillis(Date.parse(article.publishedAt)) : null,
   fetchedAt: Timestamp.fromMillis(0), date: aiNewsStore.value.feedDate ?? '',
 })))
 const feedDiagnostic = computed(() => isMobileTopic.value ? newsStore.feedDiagnosticsByTopic.mobile : {
