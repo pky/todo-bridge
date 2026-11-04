@@ -63,7 +63,17 @@ functions/:
 - force push と履歴の書き換えはしない
 - push 前のローカルゲート: リポジトリ直下の `npm run verify` は毎回通す。PR を開く前の push では、差分を書いていないレビュアー（Claude の fresh-reviewer エージェントまたは Codex CLI review）のレビューも通す。PR を開いた後、Codex の指摘を直すだけの push は `npm run verify` だけでよい。通ってから人が push する
 - PR のゲート: GitHub Actions（.github/workflows/ci.yml）が web の lint / type-check / test:run / build、functions の lint / test、Firestore ルールテストを実行する。PR 作成時に Codex の自動レビューが走る。CI が green で、Codex の指摘がすべて修正済みか理由付きで回答済みのときだけマージする
-- ローカル専用ファイル（web/.env.local、.firebaserc、doc/、progress.txt など）は .worktreeinclude に列挙してあり、git worktree にコピーされる
+- ローカル専用ファイルの引き継ぎは、次の Worktrunk 運用に従う
+
+## Worktrunk による作業分離
+- 独立した実装・不具合修正の項目ごとに、Worktrunk（`wt`）で `feature/<topic>` ブランチと worktree を用意する。同じ項目の続きは既存 worktree を再利用する。調査・説明だけの作業や軽微な文書修正では、新規 worktree を必須にしない
+- 開始時に `git worktree list` と `git status --short --branch` を確認し、担当するブランチ・worktree・ベースを決める。既存の未コミット変更を別項目へ混ぜない。依存する項目は直列に進めるか、依存元をベースとして明示する
+- 新規作成は `wt switch --create feature/<topic> --base <base> --no-hooks`、既存への移動は `wt switch feature/<topic> --no-hooks` を使う。各コマンドの作業ディレクトリは担当 worktree の絶対パスで指定する。hook の追加・承認や `--clobber` は行わない
+- 新しい worktree で AI を起動・委譲するときは、作成元 worktree の最新 `AGENTS.md` も読ませ、未コミットの運用ルールも引き継ぐ。委譲先には担当項目・ブランチ・worktree の絶対パス・変更範囲を明示する。同じ worktree を複数エージェントで同時編集しない
+- ローカル専用ファイルは `.worktreeinclude` の対象だけを引き継ぐ。まず `wt step copy-ignored --from <source-branch> --to <target-branch> --require-include --dry-run` で対象を確認し、同じコマンドから `--dry-run` を外してコピーする。`--force` を付けず、コピー先の既存ファイルを上書きしない。`.env` などの値は表示しない
+- `node_modules` を worktree 間の共有 symlink にしない。必要なパッケージだけ、lockfile に対応した独立コピーまたは `npm ci` で準備する
+- 非公開の `doc/ROADMAP.md` と `progress.txt` は元の worktree を正本とする。コピーは参照用とし、並行作業から正本を同時更新したり、コピーで正本を上書きしたりしない。計画・履歴の更新は元の worktree で担当者を1人に絞って行う
+- 完了時はブランチ・worktree の場所・変更内容・検証結果と未検証範囲を報告する。既存の禁止操作に加え、`wt merge` と `wt remove` は実行せず、統合と片付けは人が行う
 
 ## コードレビュー
 上から順に見る。指摘には必ず失敗シナリオ（どの入力でどう壊れるか）を付ける。
