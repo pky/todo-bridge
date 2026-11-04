@@ -53,6 +53,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
   let tokenRefresh: Promise<string> | null = null
   const savingOperations = new Set<string>()
   let fetchState = emptyFetch()
+  let hasMemoryOnlyCache = false
   const key = () => `todobridge:aiNewsV2:v1:${uid}:ai`
   const valid = (session: number, user: string) => generation === session && uid === user
   const visibleArticles = computed(() => blocked.value ? [] : (feed.value?.articles ?? []).filter(article => !operations.value[article.id]?.dismissed))
@@ -69,6 +70,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
     sending.value = {}
     savingOperations.clear()
     fetchState = emptyFetch()
+    hasMemoryOnlyCache = false
     blocked.value = false
     canManage.value = false
     loading.value = false
@@ -78,15 +80,18 @@ export const useAiNewsStore = defineStore('aiNews', () => {
   }
   function readCache() {
     try {
-      const raw = localStorage.getItem(key())
-      if (raw) {
-        const parsed = parseAiFeedV2(new TextEncoder().encode(raw))
-        if (parsed.ok) feed.value = parsed.feed
+      // 保存できていない記事と試行状態を、古い永続キャッシュで巻き戻さない。
+      if (!hasMemoryOnlyCache) {
+        const raw = localStorage.getItem(key())
+        if (raw) {
+          const parsed = parseAiFeedV2(new TextEncoder().encode(raw))
+          if (parsed.ok) feed.value = parsed.feed
+        }
+        const saved = localStorage.getItem(`${key()}:fetch`)
+        if (saved) fetchState = { ...emptyFetch(), ...JSON.parse(saved) }
+        // 原本が利用できない場合も試行予算は保持し、取得済みの短絡だけ避ける。
+        if (!feed.value) fetchState = { ...fetchState, feedDate: null }
       }
-      const saved = localStorage.getItem(`${key()}:fetch`)
-      if (saved) fetchState = { ...emptyFetch(), ...JSON.parse(saved) }
-      // 原本が利用できない場合も試行予算は保持し、取得済みの短絡だけ避ける。
-      if (!feed.value) fetchState = { ...fetchState, feedDate: null }
       const ops = localStorage.getItem(`${key()}:ops`)
       if (ops) {
         try { operations.value = JSON.parse(ops) }
@@ -167,6 +172,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
       // 失敗時にも試行予算を記録する。成功時刻は完全保存後だけ進める。
       if (!memoryOnly) save(`${cacheKey}:fetch`, JSON.stringify(attempted))
       fetchState = attempted
+      if (memoryOnly) hasMemoryOnlyCache = true
       loading.value = true
       if (typeof auth.authStateReady === 'function') await auth.authStateReady()
       if (!valid(session, user)) return
@@ -223,6 +229,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
       }
       feed.value = parsed.feed
       fetchState = nextState
+      hasMemoryOnlyCache = false
       error.value = null
     } catch (failure) {
       if (valid(session, user) && isAuthRejection(failure)) stopAccess('unauthenticated')
