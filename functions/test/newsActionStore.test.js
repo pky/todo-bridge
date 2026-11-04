@@ -180,13 +180,14 @@ for (const spaced of [false, true]) test(`v1 addReadLaterTaskの既存タスク�
   const seed = spaced ? { [`users/${UID}/memberships/fictional-membership`]: {} } : {}
   const ctx = setup(seed)
   await addReadLaterTask(ctx.deps, UID, 'ai', ARTICLE)
+  assert.ok(ctx.db.docs.has(eventPath('readLater')), 'iOSのあとで読むが学習イベントを書く')
   const base = spaced ? `spaces/personal_${UID}` : `users/${UID}`
   const original = structuredClone(ctx.db.docs.get(`${base}/tasks/${taskId}`)); const count = ctx.db.writes.length
   const value = input({ action: 'readLater', article: { ...ARTICLE, title: '更新された架空記事' } })
   assert.deepEqual(await ctx.store.apply(value), expected(value, 'already'))
   assert.deepEqual(ctx.db.docs.get(`${base}/tasks/${taskId}`), original)
   const added = ctx.db.writes.slice(count)
-  assert.deepEqual(added.map(w => w.path).sort(), [eventPath('readLater'), receiptPath()].sort())
+  assert.deepEqual(added.map(w => w.path), [receiptPath()])
   assert.ok(!added.some(w => w.path.includes('/newsInteractions/')))
 })
 test('dismissとreadLaterは独立イベントになり、旧interactionを変更しない', async () => {
