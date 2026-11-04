@@ -12,12 +12,16 @@ const isEmulator = import.meta.env.VITE_USE_EMULATOR === 'true'
 
 export const useAuthStore = defineStore('auth', () => {
   const ACCESS_VALIDATION_TIMEOUT_MS = 5000
+  const INITIAL_CLAIMS_TIMEOUT_MS = 10000
   const user = ref<AppUser | null>(null)
   const loading = ref(true)
   const error = ref<string | null>(null)
   const accessValidatedUid = ref<string | null>(null)
+  const accessMode = ref<'full' | 'newsViewer' | null>(null)
+  let validationGeneration = 0
   let validatingUid: string | null = null
   let accessValidationPromise: Promise<void> | null = null
+  let initialClaimsPromise: Promise<void> | null = null
 
   const isAuthenticated = computed(() => !!user.value)
 
@@ -39,11 +43,19 @@ export const useAuthStore = defineStore('auth', () => {
     return error instanceof Error ? error : new Error('ログインに失敗しました')
   }
 
-  async function validateAuthorizedUser(firebaseUser: User | null) {
+  async function validateAuthorizedUser(
+    firebaseUser: User | null,
+    allowInitialDisplay = false,
+    onInitialClaimsResolved?: () => void,
+  ) {
     if (!firebaseUser) {
-      await clearSearchCacheSafely()
+      validationGeneration += 1
+      validatingUid = null
+      accessValidationPromise = null
       user.value = null
       accessValidatedUid.value = null
+      accessMode.value = null
+      await clearSearchCacheSafely()
       return
     }
 
@@ -53,19 +65,51 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     if (accessValidationPromise && validatingUid === firebaseUser.uid) {
-      await accessValidationPromise
+      const validationPromise = accessValidationPromise
+      await initialClaimsPromise
+      onInitialClaimsResolved?.()
+      await validationPromise
       return
     }
 
+    if (user.value?.uid !== firebaseUser.uid) {
+      user.value = null
+      accessValidatedUid.value = null
+      accessMode.value = null
+    }
+
+    const generation = ++validationGeneration
     validatingUid = firebaseUser.uid
+    let resolveInitialClaims!: () => void
+    initialClaimsPromise = new Promise<void>((resolve) => { resolveInitialClaims = resolve })
     accessValidationPromise = (async () => {
       try {
-        await validateCurrentUserAccessApi()
+        let isNewsViewer = false
+        try {
+          const token = await firebaseUser.getIdTokenResult()
+          isNewsViewer = token.claims.newsRole === 'viewer'
+        } catch {
+          // claimを確認できない場合は従来の利用許可検証へ進む。
+        } finally {
+          resolveInitialClaims()
+          onInitialClaimsResolved?.()
+        }
+        // ログアウト・UID切替前のclaimや利用許可の応答を破棄する。
+        if (generation !== validationGeneration) return
+        accessMode.value = isNewsViewer ? 'newsViewer' : 'full'
+        if (!isNewsViewer) {
+          // claim確認後に限り、従来の初期表示と利用許可検証を並行する。
+          if (allowInitialDisplay) user.value = mapFirebaseUser(firebaseUser)
+          await validateCurrentUserAccessApi()
+        }
+        if (generation !== validationGeneration) return
         user.value = mapFirebaseUser(firebaseUser)
         accessValidatedUid.value = firebaseUser.uid
       } catch (error) {
+        if (generation !== validationGeneration) return
         user.value = null
         accessValidatedUid.value = null
+        accessMode.value = null
         await signOut(auth)
         throw formatAccessError(error)
       }
@@ -74,7 +118,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       await accessValidationPromise
     } finally {
-      if (validatingUid === firebaseUser.uid) {
+      if (generation === validationGeneration) {
         validatingUid = null
         accessValidationPromise = null
       }
@@ -87,19 +131,37 @@ export const useAuthStore = defineStore('auth', () => {
       return
     }
 
-    // 初期表示は先に進めつつ、権限チェックは裏で継続する
-    user.value = mapFirebaseUser(firebaseUser)
-
-    const validationPromise = validateAuthorizedUser(firebaseUser).catch((validationError) => {
+    let resolveClaims!: () => void
+    const claimsResolved = new Promise<void>((resolve) => { resolveClaims = resolve })
+    const validationPromise = validateAuthorizedUser(firebaseUser, true, resolveClaims).catch((validationError) => {
       error.value = validationError instanceof Error ? validationError.message : 'ログインに失敗しました'
       throw validationError
     })
 
-    const timeoutPromise = new Promise<void>((resolve) => {
-      window.setTimeout(() => resolve(), ACCESS_VALIDATION_TIMEOUT_MS)
-    })
+    let claimsTimeout: number | undefined
+    try {
+      // 初期化だけを10秒で解放し、同じclaim取得と利用許可判定は継続する。
+      const claimsReady = await Promise.race([
+        Promise.race([claimsResolved, validationPromise]).then(() => true),
+        new Promise<boolean>((resolve) => {
+          claimsTimeout = window.setTimeout(() => resolve(false), INITIAL_CLAIMS_TIMEOUT_MS)
+        }),
+      ])
+      if (!claimsReady) return
+    } finally {
+      window.clearTimeout(claimsTimeout)
+    }
 
-    await Promise.race([validationPromise, timeoutPromise])
+    // claim待機を終えてから、従来の利用許可検証に5秒の猶予を与える。
+    let validationTimeout: number | undefined
+    try {
+      const timeoutPromise = new Promise<void>((resolve) => {
+        validationTimeout = window.setTimeout(() => resolve(), ACCESS_VALIDATION_TIMEOUT_MS)
+      })
+      await Promise.race([validationPromise, timeoutPromise])
+    } finally {
+      window.clearTimeout(validationTimeout)
+    }
   }
 
   function initAuth() {
@@ -174,6 +236,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
+    validationGeneration += 1
+    validatingUid = null
+    accessValidationPromise = null
     loading.value = true
     error.value = null
     try {
@@ -181,6 +246,7 @@ export const useAuthStore = defineStore('auth', () => {
       await signOut(auth)
       user.value = null
       accessValidatedUid.value = null
+      accessMode.value = null
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'ログアウトに失敗しました'
       throw e
@@ -194,6 +260,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading,
     error,
     isAuthenticated,
+    accessMode,
     initAuth,
     loginWithGoogle,
     loginForLocalDevelopment,

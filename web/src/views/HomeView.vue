@@ -67,8 +67,10 @@ const isDetailOpen = computed(() => isMobile.value && tasksStore.selectedTaskId 
 const isDesktopDetailExpanded = ref(false)
 const selectedTaskName = computed(() => tasksStore.selectedTask?.name ?? 'タスク一覧')
 
-async function reloadHomeData() {
-  if (!authStore.isAuthenticated) return
+async function reloadHomeData(): Promise<boolean> {
+  const userId = authStore.user?.uid
+  const isCurrentUser = () => !!userId && authStore.user?.uid === userId && authStore.accessMode !== 'newsViewer'
+  if (!isCurrentUser()) return false
 
   const currentSequence = ++reloadSequence
   listsStore.unsubscribe()
@@ -76,11 +78,13 @@ async function reloadHomeData() {
 
   try {
     await listsStore.subscribe()
-    if (currentSequence !== reloadSequence) return
+    if (currentSequence !== reloadSequence || !isCurrentUser()) return false
     tasksStore.subscribe()
+    return true
   } catch (error) {
-    if (currentSequence !== reloadSequence) return
+    if (currentSequence !== reloadSequence || !isCurrentUser()) return false
     console.error('[HomeView] Reload error:', error)
+    return true
   }
 }
 
@@ -91,7 +95,7 @@ async function applyRequestedNavigationTarget() {
   const personalSpaceId = buildPersonalSpaceId(authStore.user.uid)
   if (!spaceStore.useLegacyPath && spaceStore.currentSpaceId !== personalSpaceId) {
     spaceStore.selectSpace(personalSpaceId)
-    await reloadHomeData()
+    if (!await reloadHomeData()) return
   }
 
   const readLaterList = listsStore.lists.find((list) => list.name === 'あとで読む')
@@ -134,7 +138,7 @@ onMounted(async () => {
   checkMobile()
   window.addEventListener('resize', checkMobile)
   document.addEventListener('visibilitychange', handleVisibilityChange)
-  await reloadHomeData()
+  if (!await reloadHomeData()) return
   documentsStore.subscribe()
   calendarStore.subscribe()
   await applyRequestedNavigationTarget()
@@ -181,7 +185,7 @@ watch(
     }
 
     if (!initialized) return
-    await reloadHomeData()
+    if (!await reloadHomeData()) return
     documentsStore.subscribe()
     calendarStore.subscribe()
     documentTaskLinksStore.subscribe(tasksStore.selectedTaskId)

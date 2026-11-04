@@ -19,6 +19,7 @@ import {
   calcPreferenceMultiplier,
   extractKeywords,
   learnKeywordPreferences,
+  LEARNING_WINDOW_DAYS,
   type InteractionSignal,
   type LearnedKeywords,
 } from './interactionLearning'
@@ -98,6 +99,18 @@ function isJapanese(text: string): boolean {
 }
 
 const db = admin.firestore()
+
+export async function loadCuratorActionEvents(
+  database: FirebaseFirestore.Firestore, uid: string, cutoff: Date
+): Promise<Record<string, unknown>[]> {
+  const snapshot = await database.collection(`users/${uid}/newsActionEvents`)
+    .where('topic', '==', 'ai')
+    .where('receivedAt', '>=', new Date(cutoff.getTime() - LEARNING_WINDOW_DAYS * 86400000))
+    .where('receivedAt', '<=', cutoff)
+    .get()
+  return snapshot.docs.map(doc => doc.data())
+}
+
 interface ClickData {
   titleEn?: string
   summaryJa?: string
@@ -382,16 +395,16 @@ export async function runGeneratePersonalizedFeed(
 
     let curatorReady = true
     let curatorPreferences: NewsPreferences = { keywords: [] }
-    let curatorInteractions: Record<string, unknown>[] = []
+    let curatorEvents: Record<string, unknown>[] = []
     const learningCutoffMs = (options.learningCutoffAt ?? new Date()).getTime()
     if (options.curatorUid) {
       try {
-        const [preferences, interactions] = await Promise.all([
+        const [preferences, events] = await Promise.all([
           db.doc(`users/${options.curatorUid}/newsPreferences/${topic}`).get(),
-          db.collection(`users/${options.curatorUid}/newsInteractions`).get(),
+          loadCuratorActionEvents(db, options.curatorUid, new Date(learningCutoffMs)),
         ])
         curatorPreferences = preferences.exists ? preferences.data() as NewsPreferences : { keywords: [] }
-        curatorInteractions = interactions.docs.map(doc => doc.data())
+        curatorEvents = events
       } catch (err) {
         curatorReady = false
         console.error('[generatePersonalizedFeed] Curator loading failed', err)
@@ -484,7 +497,7 @@ export async function runGeneratePersonalizedFeed(
     const selectCurator = () => options.curatorUid && curatorReady
       ? selectCuratorAiFeed({
         articles: articles.filter(article => !skippedIds.has(article.id)),
-        preferences: curatorPreferences, interactions: curatorInteractions, learningCutoffMs, scoreLimits,
+        preferences: curatorPreferences, events: curatorEvents, learningCutoffMs, scoreLimits,
       })
       : []
 
