@@ -19,7 +19,7 @@ Codex と Claude Code の共通ルール。CLAUDE.md はこのファイルを読
 - テストは Firebase Emulator を使う。ルールテストはデモ用プロジェクト `demo-rertm` で動く（`test:rules` に設定済み）
 - Firebase / GCP / Gemini / Google Calendar のキー、トークン、secret、環境変数の値をコードやファイルに書かない
 - Google Calendar の refresh token はサーバー側だけで扱い、ログやテスト出力に出さない
-- エージェントは git push、デプロイ、rm、git reset、ブランチ削除、本番データに触れる操作を実行しない。人が行う
+- エージェントはデプロイ、rm、git reset、ブランチ削除、本番データに触れる操作を実行しない。人が行う。git push は「Git と PR」に従う
 
 ## 公開安全性
 このリポジトリは公開されている。
@@ -58,10 +58,11 @@ functions/:
 - 残る回帰リスク
 
 ## Git と PR
-- `feature/<topic>` ブランチで作業し、PR 経由で `main` にマージする。`main` に直接コミットしない。開発者は1人で、PR の作成、レビュー、マージも本人が行う
+- `feature/<topic>` ブランチで作業し、PR 経由で `main` にマージする。`main` に直接コミットしない。開発者は1人で、マージは本人が行う
 - コミットメッセージは簡潔な1行の日本語
 - force push と履歴の書き換えはしない
-- push 前のローカルゲート: リポジトリ直下の `npm run verify` は毎回通す。PR を開く前の push では、差分を書いていないレビュアー（Claude の fresh-reviewer エージェントまたは Codex CLI review）のレビューも通す。PR を開いた後、Codex の指摘を直すだけの push は `npm run verify` だけでよい。通ってから人が push する
+- push 前のローカルゲート: リポジトリ直下の `npm run verify` は毎回通す。PR を開く前の push では、差分を書いていないレビュアー（Claude の fresh-reviewer エージェントまたは Codex CLI review）のレビューも通す。PR を開いた後、Codex の指摘を直すだけの push は `npm run verify` だけでよい。通ってから Claude Code が `feature/<topic>` に push し、PR を作成する。Codex は push しない
+- PR を作った後は、Claude Code が CI と Codex の自動レビューを10分ごとに確認し、指摘を直すか、直さない理由を返信する。マージは人が行う
 - PR のゲート: GitHub Actions（.github/workflows/ci.yml）が web の lint / type-check / test:run / build、functions の lint / test、Firestore ルールテストを実行する。PR 作成時に Codex の自動レビューが走る。CI が green で、Codex の指摘がすべて修正済みか理由付きで回答済みのときだけマージする
 - ローカル専用ファイルの引き継ぎは、次の Worktrunk 運用に従う
 
