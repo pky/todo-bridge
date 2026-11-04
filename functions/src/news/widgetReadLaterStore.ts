@@ -1,5 +1,6 @@
 import { createHash } from 'crypto'
 import type { WidgetTopic } from './widgetFeed'
+import { newsActionEventId } from './v2/newsActionEventId'
 
 /** 「あとで読む」に入れる記事。タイトルと概要と原文URLは、サーバーが記事のデータから決める。 */
 export interface ReadLaterArticle {
@@ -49,8 +50,8 @@ export async function addReadLaterTask(
 }
 
 /**
- * リストの ID は固定なので、初回利用の同時リクエストはリストの create が衝突する。
- * 衝突してタスクが無ければ、1回だけやり直す。やり直しでは名前検索で既存のリストが見つかる。
+ * リストや学習イベントの同時作成で create が衝突してタスクが無ければ、1回だけやり直す。
+ * やり直しでは既存のリストとイベントを読み直し、作成済みのものは使う。
  */
 async function addReadLaterTaskAttempt(
   deps: ReadLaterStoreDeps,
@@ -63,6 +64,10 @@ async function addReadLaterTaskAttempt(
   const base = await resolveBasePath(db, uid)
   const spaceId = `personal_${uid}`
   const taskPath = `${base}/tasks/${readLaterTaskId(topic, article.id)}`
+  const event = topic === 'ai'
+    ? db.doc(`users/${uid}/newsActionEvents/${newsActionEventId(uid, 'ai', article.id, 'readLater')}`)
+    : undefined
+  const existingEvent = event ? await event.get() : undefined
   const batch = db.batch()
 
   const found = await db.collection(`${base}/lists`).where('name', '==', LIST_NAME).limit(1).get()
@@ -120,6 +125,19 @@ async function addReadLaterTaskAttempt(
     ...(article.summaryJa !== undefined ? { summaryJa: article.summaryJa } : {}),
     ...(article.tags !== undefined ? { tags: article.tags } : {}),
   }, { merge: true })
+
+  if (event && !existingEvent?.exists) batch.create(event, {
+    topic: 'ai',
+    articleId: article.id,
+    action: 'readLater',
+    receivedAt: serverTimestamp(),
+    title: article.title,
+    summary: article.summary,
+    source: 'widget',
+    ...(article.url !== null ? { url: article.url } : {}),
+    ...(article.titleEn !== undefined ? { titleEn: article.titleEn } : {}),
+    ...(article.tags !== undefined ? { tags: article.tags } : {}),
+  })
 
   try {
     await batch.commit()
