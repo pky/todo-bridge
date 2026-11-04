@@ -61,9 +61,9 @@ export function extractMainContent(html: string): string {
 }
 
 // 1回のフェッチで本文とOGP画像を両方取得
-export async function scrapeArticle(url: string, options?: { signal?: AbortSignal }): Promise<{ content: string; ogImage: string | null }> {
+export async function scrapeArticle(url: string, options?: { signal?: AbortSignal }): Promise<{ content: string; ogImage: string | null; fetchFailed: boolean }> {
   try {
-    const { data } = await axios.get<string>(url, {
+    const { data, status } = await axios.get<string>(url, {
       timeout: TIMEOUT_MS,
       ...(options?.signal ? { signal: options.signal } : {}),
       headers: {
@@ -71,6 +71,7 @@ export async function scrapeArticle(url: string, options?: { signal?: AbortSigna
       },
       maxContentLength: 500_000,
     })
+    if (status < 200 || status >= 300) return { content: '', ogImage: null, fetchFailed: true }
 
     const $ = cheerio.load(data)
 
@@ -83,9 +84,9 @@ export async function scrapeArticle(url: string, options?: { signal?: AbortSigna
 
     const content = extractMainContentFromDom($)
 
-    return { content, ogImage }
+    return { content, ogImage, fetchFailed: false }
   } catch {
-    return { content: '', ogImage: null }
+    return { content: '', ogImage: null, fetchFailed: true }
   }
 }
 

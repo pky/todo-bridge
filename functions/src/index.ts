@@ -16,6 +16,7 @@ export {
   saveMobileNotificationPreferences,
   widgetNews,
   widgetReadLater,
+  newsAction,
 } from './news'
 
 // 日次処理は Scheduler 無料枠に収めるため3本に集約する

@@ -22,6 +22,7 @@ export interface NewsArticle {
   title: string
   description: string       // 収集時の生テキスト（英語記事は判定・要約前のスコアリングに使用）
   content?: string          // スクレイピングした本文の主要部分
+  contentFetchFailed?: boolean // 本文取得の障害を正常な空本文と区別する内部情報
   titleJa?: string          // Claude翻訳後に設定（日本語記事はtitleと同じ）
   summaryJa?: string        // Claude要約後に設定（日本語記事はdescriptionから）
   contentJa?: string        // 本文主要部分の日本語訳

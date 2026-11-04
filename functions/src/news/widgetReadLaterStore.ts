@@ -29,7 +29,7 @@ async function resolveBasePath(db: FirebaseFirestore.Firestore, uid: string): Pr
   return memberships.empty ? `users/${uid}` : `spaces/personal_${uid}`
 }
 
-function readLaterTaskId(topic: WidgetTopic, articleId: string): string {
+export function readLaterTaskId(topic: WidgetTopic, articleId: string): string {
   const digest = createHash('sha256').update(`${topic}:${articleId}`).digest('hex')
   return `readlater_${digest.slice(0, 32)}`
 }

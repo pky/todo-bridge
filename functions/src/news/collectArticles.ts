@@ -164,6 +164,7 @@ export function planAiArticleProcessing(
 ): { reuse: Array<{ raw: RawArticle; source: NewsArticle }>; fresh: RawArticle[] } {
   const doneByUrl = new Map<string, NewsArticle[]>()
   for (const article of existing) {
+    if (article.contentFetchFailed === true) continue
     if (article.triageStatus !== 'done' || article.triageVersion !== AI_TRIAGE_VERSION) continue
     if (typeof article.triagedAt !== 'number' || now - article.triagedAt > AI_REUSE_MAX_AGE_MS) continue
     const key = normalizeUrl(article.url)
@@ -210,7 +211,7 @@ function buildAiBase(raw: RawArticle, today: string, fetchedAt: admin.firestore.
 
 export function buildTriagedAiArticle(
   raw: RawArticle, content: string, result: TriageResult | null,
-  today: string, fetchedAt: admin.firestore.Timestamp
+  today: string, fetchedAt: admin.firestore.Timestamp, contentFetchFailed?: boolean
 ): NewsArticle {
   const base = buildAiBase(raw, today, fetchedAt)
   if (!result) return { ...base, triageStatus: 'pending' }
@@ -226,6 +227,7 @@ export function buildTriagedAiArticle(
     tags: result.tags,
     triagedAt: fetchedAt.toMillis(),
     ...(result.relevant && content ? { content } : {}),
+    ...(typeof contentFetchFailed === 'boolean' ? { contentFetchFailed } : {}),
   }
 }
 
@@ -245,7 +247,8 @@ export function buildReusedAiArticle(
     ...(source.developerValue ? { developerValue: source.developerValue, readReason: source.readReason ?? '' } : {}),
     ...(source.importance ? { importance: source.importance } : {}),
     ...(source.tags ? { tags: source.tags } : {}),
-    ...(source.content !== undefined ? { content: source.content } : {}),
+    ...(source.content !== undefined && (source.contentFetchFailed !== true || source.content.trim()) ? { content: source.content } : {}),
+    ...(source.contentFetchFailed === false ? { contentFetchFailed: false } : {}),
     ...(source.titleJa !== undefined ? { titleJa: source.titleJa } : {}),
     ...(source.summaryJa !== undefined ? { summaryJa: source.summaryJa } : {}),
     ...(source.summaryVersion ? { summaryVersion: source.summaryVersion } : {}),
@@ -277,12 +280,13 @@ function parseGithubRepoPath(url: string): string | null {
 }
 
 async function fetchGithubReadme(repoPath: string, options: { signal?: AbortSignal }): Promise<string> {
-  const { data } = await axios.get<string>(`https://raw.githubusercontent.com/${repoPath}/HEAD/README.md`, {
+  const { data, status } = await axios.get<string>(`https://raw.githubusercontent.com/${repoPath}/HEAD/README.md`, {
     timeout: 8000,
     responseType: 'text',
     maxContentLength: 500_000,
     ...(options.signal ? { signal: options.signal } : {}),
   })
+  if (status < 200 || status >= 300) throw new Error('READMEの取得に失敗しました')
   return typeof data === 'string' ? data : ''
 }
 
@@ -292,33 +296,35 @@ export async function scrapeAiArticles(
     deadlineAt?: number; now?: () => number; scrape?: typeof scrapeArticle
     fetchReadme?: (repoPath: string, options: { signal?: AbortSignal }) => Promise<string>
   } = {}
-): Promise<Array<{ raw: RawArticle; content: string }>> {
+): Promise<Array<{ raw: RawArticle; content: string; fetchFailed: boolean }>> {
   const now = deps.now ?? Date.now
   const deadlineAt = deps.deadlineAt ?? now() + AI_SCRAPE_DEADLINE_MS
   const scrape = deps.scrape ?? scrapeArticle
   const fetchReadme = deps.fetchReadme ?? fetchGithubReadme
-  const results: Array<{ raw: RawArticle; content: string }> = []
+  const results: Array<{ raw: RawArticle; content: string; fetchFailed: boolean }> = []
   for (let i = 0; i < raws.length; i += 5) {
     const batch = raws.slice(i, i + 5)
     const scraped = await Promise.all(batch.map(async (raw) => {
       const remaining = deadlineAt - now()
-      if (remaining <= 0) return { raw, content: '' }
+      if (remaining <= 0) return { raw, content: '', fetchFailed: true }
       const signal = AbortSignal.timeout(Math.max(remaining, 1))
       try {
-        const { content, ogImage } = await scrape(raw.url, { signal })
+        const { content, ogImage, fetchFailed = false } = await scrape(raw.url, { signal })
         const scrapedRaw = { raw: { ...raw, thumbnailUrl: raw.thumbnailUrl ?? ogImage } }
-        if (content || raw.source !== 'github') return { ...scrapedRaw, content }
+        if (content || raw.source !== 'github') return { ...scrapedRaw, content, fetchFailed }
         const repoPath = parseGithubRepoPath(raw.url)
+        if (!repoPath) return { ...scrapedRaw, content, fetchFailed }
         const readmeRemaining = deadlineAt - now()
-        if (!repoPath || readmeRemaining <= 0) return { ...scrapedRaw, content }
+        if (readmeRemaining <= 0) return { ...scrapedRaw, content, fetchFailed: true }
         try {
           const readme = await fetchReadme(repoPath, { signal: AbortSignal.timeout(Math.max(readmeRemaining, 1)) })
-          return { ...scrapedRaw, content: cleanReadmeText(readme).slice(0, AI_README_MAX_LENGTH) }
+          const readmeContent = cleanReadmeText(readme).slice(0, AI_README_MAX_LENGTH)
+          return { ...scrapedRaw, content: readmeContent, fetchFailed: !readmeContent && fetchFailed }
         } catch {
-          return { ...scrapedRaw, content }
+          return { ...scrapedRaw, content, fetchFailed: true }
         }
       } catch {
-        return { raw, content: '' }
+        return { raw, content: '', fetchFailed: true }
       }
     }))
     results.push(...scraped)
@@ -355,14 +361,38 @@ export async function cleanupOldArticles(topic: NewsTopic): Promise<void> {
   }
 }
 
-export async function runCollectArticles(): Promise<void> {
+export interface AiCollectResult {
+  sourcesSucceeded: number
+  sourcesFailed: number
+}
+
+export function isAiCollectUsable(result: AiCollectResult): boolean {
+  return result.sourcesSucceeded >= 1
+}
+
+export async function runCollectArticles(): Promise<AiCollectResult> {
   console.log('[collectArticles] Starting...')
 
   // 1. 各ソースから記事を収集
+  let sourcesSucceeded = 0
+  let sourcesFailed = 0
+  const collectSource = async (name: string, run: (onSuccess: () => void) => Promise<RawArticle[]>): Promise<RawArticle[]> => {
+    try {
+      let succeeded = false
+      const articles = await run(() => { succeeded = true })
+      if (succeeded) sourcesSucceeded++
+      else sourcesFailed++
+      return articles
+    } catch (err) {
+      sourcesFailed++
+      console.error(`[${name}]`, err)
+      return []
+    }
+  }
   const [hnArticles, rssArticles, githubArticles] = await Promise.all([
-    fetchHNArticles().catch(e => { console.error('[hn]', e); return [] as RawArticle[] }),
-    fetchRSSArticles(10).catch(e => { console.error('[rss]', e); return [] as RawArticle[] }),
-    fetchGitHubTrending().catch(e => { console.error('[github]', e); return [] as RawArticle[] }),
+    collectSource('hn', onSuccess => fetchHNArticles(onSuccess)),
+    collectSource('rss', onSuccess => fetchRSSArticles(10, onSuccess)),
+    collectSource('github', onSuccess => fetchGitHubTrending(onSuccess)),
   ])
 
   console.log(`[collectArticles] Sources: hn=${hnArticles.length}, rss=${rssArticles.length}, github=${githubArticles.length}`)
@@ -398,13 +428,18 @@ export async function runCollectArticles(): Promise<void> {
     const fetched = scrapedById.get(ref.id)
     return {
       ref,
-      data: buildTriagedAiArticle(fetched?.raw ?? raw, fetched?.content ?? '', results.get(ref.id) ?? null, today, fetchedAt),
+      data: buildTriagedAiArticle(fetched?.raw ?? raw, fetched?.content ?? '', results.get(ref.id) ?? null, today, fetchedAt, fetched?.fetchFailed),
     }
   }))
   const relevant = relevantItems.length
   console.log(`[collectArticles:ai] reused=${reuse.length} fresh=${fresh.length} relevant=${relevant} irrelevant=${results.size - relevant} pending=${pendingIds.length} requestCount=${requestCount}`)
   if (pendingIds.length > 0) console.error(`[collectArticles:ai] triage pending count=${pendingIds.length}`)
-  await cleanupOldArticles('ai')
+  try {
+    await cleanupOldArticles('ai')
+  } catch (err) {
+    console.error('[collectArticles:ai] cleanup failed', err)
+  }
+  return { sourcesSucceeded, sourcesFailed }
 }
 
 const APPLE_NEWS_HOST = 'developer.apple.com'
