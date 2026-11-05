@@ -10,8 +10,8 @@ const { toasts } = useToast()
       <div
         v-for="toast in toasts"
         :key="toast.id"
-        class="text-white rounded-lg shadow-lg px-4 py-3 text-sm pointer-events-auto"
-        :class="toast.type === 'error' ? 'bg-red-600' : 'bg-slate-800'"
+        class="text-on-solid rounded-lg shadow-lg px-4 py-3 text-sm pointer-events-auto"
+        :class="toast.type === 'error' ? 'bg-danger' : 'bg-inverse'"
       >
         {{ toast.message }}
       </div>

@@ -528,17 +528,17 @@ function formatTimeForInput(timestamp: Timestamp | null): string {
 }
 
 const priorityOptions = [
-  { value: 1, label: '高', color: 'bg-red-500' },
-  { value: 2, label: '中', color: 'bg-orange-500' },
-  { value: 3, label: '低', color: 'bg-blue-500' },
-  { value: 4, label: 'なし', color: 'bg-gray-300' },
+  { value: 1, label: '高', color: 'bg-priority-high' },
+  { value: 2, label: '中', color: 'bg-priority-medium' },
+  { value: 3, label: '低', color: 'bg-priority-low' },
+  { value: 4, label: 'なし', color: 'bg-surface-stronger' },
 ]
 </script>
 
 <template>
   <aside class="h-full flex flex-col overflow-x-hidden">
     <!-- 未選択状態 -->
-    <div v-if="!task" class="flex items-center justify-center h-full text-gray-500 text-sm">
+    <div v-if="!task" class="flex items-center justify-center h-full text-fg-subtle text-sm">
       タスクを選択してください
     </div>
 
@@ -546,10 +546,10 @@ const priorityOptions = [
     <template v-else>
       <!-- ヘッダー（デスクトップのみ） -->
       <div v-if="showHeader" class="flex items-center justify-between mb-3 sm:mb-4">
-        <h2 class="font-semibold text-gray-700 text-sm sm:text-base">詳細</h2>
+        <h2 class="font-semibold text-fg-secondary text-sm sm:text-base">詳細</h2>
         <button
           @click="tasksStore.selectTask(null)"
-          class="text-gray-400 hover:text-gray-600"
+          class="text-fg-faint hover:text-fg-muted"
         >
           ✕
         </button>
@@ -559,7 +559,7 @@ const priorityOptions = [
       <button
         v-if="parentTask"
         @click="handleBackToParent"
-        class="flex items-center gap-1 text-xs sm:text-sm text-blue-600 hover:text-blue-800 mb-3 sm:mb-4 truncate"
+        class="flex items-center gap-1 text-xs sm:text-sm text-accent hover:text-accent-strong mb-3 sm:mb-4 truncate"
       >
         <span>←</span>
         <span class="truncate">{{ parentTask.name }}</span>
@@ -571,8 +571,8 @@ const priorityOptions = [
           @click="handleToggleComplete"
           class="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded text-xs sm:text-sm font-medium transition-colors"
           :class="task.completed
-            ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            : 'bg-green-600 text-white hover:bg-green-700'"
+            ? 'bg-surface-alt text-fg-secondary hover:bg-surface-strong'
+            : 'bg-success text-on-solid hover:bg-success-hover'"
         >
           {{ task.completed ? '未完了に戻す' : '完了にする' }}
         </button>
@@ -581,9 +581,9 @@ const priorityOptions = [
       <div class="flex-1 overflow-y-auto overflow-x-hidden space-y-3 sm:space-y-4">
         <!-- タスク名 -->
         <div>
-          <label class="block text-xs text-gray-500 mb-1">タスク名</label>
+          <label class="block text-xs text-fg-subtle mb-1">タスク名</label>
           <div v-if="!editingName" @click="editingName = true" class="cursor-pointer">
-            <p class="text-gray-800 hover:bg-gray-50 px-2 py-1 rounded -mx-2 text-sm sm:text-base break-words">
+            <p class="text-fg hover:bg-surface-hover px-2 py-1 rounded -mx-2 text-sm sm:text-base break-words">
               {{ task.name }}
             </p>
           </div>
@@ -594,7 +594,7 @@ const priorityOptions = [
               @keyup.escape="editingName = false"
               @blur="handleUpdateName"
               type="text"
-              class="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+              class="w-full px-2 py-1 border border-line-strong rounded focus:outline-none focus:ring-2 focus:ring-accent text-sm sm:text-base"
               autofocus
             />
           </div>
@@ -602,11 +602,11 @@ const priorityOptions = [
 
         <!-- リスト -->
         <div>
-          <label class="block text-xs text-gray-500 mb-1">リスト</label>
+          <label class="block text-xs text-fg-subtle mb-1">リスト</label>
           <select
             :value="task.listId"
             @change="handleUpdateList"
-            class="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+            class="w-full px-2 py-1 border border-line-strong rounded focus:outline-none focus:ring-2 focus:ring-accent text-sm sm:text-base"
           >
             <option v-for="list in listsStore.lists" :key="list.id" :value="list.id">
               {{ list.name }}
@@ -616,7 +616,7 @@ const priorityOptions = [
 
         <!-- 優先度 -->
         <div>
-          <label class="block text-xs text-gray-500 mb-1">優先度</label>
+          <label class="block text-xs text-fg-subtle mb-1">優先度</label>
           <div class="flex gap-1 sm:gap-2">
             <button
               v-for="option in priorityOptions"
@@ -625,8 +625,8 @@ const priorityOptions = [
               class="px-2 sm:px-3 py-1 rounded text-xs sm:text-sm transition-colors"
               :class="[
                 task.priority === option.value
-                  ? `${option.color} text-white`
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? `${option.color} text-on-solid`
+                  : 'bg-surface-alt text-fg-muted hover:bg-surface-strong'
               ]"
             >
               {{ option.label }}
@@ -636,26 +636,26 @@ const priorityOptions = [
 
         <!-- 期限 -->
         <div>
-          <label class="block text-xs text-gray-500 mb-1">期限</label>
+          <label class="block text-xs text-fg-subtle mb-1">期限</label>
           <!-- 日付 + 時刻 + クリア -->
           <div class="flex items-center gap-1.5">
             <input
               type="date"
               :value="formatDateForInput(task.dueDate)"
               @change="handleUpdateDueDateInput"
-              class="flex-1 min-w-0 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              class="flex-1 min-w-0 px-2 py-1 border border-line-strong rounded focus:outline-none focus:ring-2 focus:ring-accent text-sm"
             />
             <input
               v-if="task.dueDate && !task.allDay"
               type="time"
               :value="editDueTime"
               @change="handleUpdateDueTimeInput"
-              class="w-24 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              class="w-24 px-2 py-1 border border-line-strong rounded focus:outline-none focus:ring-2 focus:ring-accent text-sm"
             />
             <button
               v-if="task.dueDate"
               @click="handleClearDueDate"
-              class="px-1.5 py-1 text-gray-400 hover:text-red-500 flex-shrink-0 text-xs"
+              class="px-1.5 py-1 text-fg-faint hover:text-danger flex-shrink-0 text-xs"
               title="期限をクリア"
             >
               ✕
@@ -667,15 +667,15 @@ const priorityOptions = [
               type="checkbox"
               :checked="task.allDay"
               @change="handleToggleAllDay"
-              class="rounded text-blue-600 focus:ring-blue-500"
+              class="rounded text-accent focus:ring-accent"
             />
-            <span class="text-xs text-gray-600">終日</span>
+            <span class="text-xs text-fg-muted">終日</span>
           </label>
           <button
             v-if="isFamilyTask && task.dueDate && calendarStore.configured"
             type="button"
             :disabled="calendarSaving"
-            class="mt-2 rounded border border-blue-300 px-2.5 py-1.5 text-xs font-medium text-blue-700 disabled:opacity-50"
+            class="mt-2 rounded border border-accent-line px-2.5 py-1.5 text-xs font-medium text-accent-strong disabled:opacity-50"
             @click="handleRegisterCalendar"
           >{{ calendarSaving
             ? '登録中...'
@@ -688,10 +688,10 @@ const priorityOptions = [
               type="checkbox"
               :checked="task.addToCalendar"
               @change="handleToggleAddToCalendar"
-              class="rounded text-blue-600 focus:ring-blue-500"
+              class="rounded text-accent focus:ring-accent"
             />
-            <span class="text-xs text-gray-600">Googleカレンダーに登録</span>
-            <span v-if="task.calendarEventId" class="text-xs text-green-600">✓ 登録済み</span>
+            <span class="text-xs text-fg-muted">Googleカレンダーに登録</span>
+            <span v-if="task.calendarEventId" class="text-xs text-success">✓ 登録済み</span>
           </label>
           -->
         </div>
@@ -699,11 +699,11 @@ const priorityOptions = [
         <!-- タグ -->
         <div>
           <div class="flex items-center justify-between mb-1">
-            <label class="block text-xs text-gray-500">タグ</label>
+            <label class="block text-xs text-fg-subtle">タグ</label>
             <button
               v-if="!editingTags"
               @click="editingTags = true"
-              class="text-xs text-blue-600 hover:text-blue-800"
+              class="text-xs text-accent hover:text-accent-strong"
             >
               + 追加
             </button>
@@ -712,17 +712,17 @@ const priorityOptions = [
             <span
               v-for="tag in task.tags"
               :key="tag"
-              class="group inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-600 text-xs sm:text-sm rounded-full"
+              class="group inline-flex items-center gap-1 px-2 py-0.5 bg-surface-alt text-fg-muted text-xs sm:text-sm rounded-full"
             >
               #{{ tag }}
               <button
                 @click="handleRemoveTag(tag)"
-                class="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                class="text-fg-faint hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 ✕
               </button>
             </span>
-            <span v-if="task.tags.length === 0 && !editingTags" class="text-xs text-gray-400">
+            <span v-if="task.tags.length === 0 && !editingTags" class="text-xs text-fg-faint">
               タグなし
             </span>
           </div>
@@ -733,19 +733,19 @@ const priorityOptions = [
               @keyup.escape="editingTags = false"
               type="text"
               placeholder="タグ名（#なしで入力）"
-              class="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs sm:text-sm"
+              class="w-full px-2 py-1 border border-line-strong rounded focus:outline-none focus:ring-2 focus:ring-accent text-xs sm:text-sm"
               autofocus
             />
             <div class="flex gap-1 sm:gap-2 mt-2">
               <button
                 @click="handleAddTag"
-                class="px-2 sm:px-3 py-1 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700"
+                class="px-2 sm:px-3 py-1 bg-accent text-on-solid rounded text-xs sm:text-sm hover:bg-accent-hover"
               >
                 追加
               </button>
               <button
                 @click="editingTags = false"
-                class="px-2 sm:px-3 py-1 text-gray-600 hover:text-gray-800 text-xs sm:text-sm"
+                class="px-2 sm:px-3 py-1 text-fg-muted hover:text-fg text-xs sm:text-sm"
               >
                 キャンセル
               </button>
@@ -756,26 +756,26 @@ const priorityOptions = [
         <!-- URL -->
         <div>
           <div class="flex items-center justify-between mb-1">
-            <label class="block text-xs text-gray-500">URL</label>
+            <label class="block text-xs text-fg-subtle">URL</label>
             <div class="flex items-center gap-3">
               <button
                 v-if="!editingUrl && task.url"
                 @click="handleCopyUrl"
-                class="text-xs text-blue-600 hover:text-blue-800"
+                class="text-xs text-accent hover:text-accent-strong"
               >
                 コピー
               </button>
               <button
                 v-if="!editingUrl && !task.url"
                 @click="handleStartEditUrl"
-                class="text-xs text-blue-600 hover:text-blue-800"
+                class="text-xs text-accent hover:text-accent-strong"
               >
                 + 追加
               </button>
               <button
                 v-if="!editingUrl && task.url"
                 @click="handleStartEditUrl"
-                class="text-xs text-gray-500 hover:text-gray-700"
+                class="text-xs text-fg-subtle hover:text-fg-secondary"
               >
                 編集
               </button>
@@ -787,7 +787,7 @@ const priorityOptions = [
               v-model="editUrl"
               type="url"
               placeholder="https://..."
-              class="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full px-2 sm:px-3 py-1.5 sm:py-2 border border-line-strong rounded text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-accent"
               @keyup.enter="handleUpdateUrl"
               @keyup.escape="editingUrl = false"
               autofocus
@@ -795,20 +795,20 @@ const priorityOptions = [
             <div class="flex gap-2">
               <button
                 @click="handleUpdateUrl"
-                class="px-2 sm:px-3 py-1 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700"
+                class="px-2 sm:px-3 py-1 bg-accent text-on-solid rounded text-xs sm:text-sm hover:bg-accent-hover"
               >
                 保存
               </button>
               <button
                 v-if="task.url"
                 @click="handleClearUrl"
-                class="px-2 sm:px-3 py-1 text-red-600 hover:text-red-800 text-xs sm:text-sm"
+                class="px-2 sm:px-3 py-1 text-danger hover:text-danger-strong text-xs sm:text-sm"
               >
                 削除
               </button>
               <button
                 @click="editingUrl = false"
-                class="px-2 sm:px-3 py-1 text-gray-600 hover:text-gray-800 text-xs sm:text-sm"
+                class="px-2 sm:px-3 py-1 text-fg-muted hover:text-fg text-xs sm:text-sm"
               >
                 キャンセル
               </button>
@@ -820,38 +820,38 @@ const priorityOptions = [
             :href="task.url"
             target="_blank"
             rel="noopener noreferrer"
-            class="text-blue-600 hover:text-blue-800 text-xs sm:text-sm break-all"
+            class="text-accent hover:text-accent-strong text-xs sm:text-sm break-all"
           >
             {{ task.url }}
           </a>
-          <span v-else class="text-gray-400 text-xs">なし</span>
+          <span v-else class="text-fg-faint text-xs">なし</span>
         </div>
 
         <!-- 関連書類 -->
         <div>
           <div class="flex items-center justify-between gap-2 mb-1">
-            <label class="block text-xs text-gray-500">関連書類</label>
+            <label class="block text-xs text-fg-subtle">関連書類</label>
             <DocumentAttachmentPicker
               :selected-ids="documentTaskLinksStore.documentIds"
               button-label="+ 追加"
               @confirm="handleDocumentSelection"
             />
           </div>
-          <p v-if="documentTaskLinksStore.loading" class="text-xs text-gray-400">読み込み中...</p>
-          <p v-else-if="documentTaskLinksStore.error" class="text-xs text-red-600">{{ documentTaskLinksStore.error }}</p>
-          <p v-else-if="relatedDocuments.length === 0" class="text-xs text-gray-400">関連書類なし</p>
+          <p v-if="documentTaskLinksStore.loading" class="text-xs text-fg-faint">読み込み中...</p>
+          <p v-else-if="documentTaskLinksStore.error" class="text-xs text-danger">{{ documentTaskLinksStore.error }}</p>
+          <p v-else-if="relatedDocuments.length === 0" class="text-xs text-fg-faint">関連書類なし</p>
           <div v-else class="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <article
               v-for="document in relatedDocuments"
               :key="document.id"
-              class="min-w-0 rounded-lg border border-gray-200 p-2"
+              class="min-w-0 rounded-lg border border-line p-2"
             >
               <button
                 type="button"
                 class="block w-full text-left"
                 @click="handleOpenDocument(document.id)"
               >
-                <div class="flex h-20 items-center justify-center overflow-hidden rounded bg-gray-100">
+                <div class="flex h-20 items-center justify-center overflow-hidden rounded bg-surface-alt">
                   <img
                     v-if="documentsStore.thumbnailUrls[document.id]"
                     :src="documentsStore.thumbnailUrls[document.id]"
@@ -860,24 +860,24 @@ const priorityOptions = [
                   />
                   <span v-else class="text-2xl">{{ document.mimeType.startsWith('image/') ? '🖼️' : isTextDocumentMimeType(document.mimeType) ? '📝' : '📄' }}</span>
                 </div>
-                <p class="mt-1 truncate text-xs text-gray-700">{{ document.name }}</p>
+                <p class="mt-1 truncate text-xs text-fg-secondary">{{ document.name }}</p>
               </button>
               <button
                 type="button"
                 :disabled="documentTaskLinksStore.mutatingDocumentIds.includes(document.id)"
-                class="mt-1 text-[11px] text-red-600 disabled:text-gray-400"
+                class="mt-1 text-[11px] text-danger disabled:text-fg-faint"
                 @click="handleUnlinkDocument(document.id)"
               >紐づけを解除</button>
               <button
                 v-if="document.classificationVersion != null"
                 type="button"
                 :disabled="suggestionLoadingDocumentId !== null"
-                class="mt-1 block text-[11px] font-medium text-blue-600 disabled:text-gray-400"
+                class="mt-1 block text-[11px] font-medium text-accent disabled:text-fg-faint"
                 @click="prepareDocumentSuggestion(document.id)"
               >{{ suggestionLoadingDocumentId === document.id ? '候補を取得中...' : '読み取り候補を反映' }}</button>
               <p
                 v-else-if="document.ocrStatus === 'pending' || document.ocrStatus === 'processing'"
-                class="mt-1 text-[11px] text-gray-400"
+                class="mt-1 text-[11px] text-fg-faint"
               >読み取り中...</p>
             </article>
           </div>
@@ -886,11 +886,11 @@ const priorityOptions = [
         <!-- 子タスク（未完了のみ表示） -->
         <div>
           <div class="flex items-center justify-between mb-1">
-            <label class="block text-xs text-gray-500">サブタスク</label>
+            <label class="block text-xs text-fg-subtle">サブタスク</label>
             <button
               v-if="!addingSubtask"
               @click="addingSubtask = true"
-              class="text-xs text-blue-600 hover:text-blue-800"
+              class="text-xs text-accent hover:text-accent-strong"
             >
               + 追加
             </button>
@@ -903,19 +903,19 @@ const priorityOptions = [
                 @keyup.escape="addingSubtask = false"
                 type="text"
                 placeholder="サブタスク名"
-                class="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs sm:text-sm"
+                class="w-full px-2 py-1 border border-line-strong rounded focus:outline-none focus:ring-2 focus:ring-accent text-xs sm:text-sm"
                 autofocus
               />
               <div class="flex gap-1 sm:gap-2 mt-2">
                 <button
                   @click="handleAddSubtask"
-                  class="px-2 sm:px-3 py-1 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700"
+                  class="px-2 sm:px-3 py-1 bg-accent text-on-solid rounded text-xs sm:text-sm hover:bg-accent-hover"
                 >
                   追加
                 </button>
                 <button
                   @click="addingSubtask = false"
-                  class="px-2 sm:px-3 py-1 text-gray-600 hover:text-gray-800 text-xs sm:text-sm"
+                  class="px-2 sm:px-3 py-1 text-fg-muted hover:text-fg text-xs sm:text-sm"
                 >
                   キャンセル
                 </button>
@@ -932,7 +932,7 @@ const priorityOptions = [
             />
             <div
               v-if="!addingSubtask && incompleteChildTasks.length === 0"
-              class="text-xs text-gray-400"
+              class="text-xs text-fg-faint"
             >
               サブタスクなし
             </div>
@@ -941,12 +941,12 @@ const priorityOptions = [
 
         <!-- メモ -->
         <div @click="handleFocusDetail">
-          <label class="block text-xs text-gray-500 mb-1">メモ</label>
+          <label class="block text-xs text-fg-subtle mb-1">メモ</label>
           <div class="space-y-2">
             <div
               v-for="(note, index) in task.notes"
               :key="index"
-              class="bg-gray-50 p-2 rounded"
+              class="bg-surface-muted p-2 rounded"
             >
               <!-- 編集モード -->
               <div v-if="editingNoteIndex === index" class="space-y-2">
@@ -954,19 +954,19 @@ const priorityOptions = [
                   v-model="editNoteContent"
                   @keyup.escape="handleCancelEditNote"
                   rows="3"
-                  class="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs sm:text-sm"
+                  class="w-full px-2 py-1 border border-line-strong rounded focus:outline-none focus:ring-2 focus:ring-accent text-xs sm:text-sm"
                   autofocus
                 ></textarea>
                 <div class="flex gap-1 sm:gap-2">
                   <button
                     @click="handleUpdateNote"
-                    class="px-2 sm:px-3 py-1 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700"
+                    class="px-2 sm:px-3 py-1 bg-accent text-on-solid rounded text-xs sm:text-sm hover:bg-accent-hover"
                   >
                     保存
                   </button>
                   <button
                     @click="handleCancelEditNote"
-                    class="px-2 sm:px-3 py-1 text-gray-600 hover:text-gray-800 text-xs sm:text-sm"
+                    class="px-2 sm:px-3 py-1 text-fg-muted hover:text-fg text-xs sm:text-sm"
                   >
                     キャンセル
                   </button>
@@ -975,25 +975,25 @@ const priorityOptions = [
               <!-- 表示モード -->
               <div v-else class="flex items-start gap-2">
                 <p
-                  class="flex-1 text-xs sm:text-sm text-gray-700 whitespace-pre-wrap break-words select-text"
+                  class="flex-1 text-xs sm:text-sm text-fg-secondary whitespace-pre-wrap break-words select-text"
                 >
                   {{ note }}
                 </p>
                 <button
                   @click.stop="handleStartEditNote(index)"
-                  class="text-xs text-gray-500 hover:text-gray-800 flex-shrink-0"
+                  class="text-xs text-fg-subtle hover:text-fg flex-shrink-0"
                 >
                   編集
                 </button>
                 <button
                   @click.stop="handleCopyNote(note)"
-                  class="text-xs text-blue-600 hover:text-blue-800 flex-shrink-0"
+                  class="text-xs text-accent hover:text-accent-strong flex-shrink-0"
                 >
                   コピー
                 </button>
                 <button
                   @click.stop="handleDeleteNote(index)"
-                  class="text-gray-400 hover:text-red-500 flex-shrink-0"
+                  class="text-fg-faint hover:text-danger flex-shrink-0"
                 >
                   ✕
                 </button>
@@ -1006,19 +1006,19 @@ const priorityOptions = [
                 @keyup.escape="editingNotes = false"
                 placeholder="メモを追加"
                 rows="5"
-                class="w-full px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs sm:text-sm"
+                class="w-full px-2 py-1 border border-line-strong rounded focus:outline-none focus:ring-2 focus:ring-accent text-xs sm:text-sm"
                 autofocus
               ></textarea>
               <div class="flex gap-1 sm:gap-2">
                 <button
                   @click="handleAddNote"
-                  class="px-2 sm:px-3 py-1 bg-blue-600 text-white rounded text-xs sm:text-sm hover:bg-blue-700"
+                  class="px-2 sm:px-3 py-1 bg-accent text-on-solid rounded text-xs sm:text-sm hover:bg-accent-hover"
                 >
                   追加
                 </button>
                 <button
                   @click="editingNotes = false"
-                  class="px-2 sm:px-3 py-1 text-gray-600 hover:text-gray-800 text-xs sm:text-sm"
+                  class="px-2 sm:px-3 py-1 text-fg-muted hover:text-fg text-xs sm:text-sm"
                 >
                   キャンセル
                 </button>
@@ -1028,7 +1028,7 @@ const priorityOptions = [
             <button
               v-if="!editingNotes"
               @click="editingNotes = true"
-              class="text-xs sm:text-sm text-blue-600 hover:text-blue-800"
+              class="text-xs sm:text-sm text-accent hover:text-accent-strong"
             >
               + メモを追加
             </button>
@@ -1036,10 +1036,10 @@ const priorityOptions = [
         </div>
 
         <!-- 完了済みサブタスク（折りたたみ式） -->
-        <div v-if="completedSubtasks.length > 0" class="pt-3 sm:pt-4 border-t border-gray-100">
+        <div v-if="completedSubtasks.length > 0" class="pt-3 sm:pt-4 border-t border-line-subtle">
           <button
             @click="showCompletedSubtasks = !showCompletedSubtasks"
-            class="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700"
+            class="flex items-center gap-2 text-xs text-fg-subtle hover:text-fg-secondary"
           >
             <span class="text-[10px]">{{ showCompletedSubtasks ? '▼' : '▶' }}</span>
             <span>完了済みサブタスク ({{ completedSubtasks.length }})</span>
@@ -1049,7 +1049,7 @@ const priorityOptions = [
               v-for="subtask in completedSubtasks"
               :key="subtask.id"
               @click="handleSelectSubtask(subtask.id)"
-              class="px-2 py-1 rounded cursor-pointer hover:bg-gray-50 text-xs sm:text-sm line-through text-gray-400 truncate"
+              class="px-2 py-1 rounded cursor-pointer hover:bg-surface-hover text-xs sm:text-sm line-through text-fg-faint truncate"
             >
               {{ subtask.name }}
             </div>
@@ -1058,10 +1058,10 @@ const priorityOptions = [
       </div>
 
       <!-- 削除ボタン -->
-      <div class="pt-3 sm:pt-4 border-t border-gray-200 mt-3 sm:mt-4">
+      <div class="pt-3 sm:pt-4 border-t border-line mt-3 sm:mt-4">
         <button
           @click="handleDelete"
-          class="w-full px-3 sm:px-4 py-1.5 sm:py-2 text-red-600 hover:bg-red-50 rounded transition-colors text-sm"
+          class="w-full px-3 sm:px-4 py-1.5 sm:py-2 text-danger hover:bg-danger-soft rounded transition-colors text-sm"
         >
           タスクを削除
         </button>
@@ -1070,42 +1070,42 @@ const priorityOptions = [
       <div
         v-if="suggestionPreview"
         data-testid="task-suggestion-dialog"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-scrim/40 p-4"
         @click.self="suggestionPreview = null"
       >
-        <div class="w-full max-w-md rounded-xl bg-white p-4 shadow-xl">
-          <h3 class="font-semibold text-gray-800">読み取り候補をタスクへ反映</h3>
-          <p class="mt-1 truncate text-xs text-gray-500">{{ suggestionPreview.documentName }}</p>
+        <div class="w-full max-w-md rounded-xl bg-surface p-4 shadow-xl">
+          <h3 class="font-semibold text-fg">読み取り候補をタスクへ反映</h3>
+          <p class="mt-1 truncate text-xs text-fg-subtle">{{ suggestionPreview.documentName }}</p>
           <div class="mt-4 space-y-3 text-sm">
             <label class="flex items-start gap-2">
-              <input v-model="applySuggestionName" data-testid="apply-suggestion-name" type="checkbox" class="mt-1 rounded text-blue-600" />
-              <span><span class="block text-xs text-gray-500">タスク名</span>{{ suggestionPreview.title }}</span>
+              <input v-model="applySuggestionName" data-testid="apply-suggestion-name" type="checkbox" class="mt-1 rounded text-accent" />
+              <span><span class="block text-xs text-fg-subtle">タスク名</span>{{ suggestionPreview.title }}</span>
             </label>
             <label v-if="suggestionPreview.date" class="flex items-start gap-2">
-              <input v-model="applySuggestionDate" data-testid="apply-suggestion-date" type="checkbox" class="mt-1 rounded text-blue-600" />
+              <input v-model="applySuggestionDate" data-testid="apply-suggestion-date" type="checkbox" class="mt-1 rounded text-accent" />
               <span>
-                <span class="block text-xs text-gray-500">日時</span>
+                <span class="block text-xs text-fg-subtle">日時</span>
                 {{ suggestionPreview.date }}
                 <template v-if="suggestionPreview.time"> {{ suggestionPreview.time }}<template v-if="suggestionPreview.endTime">〜{{ suggestionPreview.endTime }}</template></template>
               </span>
             </label>
             <label v-if="suggestionPreview.location || suggestionPreview.sourceExcerpt" class="flex items-start gap-2">
-              <input v-model="applySuggestionNotes" data-testid="apply-suggestion-notes" type="checkbox" class="mt-1 rounded text-blue-600" />
+              <input v-model="applySuggestionNotes" data-testid="apply-suggestion-notes" type="checkbox" class="mt-1 rounded text-accent" />
               <span class="min-w-0">
-                <span class="block text-xs text-gray-500">メモへ追加</span>
+                <span class="block text-xs text-fg-subtle">メモへ追加</span>
                 <span v-if="suggestionPreview.location" class="block">場所: {{ suggestionPreview.location }}</span>
-                <span class="block whitespace-pre-wrap break-words text-xs text-gray-600">{{ suggestionPreview.sourceExcerpt }}</span>
+                <span class="block whitespace-pre-wrap break-words text-xs text-fg-muted">{{ suggestionPreview.sourceExcerpt }}</span>
               </span>
             </label>
           </div>
-          <p class="mt-3 rounded bg-amber-50 px-3 py-2 text-xs text-amber-800">選択した項目だけを変更します。確認するまでタスクは更新されません。</p>
+          <p class="mt-3 rounded bg-warning-soft px-3 py-2 text-xs text-warning-strong">選択した項目だけを変更します。確認するまでタスクは更新されません。</p>
           <div class="mt-4 flex justify-end gap-2">
-            <button type="button" :disabled="suggestionApplying" class="px-3 py-2 text-sm text-gray-600" @click="suggestionPreview = null">キャンセル</button>
+            <button type="button" :disabled="suggestionApplying" class="px-3 py-2 text-sm text-fg-muted" @click="suggestionPreview = null">キャンセル</button>
             <button
               type="button"
               data-testid="confirm-task-suggestion"
               :disabled="suggestionApplying"
-              class="rounded bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:bg-gray-300"
+              class="rounded bg-accent px-3 py-2 text-sm font-medium text-on-solid disabled:bg-surface-stronger"
               @click="applyPreparedDocumentSuggestion"
             >{{ suggestionApplying ? '反映中...' : '選択した内容を反映' }}</button>
           </div>

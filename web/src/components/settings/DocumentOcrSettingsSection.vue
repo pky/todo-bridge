@@ -91,16 +91,16 @@ async function disableOcr(): Promise<void> {
 </script>
 
 <template>
-  <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
-    <div class="px-4 py-3 border-b border-gray-100">
+  <section class="bg-surface rounded-lg border border-line overflow-hidden">
+    <div class="px-4 py-3 border-b border-line-subtle">
       <div class="flex items-center justify-between gap-3">
         <div>
-          <h2 class="text-sm font-semibold text-gray-700">書類の文字読み取り</h2>
-          <p class="text-xs text-gray-500 mt-0.5">写真やスキャンPDFから予定・タスク候補を読み取ります</p>
+          <h2 class="text-sm font-semibold text-fg-secondary">書類の文字読み取り</h2>
+          <p class="text-xs text-fg-subtle mt-0.5">写真やスキャンPDFから予定・タスク候補を読み取ります</p>
         </div>
         <span
           class="px-2 py-1 rounded-full text-xs"
-          :class="enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'"
+          :class="enabled ? 'bg-success-soft-strong text-success-strong' : 'bg-surface-alt text-fg-muted'"
         >
           {{ loading ? '確認中' : enabled ? '有効' : '無効' }}
         </span>
@@ -108,7 +108,7 @@ async function disableOcr(): Promise<void> {
     </div>
 
     <div class="px-4 py-4 space-y-3">
-      <div class="rounded-lg bg-gray-50 border border-gray-200 px-3 py-3 text-xs text-gray-600 space-y-1">
+      <div class="rounded-lg bg-surface-muted border border-line px-3 py-3 text-xs text-fg-muted space-y-1">
         <p>・PDF内の文字はアプリのサーバー内で読み取り、外部へ送りません。</p>
         <p>・文字がないページ画像だけをGoogle Cloud VisionのEU処理環境へ送ります。</p>
         <p>・送信画像はモデル学習に使われず、オンライン処理後に保持されません。</p>
@@ -116,23 +116,23 @@ async function disableOcr(): Promise<void> {
       </div>
 
       <div class="space-y-1">
-        <div class="flex justify-between text-xs text-gray-600">
+        <div class="flex justify-between text-xs text-fg-muted">
           <span>今月の外部OCR</span>
           <span>{{ usageCount.toLocaleString() }} / 1,000ページ</span>
         </div>
-        <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
+        <div class="h-2 rounded-full bg-surface-alt overflow-hidden">
           <div
             class="h-full transition-all"
-            :class="usageCount >= 800 ? 'bg-amber-500' : 'bg-blue-500'"
+            :class="usageCount >= 800 ? 'bg-warning' : 'bg-accent'"
             :style="{ width: `${Math.min(100, usageCount / 10)}%` }"
           />
         </div>
-        <p v-if="usageCount >= 800" class="text-xs text-amber-700">
+        <p v-if="usageCount >= 800" class="text-xs text-warning-strong">
           無料枠の上限に近づいています。
         </p>
       </div>
 
-      <p v-if="!canManage" class="text-xs text-gray-500">
+      <p v-if="!canManage" class="text-xs text-fg-subtle">
         この設定は家族スペースのownerが管理します。
       </p>
 
@@ -141,7 +141,7 @@ async function disableOcr(): Promise<void> {
           v-if="enabled"
           type="button"
           :disabled="saving"
-          class="w-full border border-gray-300 text-gray-700 text-sm rounded-lg py-2 disabled:opacity-50"
+          class="w-full border border-line-strong text-fg-secondary text-sm rounded-lg py-2 disabled:opacity-50"
           @click="disableOcr"
         >
           {{ saving ? '変更中...' : '文字読み取りを無効にする' }}
@@ -150,25 +150,25 @@ async function disableOcr(): Promise<void> {
         <button
           v-else-if="!showConsent"
           type="button"
-          class="w-full bg-blue-600 text-white text-sm rounded-lg py-2 hover:bg-blue-700"
+          class="w-full bg-accent text-on-solid text-sm rounded-lg py-2 hover:bg-accent-hover"
           @click="showConsent = true"
         >
           説明を確認して有効にする
         </button>
 
-        <div v-else class="rounded-lg border border-blue-200 bg-blue-50 px-3 py-3 space-y-3">
-          <p class="text-xs leading-5 text-gray-700">
+        <div v-else class="rounded-lg border border-accent-line bg-accent-soft px-3 py-3 space-y-3">
+          <p class="text-xs leading-5 text-fg-secondary">
             文字情報を取得できないページ画像をGoogle Cloud VisionのEU処理環境へ送信します。
             原本の保存と閲覧は、文字読み取りを無効にしても利用できます。
           </p>
-          <label class="flex items-start gap-2 text-xs text-gray-700">
+          <label class="flex items-start gap-2 text-xs text-fg-secondary">
             <input v-model="consentChecked" type="checkbox" class="mt-0.5" />
             <span>上記の外部送信と処理方針に同意します</span>
           </label>
           <div class="flex gap-2">
             <button
               type="button"
-              class="flex-1 border border-gray-300 bg-white text-gray-700 text-sm rounded-lg py-2"
+              class="flex-1 border border-line-strong bg-surface text-fg-secondary text-sm rounded-lg py-2"
               @click="showConsent = false; consentChecked = false"
             >
               キャンセル
@@ -176,7 +176,7 @@ async function disableOcr(): Promise<void> {
             <button
               type="button"
               :disabled="!consentChecked || saving"
-              class="flex-1 bg-blue-600 text-white text-sm rounded-lg py-2 disabled:opacity-50"
+              class="flex-1 bg-accent text-on-solid text-sm rounded-lg py-2 disabled:opacity-50"
               @click="enableOcr"
             >
               {{ saving ? '有効化中...' : '同意して有効化' }}
@@ -185,7 +185,7 @@ async function disableOcr(): Promise<void> {
         </div>
       </template>
 
-      <p v-if="error" class="text-xs text-red-600">{{ error }}</p>
+      <p v-if="error" class="text-xs text-danger">{{ error }}</p>
     </div>
   </section>
 </template>

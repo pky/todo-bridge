@@ -413,22 +413,22 @@ async function handleRunDataMigration(): Promise<void> {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 pt-[49px]">
+  <div class="min-h-screen bg-canvas pt-[49px]">
     <!-- ヘッダー -->
-    <header class="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 shadow-sm">
+    <header class="fixed top-0 left-0 right-0 z-50 bg-surface border-b border-line px-4 py-3 flex items-center gap-3 shadow-sm">
       <button
         @click="goBack"
-        class="text-gray-500 hover:text-gray-700 text-sm"
+        class="text-fg-subtle hover:text-fg-secondary text-sm"
       >
         ← 戻る
       </button>
-      <h1 class="text-base font-semibold text-gray-800">設定</h1>
+      <h1 class="text-base font-semibold text-fg">設定</h1>
     </header>
 
     <div class="max-w-lg mx-auto px-4 py-6">
 
       <nav
-        class="mb-6 overflow-x-auto rounded-xl border border-gray-200 bg-white p-1 shadow-sm"
+        class="mb-6 overflow-x-auto rounded-xl border border-line bg-surface p-1 shadow-sm"
         aria-label="設定カテゴリ"
       >
         <div class="flex min-w-max gap-1" role="tablist">
@@ -441,8 +441,8 @@ async function handleRunDataMigration(): Promise<void> {
             :class="[
               'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
               activeSettingsTab === tab.id
-                ? 'bg-slate-800 text-white'
-                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
+                ? 'bg-inverse text-on-solid'
+                : 'text-fg-muted hover:bg-surface-hover hover:text-fg',
             ]"
             @click="activeSettingsTab = tab.id"
           >
@@ -453,36 +453,36 @@ async function handleRunDataMigration(): Promise<void> {
 
       <!-- TODO: カレンダー機能を一時無効化
       <!- - Google Calendar APIキー設定 - ->
-      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div class="px-4 py-3 border-b border-gray-100">
-          <h2 class="text-sm font-semibold text-gray-700">Google Calendar APIキー設定</h2>
-          <p class="text-xs text-gray-500 mt-0.5">
+      <section class="bg-surface rounded-lg border border-line overflow-hidden">
+        <div class="px-4 py-3 border-b border-line-subtle">
+          <h2 class="text-sm font-semibold text-fg-secondary">Google Calendar APIキー設定</h2>
+          <p class="text-xs text-fg-subtle mt-0.5">
             Google Cloud Console で取得したOAuth 2.0クライアントIDとシークレットを入力してください
           </p>
         </div>
         <div class="px-4 py-4 space-y-3">
           <div>
-            <label class="block text-xs text-gray-500 mb-1">クライアントID</label>
+            <label class="block text-xs text-fg-subtle mb-1">クライアントID</label>
             <input
               v-model="inputClientId"
               type="text"
               placeholder="xxxxx.apps.googleusercontent.com"
-              class="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full px-3 py-1.5 border border-line-strong rounded text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
           <div>
-            <label class="block text-xs text-gray-500 mb-1">クライアントシークレット</label>
+            <label class="block text-xs text-fg-subtle mb-1">クライアントシークレット</label>
             <input
               v-model="inputClientSecret"
               type="password"
               placeholder="設定済みの場合は変更する場合のみ入力"
-              class="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-full px-3 py-1.5 border border-line-strong rounded text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
           <button
             @click="handleSaveApiConfig"
             :disabled="calendarStore.apiConfigSaving || !inputClientId"
-            class="px-4 py-2 bg-gray-800 text-white text-sm rounded-lg hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            class="px-4 py-2 bg-inverse text-on-solid text-sm rounded-lg hover:bg-inverse-strong disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <span v-if="calendarStore.apiConfigSaving">保存中...</span>
             <span v-else-if="calendarStore.apiConfigSaved">保存しました</span>
@@ -492,33 +492,33 @@ async function handleRunDataMigration(): Promise<void> {
       </section>
 
       <!- - Google Calendar 連携 - ->
-      <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div class="px-4 py-3 border-b border-gray-100">
-          <h2 class="text-sm font-semibold text-gray-700">Google Calendar 連携</h2>
-          <p class="text-xs text-gray-500 mt-0.5">期日を設定したタスクをカレンダーに登録できます</p>
+      <section class="bg-surface rounded-lg border border-line overflow-hidden">
+        <div class="px-4 py-3 border-b border-line-subtle">
+          <h2 class="text-sm font-semibold text-fg-secondary">Google Calendar 連携</h2>
+          <p class="text-xs text-fg-subtle mt-0.5">期日を設定したタスクをカレンダーに登録できます</p>
         </div>
 
         <div class="px-4 py-4">
           <!- - APIキー未設定 - ->
-          <div v-if="!calendarStore.apiConfigured" class="text-sm text-gray-500">
+          <div v-if="!calendarStore.apiConfigured" class="text-sm text-fg-subtle">
             上のAPIキー設定を先に完了してください
           </div>
 
           <!- - 未連携 - ->
           <div v-else-if="!calendarStore.connected">
-            <p class="text-sm text-gray-600 mb-3">
+            <p class="text-sm text-fg-muted mb-3">
               連携すると、タスクの期日をGoogleカレンダーのイベントとして登録できます。
               連携は一度だけ許可するだけで、以降は自動で動作します。
             </p>
             <button
               @click="handleConnect"
               :disabled="calendarStore.loading"
-              class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              class="flex items-center gap-2 px-4 py-2 bg-accent text-on-solid text-sm rounded-lg hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <span v-if="calendarStore.loading">連携中...</span>
               <span v-else>Googleカレンダーと連携する</span>
             </button>
-            <p v-if="calendarStore.error" class="text-xs text-red-500 mt-2">
+            <p v-if="calendarStore.error" class="text-xs text-danger mt-2">
               {{ calendarStore.error }}
             </p>
           </div>
@@ -526,29 +526,29 @@ async function handleRunDataMigration(): Promise<void> {
           <!- - 連携済み - ->
           <div v-else class="space-y-3">
             <div class="flex items-center gap-2">
-              <span class="text-green-500 text-sm">✓</span>
-              <span class="text-sm text-gray-700">{{ calendarStore.connectedEmail }} と連携中</span>
+              <span class="text-success text-sm">✓</span>
+              <span class="text-sm text-fg-secondary">{{ calendarStore.connectedEmail }} と連携中</span>
             </div>
 
             <div>
-              <label class="block text-xs text-gray-500 mb-1">保存先カレンダー</label>
+              <label class="block text-xs text-fg-subtle mb-1">保存先カレンダー</label>
               <select
                 v-model="calendarStore.calendarId"
-                class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full px-2 py-1.5 border border-line-strong rounded text-sm focus:outline-none focus:ring-2 focus:ring-accent"
               >
                 <option value="primary">マイカレンダー（デフォルト）</option>
               </select>
-              <p class="text-xs text-gray-400 mt-1">カレンダーの追加は今後対応予定です</p>
+              <p class="text-xs text-fg-faint mt-1">カレンダーの追加は今後対応予定です</p>
             </div>
 
             <button
               @click="handleDisconnect"
               :disabled="calendarStore.loading"
-              class="text-sm text-red-500 hover:text-red-700 disabled:opacity-50 transition-colors"
+              class="text-sm text-danger hover:text-danger-strong disabled:opacity-50 transition-colors"
             >
               連携を解除
             </button>
-            <p v-if="calendarStore.error" class="text-xs text-red-500">
+            <p v-if="calendarStore.error" class="text-xs text-danger">
               {{ calendarStore.error }}
             </p>
           </div>
@@ -563,9 +563,9 @@ async function handleRunDataMigration(): Promise<void> {
       >
         <ThemeSection />
         <!-- アカウント -->
-        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div class="px-4 py-3 border-b border-gray-100">
-          <h2 class="text-sm font-semibold text-gray-700">アカウント</h2>
+        <section class="bg-surface rounded-lg border border-line overflow-hidden">
+        <div class="px-4 py-3 border-b border-line-subtle">
+          <h2 class="text-sm font-semibold text-fg-secondary">アカウント</h2>
         </div>
         <div class="px-4 py-4 space-y-3">
           <div class="flex items-center gap-3">
@@ -576,13 +576,13 @@ async function handleRunDataMigration(): Promise<void> {
               alt=""
             />
             <div>
-              <p class="text-sm text-gray-800">{{ authStore.user?.displayName }}</p>
-              <p class="text-xs text-gray-500">{{ authStore.user?.email }}</p>
+              <p class="text-sm text-fg">{{ authStore.user?.displayName }}</p>
+              <p class="text-xs text-fg-subtle">{{ authStore.user?.email }}</p>
             </div>
           </div>
           <button
             @click="authStore.logout()"
-            class="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            class="text-sm text-fg-subtle hover:text-fg-secondary transition-colors"
           >
             ログアウト
           </button>
@@ -590,75 +590,75 @@ async function handleRunDataMigration(): Promise<void> {
         </section>
 
         <!-- 共有スペース -->
-        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div class="px-4 py-3 border-b border-gray-100">
-          <h2 class="text-sm font-semibold text-gray-700">共有スペース</h2>
-          <p class="text-xs text-gray-500 mt-0.5">
+        <section class="bg-surface rounded-lg border border-line overflow-hidden">
+        <div class="px-4 py-3 border-b border-line-subtle">
+          <h2 class="text-sm font-semibold text-fg-secondary">共有スペース</h2>
+          <p class="text-xs text-fg-subtle mt-0.5">
             現在の space と、今後追加する家族共有の管理導線
           </p>
         </div>
         <div class="px-4 py-4 space-y-4">
-          <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+          <div class="rounded-lg border border-line bg-surface-muted px-3 py-3">
             <div class="flex items-center justify-between gap-3">
               <div>
-                <p class="text-xs text-gray-500">現在のスペース</p>
-                <p class="text-sm font-medium text-gray-800">{{ currentSpaceName }}</p>
+                <p class="text-xs text-fg-subtle">現在のスペース</p>
+                <p class="text-sm font-medium text-fg">{{ currentSpaceName }}</p>
                 <p
                   v-if="currentSpaceMeta && isSharedSpaceSelected"
-                  class="text-xs text-gray-500 mt-1"
+                  class="text-xs text-fg-subtle mt-1"
                 >
                   メンバー {{ currentSpaceMeta.memberCount }} 人
                 </p>
               </div>
-              <span class="px-2 py-1 rounded-full bg-blue-100 text-blue-700 text-xs">
+              <span class="px-2 py-1 rounded-full bg-accent-soft-strong text-accent-strong text-xs">
                 {{ currentSpaceTypeLabel }}
               </span>
             </div>
           </div>
 
-          <div v-if="canManageCurrentSpace" class="space-y-2 border-t border-gray-100 pt-3">
-            <p class="text-xs text-gray-500">スペース名を変更</p>
+          <div v-if="canManageCurrentSpace" class="space-y-2 border-t border-line-subtle pt-3">
+            <p class="text-xs text-fg-subtle">スペース名を変更</p>
             <input
               v-model="currentSpaceNameInput"
               type="text"
               placeholder="共有スペース名"
-              class="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+              class="w-full px-3 py-2 border border-line-strong rounded text-sm"
             />
             <button
               @click="handleUpdateSpaceName"
               :disabled="spaceNameSaving || !currentSpaceNameInput.trim()"
-              class="w-full bg-gray-800 text-white text-sm rounded-lg py-2 hover:bg-gray-900 disabled:opacity-50"
+              class="w-full bg-inverse text-on-solid text-sm rounded-lg py-2 hover:bg-inverse-strong disabled:opacity-50"
             >
               {{ spaceNameSaving ? '更新中...' : 'スペース名を保存' }}
             </button>
           </div>
 
-          <div class="space-y-2 border-t border-gray-100 pt-3">
+          <div class="space-y-2 border-t border-line-subtle pt-3">
             <div class="flex items-center justify-between gap-3">
-              <p class="text-xs text-gray-500">現在のメンバー</p>
+              <p class="text-xs text-fg-subtle">現在のメンバー</p>
               <button
                 v-if="isSharedSpaceSelected"
                 @click="loadCurrentSpaceDetails"
-                class="text-[11px] text-blue-600 hover:text-blue-800"
+                class="text-[11px] text-accent hover:text-accent-strong"
               >
                 再読込
               </button>
             </div>
             <div
               v-if="!isSharedSpaceSelected"
-              class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-xs text-gray-500"
+              class="rounded-lg border border-line bg-surface-muted px-3 py-3 text-xs text-fg-subtle"
             >
               個人スペースではメンバー一覧はありません
             </div>
             <div
               v-else-if="membersLoading"
-              class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-xs text-gray-500"
+              class="rounded-lg border border-line bg-surface-muted px-3 py-3 text-xs text-fg-subtle"
             >
               メンバーを確認中...
             </div>
             <div
               v-else-if="currentSpaceMembers.length === 0"
-              class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-xs text-gray-500"
+              class="rounded-lg border border-line bg-surface-muted px-3 py-3 text-xs text-fg-subtle"
             >
               メンバー情報がありません
             </div>
@@ -666,29 +666,29 @@ async function handleRunDataMigration(): Promise<void> {
               <div
                 v-for="member in currentSpaceMembers"
                 :key="member.uid"
-                class="rounded-lg border border-gray-200 px-3 py-3"
+                class="rounded-lg border border-line px-3 py-3"
               >
                 <div class="flex items-center justify-between gap-3">
                   <div class="min-w-0">
-                    <p class="text-sm font-medium text-gray-800 truncate">
+                    <p class="text-sm font-medium text-fg truncate">
                       {{ member.displayName || member.email || member.uid }}
                     </p>
-                    <p class="text-xs text-gray-500 truncate">{{ member.email || member.uid }}</p>
+                    <p class="text-xs text-fg-subtle truncate">{{ member.email || member.uid }}</p>
                   </div>
                   <div class="flex items-center gap-2 flex-shrink-0">
                     <span
                       class="px-2 py-1 rounded-full text-[10px]"
                       :class="member.role === 'owner'
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-gray-100 text-gray-600'"
+                        ? 'bg-warning-soft-strong text-warning-strong'
+                        : 'bg-surface-alt text-fg-muted'"
                     >
                       {{ member.role === 'owner' ? 'owner' : 'member' }}
                     </span>
                     <span
                       class="px-2 py-1 rounded-full text-[10px]"
                       :class="member.status === 'active'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-600'"
+                        ? 'bg-success-soft-strong text-success-strong'
+                        : 'bg-surface-alt text-fg-muted'"
                     >
                       {{ member.status }}
                     </span>
@@ -698,18 +698,18 @@ async function handleRunDataMigration(): Promise<void> {
             </div>
           </div>
 
-          <div class="space-y-2 border-t border-gray-100 pt-3">
-            <p class="text-xs text-gray-500">家族スペースを作成</p>
+          <div class="space-y-2 border-t border-line-subtle pt-3">
+            <p class="text-xs text-fg-subtle">家族スペースを作成</p>
             <input
               v-model="familySpaceName"
               type="text"
               placeholder="家族スペース名"
-              class="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+              class="w-full px-3 py-2 border border-line-strong rounded text-sm"
             />
             <button
               @click="handleCreateFamilySpace"
               :disabled="familySpaceLoading"
-              class="w-full bg-gray-800 text-white text-sm rounded-lg py-2 hover:bg-gray-900 disabled:opacity-50"
+              class="w-full bg-inverse text-on-solid text-sm rounded-lg py-2 hover:bg-inverse-strong disabled:opacity-50"
             >
               {{ familySpaceLoading ? '作成中...' : '家族スペースを作成' }}
             </button>
@@ -736,20 +736,20 @@ async function handleRunDataMigration(): Promise<void> {
           </Suspense>
         </div>
 
-        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div class="px-4 py-3 border-b border-gray-100">
-          <h2 class="text-sm font-semibold text-gray-700">Google Calendar連携</h2>
-          <p class="text-xs text-gray-500 mt-0.5">書類から確認した予定を家族のカレンダーへ登録します</p>
+        <section class="bg-surface rounded-lg border border-line overflow-hidden">
+        <div class="px-4 py-3 border-b border-line-subtle">
+          <h2 class="text-sm font-semibold text-fg-secondary">Google Calendar連携</h2>
+          <p class="text-xs text-fg-subtle mt-0.5">書類から確認した予定を家族のカレンダーへ登録します</p>
         </div>
         <div class="px-4 py-4 space-y-4">
           <div v-if="canManageCalendar" class="space-y-4">
-            <ol class="list-decimal space-y-2 pl-5 text-xs leading-5 text-slate-600">
+            <ol class="list-decimal space-y-2 pl-5 text-xs leading-5 text-fg-muted">
               <li>
                 <a
                   href="https://calendar.google.com/calendar/u/0/r/settings"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="text-blue-600 underline"
+                  class="text-accent underline"
                 >Google Calendarの設定を開き</a>、左側の「マイカレンダーの設定」から家族カレンダーを選びます。
               </li>
               <li>
@@ -759,21 +759,21 @@ async function handleRunDataMigration(): Promise<void> {
               <li>左側の「カレンダーの統合」を開き、カレンダーIDをコピーして下へ貼り付けます。</li>
             </ol>
 
-            <label class="block text-xs font-medium text-slate-600">
+            <label class="block text-xs font-medium text-fg-muted">
               共有するサービスアカウント
               <input
                 :value="calendarStore.serviceAccountEmail"
                 type="text"
                 readonly
-                class="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm"
+                class="mt-1 w-full rounded-lg border border-line-strong bg-surface-muted px-3 py-2 text-sm"
                 @focus="($event.target as HTMLInputElement).select()"
               />
             </label>
-            <p v-if="!calendarStore.serviceAccountEmail" class="text-xs text-amber-700">
+            <p v-if="!calendarStore.serviceAccountEmail" class="text-xs text-warning-strong">
               サービスアカウントを確認中です。表示されない場合はGoogle Calendar APIの有効化を確認してください。
             </p>
 
-            <label class="block text-xs font-medium text-slate-600">
+            <label class="block text-xs font-medium text-fg-muted">
               カレンダーID
               <input
                 v-model="calendarIdInput"
@@ -781,59 +781,59 @@ async function handleRunDataMigration(): Promise<void> {
                 inputmode="text"
                 autocomplete="off"
                 placeholder="xxxxx@group.calendar.google.com"
-                class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                class="mt-1 w-full rounded-lg border border-line-strong px-3 py-2 text-sm"
               />
             </label>
             <div class="flex items-center gap-3">
               <button
                 type="button"
                 :disabled="calendarStore.loading || !calendarStore.serviceAccountEmail || !calendarIdInput.trim()"
-                class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                class="rounded-lg bg-inverse px-4 py-2 text-sm font-medium text-on-solid disabled:opacity-50"
                 @click="handleSaveCalendarConfig"
               >{{ calendarStore.loading ? '確認中...' : '共有先を確認して保存' }}</button>
               <button
                 v-if="calendarStore.configured"
                 type="button"
                 :disabled="calendarStore.loading"
-                class="text-sm text-red-600 disabled:opacity-50"
+                class="text-sm text-danger disabled:opacity-50"
                 @click="handleClearCalendarConfig"
               >設定を解除</button>
             </div>
-            <p v-if="calendarStore.configured" class="text-sm text-green-700">
+            <p v-if="calendarStore.configured" class="text-sm text-success-strong">
               登録先: {{ calendarStore.calendarName || calendarStore.calendarId }}
             </p>
             <div
               v-if="calendarStore.configured"
-              class="space-y-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3"
+              class="space-y-3 rounded-lg border border-line bg-surface-muted px-3 py-3"
             >
-              <label class="flex items-start gap-2 text-sm text-slate-700">
+              <label class="flex items-start gap-2 text-sm text-fg-secondary">
                 <input
                   v-model="calendarStore.autoRegistrationEnabled"
                   type="checkbox"
-                  class="mt-0.5 rounded border-slate-300"
+                  class="mt-0.5 rounded border-line-strong"
                   @change="calendarAutomationSaved = false"
                 />
                 <span>
                   明確な予定を自動登録する
-                  <span class="mt-1 block text-xs leading-5 text-slate-500">
+                  <span class="mt-1 block text-xs leading-5 text-fg-subtle">
                     年月日、予定内容、分類の信頼度が条件を満たす将来の予定だけを登録します。曖昧な候補は確認待ちのまま残します。
                   </span>
                 </span>
               </label>
 
               <fieldset :disabled="!calendarStore.autoRegistrationEnabled" class="space-y-2 disabled:opacity-50">
-                <legend class="text-xs font-medium text-slate-600">自動登録する書類カテゴリ</legend>
+                <legend class="text-xs font-medium text-fg-muted">自動登録する書類カテゴリ</legend>
                 <div class="grid gap-2 sm:grid-cols-2">
                   <label
                     v-for="option in calendarAutoCategoryOptions"
                     :key="option.value"
-                    class="flex items-center gap-2 text-xs text-slate-700"
+                    class="flex items-center gap-2 text-xs text-fg-secondary"
                   >
                     <input
                       v-model="calendarStore.autoRegistrationCategories"
                       :value="option.value"
                       type="checkbox"
-                      class="rounded border-slate-300"
+                      class="rounded border-line-strong"
                       @change="calendarAutomationSaved = false"
                     />
                     {{ option.label }}
@@ -841,12 +841,12 @@ async function handleRunDataMigration(): Promise<void> {
                 </div>
               </fieldset>
 
-              <label class="block text-xs font-medium text-slate-600">
+              <label class="block text-xs font-medium text-fg-muted">
                 最低信頼度
                 <select
                   v-model.number="calendarStore.autoRegistrationMinConfidence"
                   :disabled="!calendarStore.autoRegistrationEnabled"
-                  class="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:opacity-50"
+                  class="mt-1 rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm disabled:opacity-50"
                   @change="calendarAutomationSaved = false"
                 >
                   <option :value="0.8">80%</option>
@@ -858,25 +858,25 @@ async function handleRunDataMigration(): Promise<void> {
               <button
                 type="button"
                 :disabled="calendarStore.loading || (calendarStore.autoRegistrationEnabled && calendarStore.autoRegistrationCategories.length === 0)"
-                class="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+                class="rounded-lg bg-inverse px-4 py-2 text-sm font-medium text-on-solid disabled:opacity-50"
                 @click="handleSaveCalendarAutomationConfig"
               >{{ calendarStore.loading ? '保存中...' : '自動登録設定を保存' }}</button>
-              <p v-if="calendarAutomationSaved" class="text-xs text-green-700">自動登録設定を保存しました。</p>
+              <p v-if="calendarAutomationSaved" class="text-xs text-success-strong">自動登録設定を保存しました。</p>
             </div>
           </div>
           <div v-else>
             <template v-if="calendarStore.configured">
-              <p class="text-sm text-gray-600">
+              <p class="text-sm text-fg-muted">
                 登録先: {{ calendarStore.calendarName || calendarStore.calendarId }}
               </p>
               <p
                 v-if="calendarStore.autoRegistrationEnabled"
-                class="mt-1 text-xs text-green-700"
+                class="mt-1 text-xs text-success-strong"
               >明確な予定の自動登録が有効です。</p>
             </template>
-            <p v-else class="text-sm text-slate-500">Google Calendar連携は家族スペースのownerが設定します。</p>
+            <p v-else class="text-sm text-fg-subtle">Google Calendar連携は家族スペースのownerが設定します。</p>
           </div>
-          <p v-if="calendarStore.error" class="mt-2 text-xs text-red-600">{{ calendarStore.error }}</p>
+          <p v-if="calendarStore.error" class="mt-2 text-xs text-danger">{{ calendarStore.error }}</p>
         </div>
         </section>
       </div>
@@ -901,19 +901,19 @@ async function handleRunDataMigration(): Promise<void> {
         data-testid="settings-data"
       >
         <!-- インポートとデータ更新 -->
-        <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div class="px-4 py-3 border-b border-gray-100">
-          <h2 class="text-sm font-semibold text-gray-700">インポートとデータ更新</h2>
-          <p class="text-xs text-gray-500 mt-0.5">
+        <section class="bg-surface rounded-lg border border-line overflow-hidden">
+        <div class="px-4 py-3 border-b border-line-subtle">
+          <h2 class="text-sm font-semibold text-fg-secondary">インポートとデータ更新</h2>
+          <p class="text-xs text-fg-subtle mt-0.5">
             現在のスペースに対するインポート、バックアップ、削除、データ補完を実行します
           </p>
         </div>
 
         <div class="px-4 py-4 space-y-4">
-          <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 space-y-3">
+          <div class="rounded-lg border border-line bg-surface-muted px-3 py-3 space-y-3">
             <div>
-              <p class="text-xs text-gray-500">対象スペース</p>
-              <p class="text-sm font-medium text-gray-800">{{ currentSpaceName }}</p>
+              <p class="text-xs text-fg-subtle">対象スペース</p>
+              <p class="text-sm font-medium text-fg">{{ currentSpaceName }}</p>
             </div>
 
             <input
@@ -926,40 +926,40 @@ async function handleRunDataMigration(): Promise<void> {
             <button
               @click="fileInput?.click()"
               :disabled="importing"
-              class="w-full px-3 py-2 border-2 border-dashed border-gray-300 rounded text-sm text-gray-600 hover:border-blue-500 hover:text-blue-600 disabled:opacity-50"
+              class="w-full px-3 py-2 border-2 border-dashed border-line-strong rounded text-sm text-fg-muted hover:border-accent hover:text-accent disabled:opacity-50"
             >
               {{ selectedFile ? selectedFile.name : 'RTMエクスポートJSONを選択' }}
             </button>
 
             <div v-if="importing && progress" class="space-y-2">
-              <div class="flex items-center justify-between text-xs text-gray-500">
+              <div class="flex items-center justify-between text-xs text-fg-subtle">
                 <span>{{ progress.message }}</span>
                 <span>{{ progressPercent }}%</span>
               </div>
-              <div class="w-full bg-gray-200 rounded-full h-2">
+              <div class="w-full bg-surface-strong rounded-full h-2">
                 <div
-                  class="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  class="bg-accent h-2 rounded-full transition-all duration-300"
                   :style="{ width: `${progressPercent}%` }"
                 />
               </div>
             </div>
 
-            <div v-if="importResult?.success" class="rounded-lg border border-green-200 bg-green-50 px-3 py-3 text-sm text-green-700">
+            <div v-if="importResult?.success" class="rounded-lg border border-success-line bg-success-soft px-3 py-3 text-sm text-success-strong">
               リスト {{ importResult.listsImported }} 件、タスク {{ importResult.tasksImported }} 件、タグ {{ importResult.tagsImported }} 件を取り込みました
             </div>
 
-            <div v-if="clearResult?.success" class="rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-3 text-sm text-yellow-700">
+            <div v-if="clearResult?.success" class="rounded-lg border border-warning-line bg-warning-soft px-3 py-3 text-sm text-warning-strong">
               タスク {{ clearResult.tasksDeleted }} 件、リスト {{ clearResult.listsDeleted }} 件、タグ {{ clearResult.tagsDeleted }} 件を削除しました
             </div>
 
-            <div v-if="maintenanceError" class="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700">
+            <div v-if="maintenanceError" class="rounded-lg border border-danger-line bg-danger-soft px-3 py-3 text-sm text-danger-strong">
               {{ maintenanceError }}
             </div>
 
             <button
               @click="handleImport"
               :disabled="!selectedFile || importing || clearing || exporting || migrating"
-              class="w-full bg-blue-600 text-white text-sm rounded-lg py-2 hover:bg-blue-700 disabled:opacity-50"
+              class="w-full bg-accent text-on-solid text-sm rounded-lg py-2 hover:bg-accent-hover disabled:opacity-50"
             >
               {{ importing ? 'インポート中...' : 'インポート開始' }}
             </button>
@@ -967,7 +967,7 @@ async function handleRunDataMigration(): Promise<void> {
             <button
               @click="handleExport"
               :disabled="importing || clearing || exporting || migrating"
-              class="w-full bg-green-600 text-white text-sm rounded-lg py-2 hover:bg-green-700 disabled:opacity-50"
+              class="w-full bg-success text-on-solid text-sm rounded-lg py-2 hover:bg-success-hover disabled:opacity-50"
             >
               {{ exporting ? 'エクスポート中...' : 'バックアップをダウンロード' }}
             </button>
@@ -975,24 +975,24 @@ async function handleRunDataMigration(): Promise<void> {
             <button
               @click="handleClear"
               :disabled="importing || clearing || exporting || migrating"
-              class="w-full bg-red-100 text-red-700 text-sm rounded-lg py-2 hover:bg-red-200 disabled:opacity-50"
+              class="w-full bg-danger-soft-strong text-danger-strong text-sm rounded-lg py-2 hover:bg-danger-soft-strong disabled:opacity-50"
             >
               {{ clearing ? '削除中...' : 'このスペースのデータを削除' }}
             </button>
           </div>
 
-          <div class="rounded-lg border border-gray-200 px-3 py-3 space-y-2">
-            <p class="text-sm font-medium text-gray-800">データ更新</p>
-            <p class="text-xs text-gray-500">
+          <div class="rounded-lg border border-line px-3 py-3 space-y-2">
+            <p class="text-sm font-medium text-fg">データ更新</p>
+            <p class="text-xs text-fg-subtle">
               現在のスペース内のタスクに `deleted: false` を補完し、リストの未完了件数も再計算します。
             </p>
-            <p v-if="migrationMessage" class="text-xs text-gray-600 font-mono">
+            <p v-if="migrationMessage" class="text-xs text-fg-muted font-mono">
               {{ migrationMessage }}
             </p>
             <button
               @click="handleRunDataMigration"
               :disabled="importing || clearing || exporting || migrating"
-              class="w-full bg-gray-800 text-white text-sm rounded-lg py-2 hover:bg-gray-900 disabled:opacity-50"
+              class="w-full bg-inverse text-on-solid text-sm rounded-lg py-2 hover:bg-inverse-strong disabled:opacity-50"
             >
               {{ migrating ? '更新中...' : 'データ更新を実行' }}
             </button>

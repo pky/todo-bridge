@@ -611,7 +611,7 @@ watch(
 <template>
   <aside class="h-full flex flex-col">
     <div class="mb-3">
-      <h2 class="text-xs font-medium text-gray-500 mb-1.5">スマート</h2>
+      <h2 class="text-xs font-medium text-fg-subtle mb-1.5">スマート</h2>
       <div class="grid grid-cols-2 gap-1">
         <button
           v-for="smartList in smartLists"
@@ -620,8 +620,8 @@ watch(
           class="flex items-center justify-between px-2 py-1.5 rounded text-xs cursor-pointer transition-colors"
           :class="
             listsStore.selectedSmartList === smartList.type
-              ? 'bg-blue-100 text-blue-800'
-              : 'hover:bg-gray-100 text-gray-600'
+              ? 'bg-accent-soft-strong text-accent-strong'
+              : 'hover:bg-surface-hover text-fg-muted'
           "
         >
           <span class="flex items-center gap-1 truncate">
@@ -633,8 +633,8 @@ watch(
             class="text-[10px] px-1 rounded-full ml-1 flex-shrink-0"
             :class="
               smartList.type === 'overdue'
-                ? 'bg-red-100 text-red-600'
-                : 'bg-gray-200 text-gray-500'
+                ? 'bg-danger-soft-strong text-danger'
+                : 'bg-surface-strong text-fg-subtle'
             "
           >
             {{ smartList.count }}
@@ -643,17 +643,17 @@ watch(
       </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto space-y-4 border-t border-gray-200 pt-3">
+    <div class="flex-1 overflow-y-auto space-y-4 border-t border-line pt-3">
       <section
         v-for="section in sections"
         :key="section.key"
       >
         <div class="flex items-center justify-between mb-2">
-          <h2 class="text-xs font-medium text-gray-500">{{ section.title }}</h2>
+          <h2 class="text-xs font-medium text-fg-subtle">{{ section.title }}</h2>
           <button
             v-if="section.canAdd"
             @click="openAddList(section.key)"
-            class="text-blue-600 hover:text-blue-800 text-xs"
+            class="text-accent hover:text-accent-strong text-xs"
           >
             + 追加
           </button>
@@ -661,7 +661,7 @@ watch(
 
         <div
           v-if="addingSection === section.key"
-          class="mb-3 rounded-lg border border-gray-200 bg-white p-2"
+          class="mb-3 rounded-lg border border-line bg-surface p-2"
         >
           <input
             v-model="newListName"
@@ -669,22 +669,22 @@ watch(
             @keyup.escape="resetNewListForm"
             type="text"
             :placeholder="`${section.title}リスト名`"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="w-full px-3 py-2 border border-line-strong rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             autofocus
           />
-          <p class="mt-2 text-[11px] text-gray-500">
+          <p class="mt-2 text-[11px] text-fg-subtle">
             {{ section.key === 'personal' ? '個人用に作成します' : '共有スペースに作成します' }}
           </p>
           <div class="flex gap-2 mt-2">
             <button
               @click="handleAddList"
-              class="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+              class="px-3 py-1 bg-accent text-on-solid rounded text-sm hover:bg-accent-hover"
             >
               追加
             </button>
             <button
               @click="resetNewListForm"
-              class="px-3 py-1 text-gray-600 hover:text-gray-800 text-sm"
+              class="px-3 py-1 text-fg-muted hover:text-fg text-sm"
             >
               キャンセル
             </button>
@@ -706,15 +706,15 @@ watch(
             class="group flex items-center justify-between px-2 py-1.5 rounded cursor-pointer transition-colors text-sm"
             :class="[
               isSelectedList(list)
-                ? 'bg-blue-100 text-blue-800'
-                : 'hover:bg-gray-100 text-gray-700',
-              dragOverIndex === index && isCurrentSpaceList(list) ? 'border-t-2 border-blue-500' : '',
+                ? 'bg-accent-soft-strong text-accent-strong'
+                : 'hover:bg-surface-hover text-fg-secondary',
+              dragOverIndex === index && isCurrentSpaceList(list) ? 'border-t-2 border-accent' : '',
               draggedListId === list.id ? 'opacity-50' : ''
             ]"
           >
             <span class="flex items-center gap-1.5 min-w-0">
               <span
-                class="drag-handle text-gray-400 text-xs select-none touch-none p-1"
+                class="drag-handle text-fg-faint text-xs select-none touch-none p-1"
                 :class="isCurrentSpaceList(list) ? 'cursor-grab' : 'cursor-default opacity-30'"
                 @touchstart="handleTouchStart(list, $event)"
               >⋮⋮</span>
@@ -725,14 +725,14 @@ watch(
                   @keyup.enter="saveListName(list.id)"
                   @keyup.escape="cancelEditingList"
                   type="text"
-                  class="w-full px-1 py-0.5 border border-blue-500 rounded text-sm focus:outline-none min-w-0"
+                  class="w-full px-1 py-0.5 border border-accent rounded text-sm focus:outline-none min-w-0"
                   autofocus
                 />
                 <div
                   v-if="canConfigureCurrentSpaceMembers"
-                  class="mt-2 rounded-md border border-blue-100 bg-white p-2"
+                  class="mt-2 rounded-md border border-accent-line bg-surface p-2"
                 >
-                  <div class="flex gap-3 text-xs text-gray-600">
+                  <div class="flex gap-3 text-xs text-fg-muted">
                     <label class="flex items-center gap-1">
                       <input
                         v-model="editingShareMode"
@@ -754,13 +754,13 @@ watch(
                 <div class="mt-2 flex gap-2">
                   <button
                     @click="saveListName(list.id)"
-                    class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                    class="px-2 py-1 bg-accent text-on-solid rounded text-xs hover:bg-accent-hover"
                   >
                     保存
                   </button>
                   <button
                     @click="cancelEditingList"
-                    class="px-2 py-1 text-gray-600 hover:text-gray-800 text-xs"
+                    class="px-2 py-1 text-fg-muted hover:text-fg text-xs"
                   >
                     キャンセル
                   </button>
@@ -774,7 +774,7 @@ watch(
                 <span class="truncate block">{{ list.name }}</span>
                 <span
                   v-if="showListSpaceLabel(list, section.key)"
-                  class="text-[10px] text-gray-400"
+                  class="text-[10px] text-fg-faint"
                 >
                   {{ list.spaceLabel }}
                 </span>
@@ -784,14 +784,14 @@ watch(
             <span class="flex items-center gap-1 flex-shrink-0">
               <span
                 v-if="section.key === 'personal' && list.incompleteTaskCount && list.incompleteTaskCount > 0"
-                class="text-[10px] text-gray-400"
+                class="text-[10px] text-fg-faint"
               >
                 {{ list.incompleteTaskCount }}
               </span>
               <button
                 v-if="list.name !== 'Inbox' && isCurrentSpaceList(list)"
                 @click.stop="startEditingList(list, $event)"
-                class="text-gray-400 hover:text-blue-500 transition-colors text-xs md:opacity-0 md:group-hover:opacity-100"
+                class="text-fg-faint hover:text-accent transition-colors text-xs md:opacity-0 md:group-hover:opacity-100"
                 :class="isSelectedList(list) ? 'opacity-100' : 'opacity-100 md:opacity-0'"
                 title="編集"
               >
@@ -800,7 +800,7 @@ watch(
               <button
                 v-if="list.name !== 'Inbox' && isCurrentSpaceList(list)"
                 @click.stop="handleDeleteList(list)"
-                class="text-gray-400 hover:text-red-500 transition-colors text-xs md:opacity-0 md:group-hover:opacity-100"
+                class="text-fg-faint hover:text-danger transition-colors text-xs md:opacity-0 md:group-hover:opacity-100"
                 :class="isSelectedList(list) ? 'opacity-100' : 'opacity-100 md:opacity-0'"
                 title="削除"
               >
@@ -812,7 +812,7 @@ watch(
 
         <p
           v-if="section.lists.length === 0"
-          class="px-2 py-2 text-xs text-gray-400"
+          class="px-2 py-2 text-xs text-fg-faint"
         >
           {{ section.emptyMessage }}
         </p>

@@ -37,20 +37,20 @@ async function handleLocalLogin() {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gray-100">
-    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+  <div class="min-h-screen flex items-center justify-center bg-canvas">
+    <div class="bg-surface p-8 rounded-lg shadow-md w-full max-w-md">
       <div class="mb-8 flex items-center justify-center gap-3">
         <img src="/icons/icon.svg" alt="TodoBridge" class="h-12 w-12" />
-        <span class="text-xl font-medium tracking-tight text-gray-700">TodoBridge</span>
+        <span class="text-xl font-medium tracking-tight text-fg-secondary">TodoBridge</span>
       </div>
-      <p class="text-gray-600 text-center mb-6">
+      <p class="text-fg-muted text-center mb-6">
         共有対応のタスク管理アプリ
       </p>
 
       <button
         @click="handleGoogleLogin"
         :disabled="authStore.loading"
-        class="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 rounded-lg px-6 py-3 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        class="w-full flex items-center justify-center gap-3 bg-surface border border-line-strong rounded-lg px-6 py-3 text-fg-secondary hover:bg-surface-hover focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <svg class="w-5 h-5" viewBox="0 0 24 24">
           <path
@@ -78,12 +78,12 @@ async function handleLocalLogin() {
         data-testid="local-login"
         @click="handleLocalLogin"
         :disabled="authStore.loading"
-        class="mt-3 w-full rounded-lg border border-blue-200 bg-blue-50 px-6 py-3 text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+        class="mt-3 w-full rounded-lg border border-accent-line bg-accent-soft px-6 py-3 text-accent-strong hover:bg-accent-soft-strong disabled:cursor-not-allowed disabled:opacity-50"
       >
         ローカル確認用にログイン
       </button>
 
-      <p v-if="authStore.error" class="mt-4 text-red-500 text-center text-sm">
+      <p v-if="authStore.error" class="mt-4 text-danger text-center text-sm">
         {{ authStore.error }}
       </p>
     </div>

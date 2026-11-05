@@ -75,24 +75,24 @@ async function handleFileSelection(event: Event): Promise<void> {
     <button
       type="button"
       :disabled="disabled"
-      class="text-xs font-medium text-blue-600 hover:text-blue-800 disabled:text-gray-400"
+      class="text-xs font-medium text-accent hover:text-accent-strong disabled:text-fg-faint"
       @click="open = !open"
     >{{ open ? '閉じる' : buttonLabel }}</button>
 
     <div
       v-if="open"
-      class="absolute right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-gray-200 bg-white p-3 shadow-lg"
+      class="absolute right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-line bg-surface p-3 shadow-lg"
     >
       <div class="flex items-center justify-between gap-2">
-        <p class="text-xs font-medium text-gray-700">関連づける書類を選択</p>
+        <p class="text-xs font-medium text-fg-secondary">関連づける書類を選択</p>
         <button
           type="button"
           :disabled="documentsStore.uploading"
-          class="rounded border border-blue-300 px-2 py-1 text-xs text-blue-700 disabled:opacity-50"
+          class="rounded border border-accent-line px-2 py-1 text-xs text-accent-strong disabled:opacity-50"
           @click="fileInput?.click()"
         >{{ documentsStore.uploading ? '保存中...' : '新しい書類を追加' }}</button>
       </div>
-      <p class="mt-1 text-[11px] text-gray-500">
+      <p class="mt-1 text-[11px] text-fg-subtle">
         {{ currentSpaceLabel }}の書類を表示中。新しい書類も同じ保存先に追加します。
       </p>
       <input
@@ -103,22 +103,22 @@ async function handleFileSelection(event: Event): Promise<void> {
         @change="handleFileSelection"
       />
 
-      <p v-if="uploadError" class="mt-2 rounded bg-red-50 px-2 py-1.5 text-xs text-red-700">{{ uploadError }}</p>
-      <p v-if="documentsStore.loading" class="mt-3 text-xs text-gray-500">書類を読み込み中...</p>
-      <p v-else-if="availableDocuments.length === 0" class="mt-3 text-xs text-gray-500">選択できる書類がありません。</p>
+      <p v-if="uploadError" class="mt-2 rounded bg-danger-soft px-2 py-1.5 text-xs text-danger-strong">{{ uploadError }}</p>
+      <p v-if="documentsStore.loading" class="mt-3 text-xs text-fg-subtle">書類を読み込み中...</p>
+      <p v-else-if="availableDocuments.length === 0" class="mt-3 text-xs text-fg-subtle">選択できる書類がありません。</p>
       <div v-else class="mt-3 max-h-64 space-y-1 overflow-y-auto">
         <label
           v-for="document in availableDocuments"
           :key="document.id"
-          class="flex cursor-pointer items-center gap-2 rounded-lg p-2 hover:bg-gray-50"
+          class="flex cursor-pointer items-center gap-2 rounded-lg p-2 hover:bg-surface-hover"
         >
           <input
             type="checkbox"
             :checked="draftIds.includes(document.id)"
-            class="rounded text-blue-600 focus:ring-blue-500"
+            class="rounded text-accent focus:ring-accent"
             @change="toggleDocument(document.id)"
           />
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-gray-100">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-alt">
             <img
               v-if="documentsStore.thumbnailUrls[document.id]"
               :src="documentsStore.thumbnailUrls[document.id]"
@@ -127,15 +127,15 @@ async function handleFileSelection(event: Event): Promise<void> {
             />
             <span v-else>{{ document.mimeType.startsWith('image/') ? '🖼️' : isTextDocumentMimeType(document.mimeType) ? '📝' : '📄' }}</span>
           </div>
-          <span class="min-w-0 flex-1 truncate text-xs text-gray-700">{{ document.name }}</span>
+          <span class="min-w-0 flex-1 truncate text-xs text-fg-secondary">{{ document.name }}</span>
         </label>
       </div>
 
       <div class="mt-3 flex justify-end gap-2">
-        <button type="button" class="px-3 py-1.5 text-xs text-gray-600" @click="open = false">キャンセル</button>
+        <button type="button" class="px-3 py-1.5 text-xs text-fg-muted" @click="open = false">キャンセル</button>
         <button
           type="button"
-          class="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white"
+          class="rounded bg-accent px-3 py-1.5 text-xs font-medium text-on-solid"
           @click="confirmSelection"
         >{{ draftIds.length }}件を選択</button>
       </div>

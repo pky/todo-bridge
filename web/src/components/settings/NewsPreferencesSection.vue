@@ -49,26 +49,26 @@ async function saveCurrentPreferences(): Promise<void> {
 </script>
 
 <template>
-  <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
-    <div class="px-4 py-3 border-b border-gray-100">
-      <h2 class="text-sm font-semibold text-gray-700">ニュースキーワード優先度</h2>
-      <p class="text-xs text-gray-500 mt-0.5">
+  <section class="bg-surface rounded-lg border border-line overflow-hidden">
+    <div class="px-4 py-3 border-b border-line-subtle">
+      <h2 class="text-sm font-semibold text-fg-secondary">ニュースキーワード優先度</h2>
+      <p class="text-xs text-fg-subtle mt-0.5">
         優先したいキーワードは重み2.0以上、優先度を下げたいキーワードは1.0未満に設定
       </p>
     </div>
 
-    <div class="px-4 py-3 border-b border-gray-100">
+    <div class="px-4 py-3 border-b border-line-subtle">
       <div class="flex gap-2">
         <button
           class="rounded-full px-3 py-1 text-xs font-medium"
-          :class="currentTopic === 'ai' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'"
+          :class="currentTopic === 'ai' ? 'bg-inverse-strong text-on-solid' : 'bg-surface-alt text-fg-muted'"
           @click="switchTopic('ai')"
         >
           AI
         </button>
         <button
           class="rounded-full px-3 py-1 text-xs font-medium"
-          :class="currentTopic === 'mobile' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'"
+          :class="currentTopic === 'mobile' ? 'bg-inverse-strong text-on-solid' : 'bg-surface-alt text-fg-muted'"
           @click="switchTopic('mobile')"
         >
           モバイル
@@ -77,22 +77,22 @@ async function saveCurrentPreferences(): Promise<void> {
     </div>
 
     <div class="px-4 py-3 space-y-2">
-      <div v-if="currentTopic === 'mobile'" class="space-y-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
+      <div v-if="currentTopic === 'mobile'" class="space-y-3 rounded-lg border border-line-subtle bg-surface-muted p-3">
         <div>
-          <p class="text-xs font-semibold text-gray-700">対象プラットフォーム</p>
+          <p class="text-xs font-semibold text-fg-secondary">対象プラットフォーム</p>
           <div class="mt-2 flex gap-2">
-            <label class="flex items-center gap-1 text-sm text-gray-600">
+            <label class="flex items-center gap-1 text-sm text-fg-muted">
               <input v-model="mobilePlatforms" type="checkbox" value="ios" />
               iOS
             </label>
-            <label class="flex items-center gap-1 text-sm text-gray-600">
+            <label class="flex items-center gap-1 text-sm text-fg-muted">
               <input v-model="mobilePlatforms" type="checkbox" value="android" />
               Android
             </label>
           </div>
         </div>
 
-        <label class="flex items-center justify-between gap-3 text-sm text-gray-600">
+        <label class="flex items-center justify-between gap-3 text-sm text-fg-muted">
           <span>要対応のみを優先</span>
           <input v-model="actionRequiredOnly" type="checkbox" />
         </label>
@@ -107,7 +107,7 @@ async function saveCurrentPreferences(): Promise<void> {
           v-model="kw.word"
           type="text"
           placeholder="キーワード"
-          class="flex-1 text-sm border border-gray-300 rounded px-2 py-1"
+          class="flex-1 text-sm border border-line-strong rounded px-2 py-1"
         />
         <input
           v-model.number="kw.weight"
@@ -115,10 +115,10 @@ async function saveCurrentPreferences(): Promise<void> {
           min="0.1"
           max="5.0"
           step="0.1"
-          class="w-16 text-sm border border-gray-300 rounded px-2 py-1 text-center"
+          class="w-16 text-sm border border-line-strong rounded px-2 py-1 text-center"
         />
         <button
-          class="text-red-400 hover:text-red-600 text-xs"
+          class="text-danger-faint hover:text-danger text-xs"
           @click="newsKeywords.splice(index, 1)"
         >
           削除
@@ -126,16 +126,16 @@ async function saveCurrentPreferences(): Promise<void> {
       </div>
 
       <button
-        class="text-sm text-blue-500 hover:text-blue-700"
+        class="text-sm text-accent hover:text-accent-strong"
         @click="newsKeywords.push({ word: '', weight: 1.0 })"
       >
         + キーワードを追加
       </button>
     </div>
 
-    <div class="px-4 py-3 border-t border-gray-100">
+    <div class="px-4 py-3 border-t border-line-subtle">
       <button
-        class="w-full bg-blue-500 text-white text-sm rounded-lg py-2 hover:bg-blue-600"
+        class="w-full bg-accent text-on-solid text-sm rounded-lg py-2 hover:bg-accent"
         @click="saveCurrentPreferences"
       >
         保存

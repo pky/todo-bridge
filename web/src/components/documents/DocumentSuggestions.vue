@@ -174,164 +174,164 @@ function registerCalendar(suggestion: DocumentSuggestion): void {
 </script>
 
 <template>
-  <section data-testid="document-suggestions" class="mt-4 rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
+  <section data-testid="document-suggestions" class="mt-4 rounded-xl border border-line bg-surface p-3 sm:p-4">
     <div class="flex items-center justify-between gap-3">
       <div>
-        <h3 class="text-sm font-medium text-slate-800">読み取り候補</h3>
-        <p class="mt-0.5 text-xs text-slate-500">内容を確認してから採用します。TodoやCalendarへの登録は自動では行いません。</p>
+        <h3 class="text-sm font-medium text-fg">読み取り候補</h3>
+        <p class="mt-0.5 text-xs text-fg-subtle">内容を確認してから採用します。TodoやCalendarへの登録は自動では行いません。</p>
       </div>
       <div class="flex shrink-0 items-center gap-2">
-        <span v-if="actionableSuggestions.length" class="text-xs text-slate-500">{{ actionableSuggestions.length }}件</span>
+        <span v-if="actionableSuggestions.length" class="text-xs text-fg-subtle">{{ actionableSuggestions.length }}件</span>
         <button
           type="button"
           :disabled="reanalyzing"
-          class="rounded-lg border border-blue-300 bg-white px-2.5 py-1.5 text-xs font-medium text-blue-700 disabled:opacity-50"
+          class="rounded-lg border border-accent-line bg-surface px-2.5 py-1.5 text-xs font-medium text-accent-strong disabled:opacity-50"
           @click="emit('reanalyze')"
         >{{ reanalyzing ? '再抽出中...' : '候補を再抽出' }}</button>
       </div>
     </div>
 
-    <p v-if="loading" class="mt-3 text-sm text-slate-500">候補を読み込み中...</p>
-    <p v-else-if="error" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
-    <p v-else-if="actionableSuggestions.length === 0" class="mt-3 text-sm text-slate-500">Todoや予定にできる候補は見つかりませんでした。</p>
+    <p v-if="loading" class="mt-3 text-sm text-fg-subtle">候補を読み込み中...</p>
+    <p v-else-if="error" class="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong">{{ error }}</p>
+    <p v-else-if="actionableSuggestions.length === 0" class="mt-3 text-sm text-fg-subtle">Todoや予定にできる候補は見つかりませんでした。</p>
 
     <div v-else class="mt-3 space-y-3">
       <article
         v-for="suggestion in actionableSuggestions"
         :key="suggestion.id"
-        class="rounded-xl border border-slate-200 p-3"
-        :class="suggestion.status === 'dismissed' ? 'bg-slate-50 opacity-75' : 'bg-white'"
+        class="rounded-xl border border-line p-3"
+        :class="suggestion.status === 'dismissed' ? 'bg-surface-muted opacity-75' : 'bg-surface'"
       >
         <div class="flex flex-wrap items-center gap-2 text-xs">
-          <span class="rounded-full bg-blue-50 px-2 py-1 font-medium text-blue-700">{{ typeLabels[suggestion.type] }}</span>
+          <span class="rounded-full bg-accent-soft px-2 py-1 font-medium text-accent-strong">{{ typeLabels[suggestion.type] }}</span>
           <span
             class="rounded-full px-2 py-1"
             :class="suggestion.status === 'accepted'
-              ? 'bg-green-100 text-green-700'
+              ? 'bg-success-soft-strong text-success-strong'
               : suggestion.status === 'dismissed'
-                ? 'bg-slate-200 text-slate-600'
-                : 'bg-amber-100 text-amber-700'"
+                ? 'bg-surface-strong text-fg-muted'
+                : 'bg-warning-soft-strong text-warning-strong'"
           >{{ statusLabels[suggestion.status] }}</span>
-          <span :class="suggestion.confidence !== null && suggestion.confidence < 0.7 ? 'font-medium text-amber-700' : 'text-slate-500'">
+          <span :class="suggestion.confidence !== null && suggestion.confidence < 0.7 ? 'font-medium text-warning-strong' : 'text-fg-subtle'">
             {{ confidenceLabel(suggestion.confidence) }}
           </span>
         </div>
 
-        <label class="mt-3 block text-xs font-medium text-slate-600">
+        <label class="mt-3 block text-xs font-medium text-fg-muted">
           タイトル
           <input
             v-if="drafts[suggestion.id]"
             :value="titleValue(suggestion.id)"
             type="text"
             maxlength="500"
-            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800"
+            class="mt-1 w-full rounded-lg border border-line-strong px-3 py-2 text-sm text-fg"
             @input="updateTitle(suggestion.id, ($event.target as HTMLInputElement).value)"
           />
         </label>
 
         <div v-if="drafts[suggestion.id] && 'dateText' in suggestion.value" class="mt-3 grid gap-3 sm:grid-cols-2">
-          <label class="block text-xs font-medium text-slate-600">
+          <label class="block text-xs font-medium text-fg-muted">
             日付
             <input
               type="date"
               :value="valueAsString(suggestion.id, 'date')"
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-line-strong px-3 py-2 text-sm"
               @input="updateDate(suggestion.id, ($event.target as HTMLInputElement).value)"
             />
           </label>
-          <label class="block text-xs font-medium text-slate-600">
+          <label class="block text-xs font-medium text-fg-muted">
             開始時刻
             <input
               type="time"
               :value="valueAsString(suggestion.id, 'time')"
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-line-strong px-3 py-2 text-sm"
               @input="updateValue(suggestion.id, 'time', ($event.target as HTMLInputElement).value || null)"
             />
           </label>
-          <label v-if="suggestion.type === 'calendar_event'" class="block text-xs font-medium text-slate-600">
+          <label v-if="suggestion.type === 'calendar_event'" class="block text-xs font-medium text-fg-muted">
             終了時刻
             <input
               type="time"
               :value="valueAsString(suggestion.id, 'endTime')"
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-line-strong px-3 py-2 text-sm"
               @input="updateValue(suggestion.id, 'endTime', ($event.target as HTMLInputElement).value || null)"
             />
           </label>
-          <label v-if="suggestion.type === 'calendar_event'" class="block text-xs font-medium text-slate-600 sm:col-span-2">
+          <label v-if="suggestion.type === 'calendar_event'" class="block text-xs font-medium text-fg-muted sm:col-span-2">
             場所
             <input
               type="text"
               :value="valueAsString(suggestion.id, 'location')"
               maxlength="500"
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-line-strong px-3 py-2 text-sm"
               @input="updateValue(suggestion.id, 'location', ($event.target as HTMLInputElement).value || null)"
             />
           </label>
-          <p v-if="hasAmbiguousYear(suggestion.id)" class="sm:col-span-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <p v-if="hasAmbiguousYear(suggestion.id)" class="sm:col-span-2 rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning-strong">
             {{ ambiguousYearMessage(suggestion.id) }}
           </p>
         </div>
 
-        <label v-else-if="primaryTextKey(suggestion)" class="mt-3 block text-xs font-medium text-slate-600">
+        <label v-else-if="primaryTextKey(suggestion)" class="mt-3 block text-xs font-medium text-fg-muted">
           内容
           <input
             type="text"
             :value="valueAsString(suggestion.id, primaryTextKey(suggestion)!)"
-            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-lg border border-line-strong px-3 py-2 text-sm"
             @input="updateValue(suggestion.id, primaryTextKey(suggestion)!, ($event.target as HTMLInputElement).value)"
           />
         </label>
 
-        <label v-else-if="typeof suggestion.value.amount === 'number'" class="mt-3 block text-xs font-medium text-slate-600">
+        <label v-else-if="typeof suggestion.value.amount === 'number'" class="mt-3 block text-xs font-medium text-fg-muted">
           金額（円）
           <input
             type="number"
             min="0"
             :value="valueAsString(suggestion.id, 'amount')"
-            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-lg border border-line-strong px-3 py-2 text-sm"
             @input="updateValue(suggestion.id, 'amount', Number(($event.target as HTMLInputElement).value))"
           />
         </label>
 
-        <div class="mt-3 rounded-lg bg-slate-50 px-3 py-2">
+        <div class="mt-3 rounded-lg bg-surface-muted px-3 py-2">
           <div class="flex items-center justify-between gap-3">
-            <span class="text-xs font-medium text-slate-500">根拠</span>
+            <span class="text-xs font-medium text-fg-subtle">根拠</span>
             <button
               v-if="suggestion.pageNumber"
               type="button"
-              class="text-xs font-medium text-blue-600 hover:underline"
+              class="text-xs font-medium text-accent hover:underline"
               @click="emit('openPage', suggestion.pageNumber)"
             >{{ suggestion.pageNumber }}ページを開く</button>
           </div>
-          <p class="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-600">{{ suggestion.sourceExcerpt }}</p>
+          <p class="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-fg-muted">{{ suggestion.sourceExcerpt }}</p>
         </div>
 
         <div class="mt-3 grid gap-2 sm:grid-cols-3">
           <button
             type="button"
             :disabled="savingIds.includes(suggestion.id)"
-            class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-50"
+            class="rounded-lg border border-line-strong px-3 py-2 text-sm font-medium text-fg-secondary disabled:opacity-50"
             @click="save(suggestion, suggestion.status)"
           >修正を保存</button>
           <button
             v-if="suggestion.type === 'calendar_event' || suggestion.status !== 'accepted'"
             type="button"
             :disabled="savingIds.includes(suggestion.id)"
-            class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+            class="rounded-lg bg-accent px-3 py-2 text-sm font-medium text-on-solid disabled:opacity-50"
             @click="suggestion.type === 'calendar_event' ? registerCalendar(suggestion) : save(suggestion, 'accepted')"
           >{{ acceptanceLabel(suggestion) }}</button>
           <button
             v-if="suggestion.status !== 'dismissed'"
             type="button"
             :disabled="savingIds.includes(suggestion.id)"
-            class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 disabled:opacity-50"
+            class="rounded-lg border border-line-strong px-3 py-2 text-sm text-fg-muted disabled:opacity-50"
             @click="save(suggestion, 'dismissed')"
           >候補から外す</button>
           <button
             v-else
             type="button"
             :disabled="savingIds.includes(suggestion.id)"
-            class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-600 disabled:opacity-50"
+            class="rounded-lg border border-line-strong px-3 py-2 text-sm text-fg-muted disabled:opacity-50"
             @click="save(suggestion, 'pending')"
           >確認待ちに戻す</button>
         </div>

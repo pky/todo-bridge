@@ -336,13 +336,13 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
 </script>
 
 <template>
-  <div class="flex flex-col min-h-screen bg-gray-50 pt-[88px]">
+  <div class="flex flex-col min-h-screen bg-canvas pt-[88px]">
     <!-- ヘッダー (fixed で固定) -->
-    <header class="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 shadow-sm">
+    <header class="fixed top-0 left-0 right-0 z-50 bg-surface border-b border-line px-4 py-3 flex items-center gap-3 shadow-sm">
       <button
         v-if="authStore.accessMode !== 'newsViewer'"
         @click="goBack"
-        class="text-gray-500 hover:text-gray-700 p-1 -ml-1"
+        class="text-fg-subtle hover:text-fg-secondary p-1 -ml-1"
         aria-label="戻る"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -350,13 +350,13 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
         </svg>
       </button>
       <div>
-        <h1 class="text-base font-semibold text-gray-800">{{ pageTitle }}</h1>
-        <p class="text-xs text-gray-400">{{ pageSubtitle }}</p>
-        <p class="text-[11px] text-gray-400">{{ formatFeedDate(latestFeedDate) }}</p>
+        <h1 class="text-base font-semibold text-fg">{{ pageTitle }}</h1>
+        <p class="text-xs text-fg-faint">{{ pageSubtitle }}</p>
+        <p class="text-[11px] text-fg-faint">{{ formatFeedDate(latestFeedDate) }}</p>
       </div>
       <button
         type="button"
-        class="ml-auto inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-white hover:text-gray-900"
+        class="ml-auto inline-flex items-center gap-2 rounded-full border border-line bg-surface-muted px-3 py-1.5 text-xs font-medium text-fg-secondary transition hover:border-line-strong hover:bg-surface hover:text-fg"
         v-if="canManage"
         @click="openReadLaterInTodo"
       >
@@ -365,35 +365,35 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
       <button
         v-if="authStore.accessMode === 'newsViewer'"
         type="button"
-        class="ml-auto rounded-full border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+        class="ml-auto rounded-full border border-line px-3 py-1.5 text-xs font-medium text-fg-secondary hover:bg-surface-hover"
         @click="handleLogout"
       >
         ログアウト
       </button>
-      <p v-if="viewerLogoutError" role="alert" class="w-full text-right text-xs text-red-600">{{ viewerLogoutError }}</p>
+      <p v-if="viewerLogoutError" role="alert" class="w-full text-right text-xs text-danger">{{ viewerLogoutError }}</p>
     </header>
 
     <!-- 記事リスト -->
     <div class="flex-1 overflow-y-auto" ref="listContainerRef">
-      <div v-if="isMobileTopic" class="sticky top-0 z-10 border-b border-gray-200 bg-white/95 px-3 py-2 backdrop-blur">
+      <div v-if="isMobileTopic" class="sticky top-0 z-10 border-b border-line bg-surface/95 px-3 py-2 backdrop-blur">
         <div class="flex gap-2 overflow-x-auto">
           <button
             class="rounded-full px-3 py-1 text-xs font-medium"
-            :class="mobileFilter === 'ios' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'"
+            :class="mobileFilter === 'ios' ? 'bg-inverse-strong text-on-solid' : 'bg-surface-alt text-fg-muted'"
             @click="mobileFilter = 'ios'"
           >
             iOS
           </button>
           <button
             class="rounded-full px-3 py-1 text-xs font-medium"
-            :class="mobileFilter === 'android' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'"
+            :class="mobileFilter === 'android' ? 'bg-inverse-strong text-on-solid' : 'bg-surface-alt text-fg-muted'"
             @click="mobileFilter = 'android'"
           >
             Android
           </button>
           <button
             class="rounded-full px-3 py-1 text-xs font-medium"
-            :class="mobileFilter === 'all' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'"
+            :class="mobileFilter === 'all' ? 'bg-inverse-strong text-on-solid' : 'bg-surface-alt text-fg-muted'"
             @click="mobileFilter = 'all'"
           >
             すべて
@@ -402,20 +402,20 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
       </div>
 
       <div v-if="!isMobileTopic" class="px-3 py-2">
-        <button class="text-sm text-blue-600" @click="aiNewsStore.load(authStore.user!.uid, true)">ニュースを更新</button>
-        <p v-if="aiNewsStore.error" role="alert" class="text-sm text-red-600">{{ aiNewsStore.error }}</p>
-        <button v-for="id in canManage ? aiNewsStore.pendingArticles : []" :key="id" class="block text-sm text-blue-600" @click="aiNewsStore.retryPending(id)">操作結果が未確認・再試行</button>
+        <button class="text-sm text-accent" @click="aiNewsStore.load(authStore.user!.uid, true)">ニュースを更新</button>
+        <p v-if="aiNewsStore.error" role="alert" class="text-sm text-danger">{{ aiNewsStore.error }}</p>
+        <button v-for="id in canManage ? aiNewsStore.pendingArticles : []" :key="id" class="block text-sm text-accent" @click="aiNewsStore.retryPending(id)">操作結果が未確認・再試行</button>
       </div>
       <!-- ローディング -->
       <div v-if="newsLoading && !hasVisibleArticles" class="flex justify-center items-center py-12">
-        <div class="text-sm text-gray-400">読み込み中...</div>
+        <div class="text-sm text-fg-faint">読み込み中...</div>
       </div>
 
       <!-- エラー -->
       <div v-else-if="newsError && !hasVisibleArticles" class="px-4 py-8 text-center">
-        <p class="text-sm text-red-500">{{ newsError }}</p>
+        <p class="text-sm text-danger">{{ newsError }}</p>
         <button
-          class="mt-3 text-sm text-blue-500"
+          class="mt-3 text-sm text-accent"
           @click="isMobileTopic ? newsStore.loadTodayFeed(currentTopic) : aiNewsStore.load(authStore.user!.uid, true)"
         >
           再読み込み
@@ -424,8 +424,8 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
 
       <!-- 記事なし -->
       <div v-else-if="!hasVisibleArticles" class="px-4 py-12 text-center">
-        <p class="text-sm text-gray-500">{{ feedDiagnostic.message }}</p>
-        <p class="text-xs text-gray-300 mt-1">
+        <p class="text-sm text-fg-subtle">{{ feedDiagnostic.message }}</p>
+        <p class="text-xs text-fg-faint mt-1">
           {{
             feedDiagnostic.state === 'no-feed'
               ? '配信データの作成を待っています'
@@ -442,35 +442,35 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
 
       <!-- 記事一覧 -->
       <div v-else class="px-3 py-3 pb-20">
-        <p v-if="actionItemError" role="alert" class="mb-3 text-sm text-red-600">{{ actionItemError }}</p>
+        <p v-if="actionItemError" role="alert" class="mb-3 text-sm text-danger">{{ actionItemError }}</p>
         <div v-if="newsLoading && hasVisibleArticles" class="pb-2 text-right">
-          <p class="text-xs text-gray-400">{{ feedDiagnostic.message }}</p>
+          <p class="text-xs text-fg-faint">{{ feedDiagnostic.message }}</p>
         </div>
 
         <section
           v-if="isMobileTopic"
-          class="mb-3 overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-red-50"
+          class="mb-3 overflow-hidden rounded-2xl border border-warning-line bg-gradient-to-br from-warning-soft via-surface to-danger-soft"
         >
-          <div class="border-b border-amber-100 px-4 py-3">
-            <p class="text-xs font-semibold tracking-[0.18em] text-amber-700">IMPORTANT</p>
-            <h2 class="mt-1 text-base font-semibold text-gray-900">今日の重要事項</h2>
+          <div class="border-b border-warning-line px-4 py-3">
+            <p class="text-xs font-semibold tracking-[0.18em] text-warning-strong">IMPORTANT</p>
+            <h2 class="mt-1 text-base font-semibold text-fg">今日の重要事項</h2>
           </div>
 
           <div v-if="importantArticles.length > 0" class="grid grid-cols-1 gap-3 px-3 py-3">
             <article
               v-for="article in importantArticles"
               :key="`important-${article.key}`"
-              class="rounded-xl border border-amber-100 bg-white p-3 shadow-sm"
+              class="rounded-xl border border-warning-line bg-surface p-3 shadow-sm"
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
-                  <p class="text-xs font-medium text-amber-700">{{ getImportanceReason(article) }}</p>
-                  <h3 data-testid="important-title" class="mt-1 text-sm font-semibold leading-snug text-gray-900">
+                  <p class="text-xs font-medium text-warning-strong">{{ getImportanceReason(article) }}</p>
+                  <h3 data-testid="important-title" class="mt-1 text-sm font-semibold leading-snug text-fg">
                     {{ article.titleJa || article.title }}
                   </h3>
                 </div>
                 <button
-                  class="rounded-full p-1 text-gray-300 hover:text-red-400"
+                  class="rounded-full p-1 text-fg-faint hover:text-danger-faint"
                   @click.stop="handleDismiss(actionItemArticle(article))"
                   title="興味なし"
                 >
@@ -483,9 +483,9 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
               <MobileSummary
                 v-if="article.mobileSummary"
                 :summary="article.mobileSummary"
-                class="mt-2 text-xs leading-relaxed text-gray-600"
+                class="mt-2 text-xs leading-relaxed text-fg-muted"
               />
-              <p v-else-if="article.summaryJa" class="mt-2 text-xs leading-relaxed text-gray-600">
+              <p v-else-if="article.summaryJa" class="mt-2 text-xs leading-relaxed text-fg-muted">
                 {{ article.summaryJa }}
               </p>
 
@@ -493,29 +493,29 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
                 <div class="flex flex-wrap gap-1 text-[11px]">
                   <span
                     v-if="article.importantLevel === 'urgent'"
-                    class="rounded-full bg-red-600 px-2 py-1 text-white"
+                    class="rounded-full bg-danger px-2 py-1 text-on-solid"
                   >
                     今すぐ確認
                   </span>
                   <span
                     v-else-if="article.importantLevel === 'review'"
-                    class="rounded-full bg-amber-100 px-2 py-1 text-amber-700"
+                    class="rounded-full bg-warning-soft-strong px-2 py-1 text-warning-strong"
                   >
                     確認推奨
                   </span>
-                  <span v-if="article.isOfficial" class="rounded-full bg-gray-900 px-2 py-1 text-white">公式</span>
-                  <span v-if="article.platform === 'ios'" class="rounded-full bg-gray-100 px-2 py-1 text-gray-700">iOS</span>
-                  <span v-if="article.platform === 'android'" class="rounded-full bg-gray-100 px-2 py-1 text-gray-700">Android</span>
-                  <span v-if="article.actionRequired" class="rounded-full bg-red-100 px-2 py-1 text-red-700">要対応</span>
+                  <span v-if="article.isOfficial" class="rounded-full bg-inverse-strong px-2 py-1 text-on-solid">公式</span>
+                  <span v-if="article.platform === 'ios'" class="rounded-full bg-surface-alt px-2 py-1 text-fg-secondary">iOS</span>
+                  <span v-if="article.platform === 'android'" class="rounded-full bg-surface-alt px-2 py-1 text-fg-secondary">Android</span>
+                  <span v-if="article.actionRequired" class="rounded-full bg-danger-soft-strong px-2 py-1 text-danger-strong">要対応</span>
                   <span
                     v-if="isActionItemOverdue(article, getLocalDateKey())"
-                    class="rounded-full bg-red-100 px-2 py-1 text-red-700"
+                    class="rounded-full bg-danger-soft-strong px-2 py-1 text-danger-strong"
                   >
                     期限切れ・未対応
                   </span>
                   <span
                     v-if="article.requiredByDate"
-                    class="rounded-full bg-blue-100 px-2 py-1 text-blue-700"
+                    class="rounded-full bg-accent-soft-strong px-2 py-1 text-accent-strong"
                   >
                     期限 {{ article.requiredByDate }}
                   </span>
@@ -523,7 +523,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
                 <div class="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    class="rounded-full border border-green-200 bg-white px-3 py-1 text-xs font-medium text-green-700 disabled:opacity-50"
+                    class="rounded-full border border-success-line bg-surface px-3 py-1 text-xs font-medium text-success-strong disabled:opacity-50"
                     :disabled="pendingActionItems.has(article.key)"
                     @click.stop="updateActionItem(article.key)"
                   >
@@ -531,13 +531,13 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
                   </button>
                   <button
                     type="button"
-                    class="rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-medium text-amber-700 hover:border-amber-300 hover:bg-amber-50"
+                    class="rounded-full border border-warning-line bg-surface px-3 py-1 text-xs font-medium text-warning-strong hover:border-warning-line hover:bg-warning-soft"
                     @click.stop="handleBookmark(actionItemArticle(article))"
                   >
                     あとで読む
                   </button>
                   <a
-                    class="rounded-full bg-amber-500 px-3 py-1 text-xs font-medium text-white hover:bg-amber-600"
+                    class="rounded-full bg-warning px-3 py-1 text-xs font-medium text-on-solid hover:bg-warning-hover"
                     :href="article.url"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -551,10 +551,10 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
           </div>
         </section>
 
-        <section v-if="isMobileTopic && resolvedActionItems.length > 0" class="mb-3 rounded-xl border border-gray-200 bg-white p-3">
+        <section v-if="isMobileTopic && resolvedActionItems.length > 0" class="mb-3 rounded-xl border border-line bg-surface p-3">
           <button
             type="button"
-            class="text-sm font-medium text-gray-600"
+            class="text-sm font-medium text-fg-muted"
             :aria-expanded="showResolvedActionItems"
             @click="showResolvedActionItems = !showResolvedActionItems"
           >
@@ -562,12 +562,12 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
           </button>
           <div v-if="showResolvedActionItems" class="mt-3 grid gap-3">
             <article v-for="item in resolvedActionItems" :key="item.key" class="flex items-start justify-between gap-3">
-              <a :href="item.url" target="_blank" rel="noopener noreferrer" class="min-w-0 break-words text-sm text-gray-600">
+              <a :href="item.url" target="_blank" rel="noopener noreferrer" class="min-w-0 break-words text-sm text-fg-muted">
                 {{ item.titleJa || item.title }}
               </a>
               <button
                 type="button"
-                class="shrink-0 rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-600 disabled:opacity-50"
+                class="shrink-0 rounded-full border border-line px-3 py-1 text-xs text-fg-muted disabled:opacity-50"
                 :disabled="pendingActionItems.has(item.key)"
                 @click="updateActionItem(item.key, true)"
               >
@@ -660,7 +660,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
       <button
         v-if="showScrollTop"
         @click="scrollToTop"
-        class="fixed bottom-6 right-6 p-3 bg-white text-gray-600 border border-gray-200 rounded-full shadow-lg hover:bg-gray-50 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 z-40 transition-all"
+        class="fixed bottom-6 right-6 p-3 bg-surface text-fg-muted border border-line rounded-full shadow-lg hover:bg-surface-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 z-40 transition-all"
         aria-label="トップに戻る"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -673,7 +673,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
     <Transition name="toast">
       <div
         v-if="bookmarkToast"
-        class="fixed bottom-20 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-4 py-2 rounded-full z-50"
+        class="fixed bottom-20 left-1/2 -translate-x-1/2 bg-inverse text-on-solid text-sm px-4 py-2 rounded-full z-50"
       >
         「あとで読む」に追加しました
       </div>

@@ -65,10 +65,10 @@ function toggleCompletedTasks() {
 }
 
 const priorityOptions = [
-  { value: 1, label: '高', color: 'bg-red-500' },
-  { value: 2, label: '中', color: 'bg-orange-500' },
-  { value: 3, label: '低', color: 'bg-blue-500' },
-  { value: 4, label: 'なし', color: 'bg-gray-300' },
+  { value: 1, label: '高', color: 'bg-priority-high' },
+  { value: 2, label: '中', color: 'bg-priority-medium' },
+  { value: 3, label: '低', color: 'bg-priority-low' },
+  { value: 4, label: 'なし', color: 'bg-surface-stronger' },
 ]
 
 // 選択中のタスクがあるか
@@ -346,16 +346,16 @@ async function handleDeleteCompletedTasks() {
   <section class="h-full flex flex-col overflow-x-hidden">
     <!-- ヘッダー -->
     <div class="flex items-center justify-between gap-2 mb-2">
-      <h2 class="font-semibold text-gray-700 truncate min-w-0 flex-1 text-sm sm:text-base">
+      <h2 class="font-semibold text-fg-secondary truncate min-w-0 flex-1 text-sm sm:text-base">
         <template v-if="tasksStore.isSearching">
           検索結果: "{{ tasksStore.searchQuery }}"
         </template>
         <template v-else-if="tasksStore.isTagFiltering">
           <span class="flex items-center gap-1">
-            <span class="text-blue-600">#{{ tasksStore.selectedTag }}</span>
+            <span class="text-accent">#{{ tasksStore.selectedTag }}</span>
             <button
               @click="tasksStore.clearTagFilter()"
-              class="text-gray-400 hover:text-gray-600 text-xs"
+              class="text-fg-faint hover:text-fg-muted text-xs"
             >✕</button>
           </span>
         </template>
@@ -366,7 +366,7 @@ async function handleDeleteCompletedTasks() {
           {{ listsStore.selectedList?.name || 'タスク' }}
         </template>
       </h2>
-      <span class="text-xs sm:text-sm text-gray-500 flex-shrink-0">
+      <span class="text-xs sm:text-sm text-fg-subtle flex-shrink-0">
         <template v-if="tasksStore.isSearching">
           {{ localSearchResults.length }}件
         </template>
@@ -375,24 +375,24 @@ async function handleDeleteCompletedTasks() {
         </template>
       </span>
     </div>
-    <label v-if="tasksStore.isSearching" class="flex items-center gap-1.5 mb-2 text-xs text-gray-500 cursor-pointer select-none">
+    <label v-if="tasksStore.isSearching" class="flex items-center gap-1.5 mb-2 text-xs text-fg-subtle cursor-pointer select-none">
       <input
         type="checkbox"
         :checked="tasksStore.searchIncludeCompleted"
         @change="tasksStore.toggleSearchIncludeCompleted()"
-        class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+        class="rounded border-line-strong text-accent focus:ring-accent w-3.5 h-3.5"
       />
       完了済みも含める
-      <span v-if="tasksStore.searchCacheLoading" class="text-gray-400">読み込み中...</span>
+      <span v-if="tasksStore.searchCacheLoading" class="text-fg-faint">読み込み中...</span>
     </label>
 
     <div v-if="listsStore.tags.length > 0" class="mb-3">
       <div class="flex items-center justify-between gap-2 mb-1">
-        <span class="text-xs text-gray-500">タグ</span>
+        <span class="text-xs text-fg-subtle">タグ</span>
         <button
           v-if="tasksStore.selectedTag"
           @click="tasksStore.clearTagFilter()"
-          class="text-[10px] text-blue-600 hover:text-blue-800"
+          class="text-[10px] text-accent hover:text-accent-strong"
         >
           クリア
         </button>
@@ -404,8 +404,8 @@ async function handleDeleteCompletedTasks() {
           @click="tasksStore.selectedTag === tag.name ? tasksStore.clearTagFilter() : tasksStore.setTagFilter(tag.name)"
           class="px-2 py-1 text-[10px] rounded-full whitespace-nowrap transition-colors"
           :class="tasksStore.selectedTag === tag.name
-            ? 'bg-blue-500 text-white'
-            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+            ? 'bg-accent text-on-solid'
+            : 'bg-surface-alt text-fg-muted hover:bg-surface-strong'"
         >
           #{{ tag.name }}
         </button>
@@ -413,16 +413,16 @@ async function handleDeleteCompletedTasks() {
     </div>
 
     <!-- ツールバー -->
-    <div class="flex items-center gap-1 sm:gap-2 mb-3 sm:mb-4 pb-2 border-b border-gray-200">
+    <div class="flex items-center gap-1 sm:gap-2 mb-3 sm:mb-4 pb-2 border-b border-line">
       <button
         @click="handleCompleteSelected"
         :disabled="!hasSelectedTask"
         class="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded border transition-colors flex-shrink-0"
         :class="hasSelectedTask
           ? (selectedTaskCompleted
-              ? 'border-gray-300 bg-gray-50 text-gray-600 hover:bg-gray-100'
-              : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50')
-          : 'border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed'"
+              ? 'border-line-strong bg-surface-muted text-fg-muted hover:bg-surface-hover'
+              : 'border-line-strong bg-surface text-fg-secondary hover:bg-surface-hover')
+          : 'border-line bg-surface-muted text-fg-faint cursor-not-allowed'"
         :title="selectedTaskCompleted ? '未完了に戻す' : '完了にする'"
       >
         <span class="text-base sm:text-lg">✓</span>
@@ -430,13 +430,13 @@ async function handleDeleteCompletedTasks() {
 
       <!-- ソート切り替え -->
       <div class="flex items-center gap-1 ml-auto">
-        <span class="text-xs text-gray-500 hidden sm:inline">並び順:</span>
+        <span class="text-xs text-fg-subtle hidden sm:inline">並び順:</span>
         <button
           @click="tasksStore.setSortOrder('name')"
           class="px-1.5 sm:px-2 py-1 text-xs rounded transition-colors"
           :class="tasksStore.sortOrder === 'name'
-            ? 'bg-blue-100 text-blue-700'
-            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+            ? 'bg-accent-soft-strong text-accent-strong'
+            : 'bg-surface-alt text-fg-muted hover:bg-surface-strong'"
         >
           名前
         </button>
@@ -444,8 +444,8 @@ async function handleDeleteCompletedTasks() {
           @click="tasksStore.setSortOrder('created')"
           class="px-1.5 sm:px-2 py-1 text-xs rounded transition-colors"
           :class="tasksStore.sortOrder === 'created'
-            ? 'bg-blue-100 text-blue-700'
-            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+            ? 'bg-accent-soft-strong text-accent-strong'
+            : 'bg-surface-alt text-fg-muted hover:bg-surface-strong'"
         >
           作成日
         </button>
@@ -457,27 +457,27 @@ async function handleDeleteCompletedTasks() {
       <div v-if="!isAdding">
         <button
           @click="openAddForm"
-          class="w-full text-left px-3 py-2 text-gray-500 hover:bg-gray-50 rounded-lg border border-dashed border-gray-300 hover:border-gray-400 transition-colors"
+          class="w-full text-left px-3 py-2 text-fg-subtle hover:bg-surface-hover rounded-lg border border-dashed border-line-strong hover:border-line-strong transition-colors"
         >
           + タスクを追加
         </button>
       </div>
-      <div v-else class="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+      <div v-else class="bg-surface border border-line rounded-lg p-3 shadow-sm">
         <input
           v-model="newTaskName"
           data-testid="new-task-name"
           @keyup.escape="resetAddForm"
           type="text"
           placeholder="タスク名を入力"
-          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          class="w-full px-3 py-2 border border-line-strong rounded-md focus:outline-none focus:ring-2 focus:ring-accent"
           autofocus
         />
-        <label class="mt-3 block text-xs text-gray-500">
+        <label class="mt-3 block text-xs text-fg-subtle">
           追加先リスト
           <select
             v-model="newTaskListId"
             data-testid="new-task-list"
-            class="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="mt-1 w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
           >
             <option v-for="list in listsStore.lists" :key="list.id" :value="list.id">
               {{ list.name }}
@@ -487,31 +487,31 @@ async function handleDeleteCompletedTasks() {
         <!-- 期限と優先度 -->
         <div class="flex flex-wrap items-center gap-3 mt-3">
           <div class="flex items-center gap-2">
-            <label class="text-xs text-gray-500">期限</label>
+            <label class="text-xs text-fg-subtle">期限</label>
             <input
               v-model="newTaskDueDate"
               data-testid="new-task-due-date"
               type="date"
-              class="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="px-2 py-1 border border-line-strong rounded text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
           <div v-if="newTaskDueDate" class="flex items-center gap-2">
-            <label class="text-xs text-gray-500">開始</label>
+            <label class="text-xs text-fg-subtle">開始</label>
             <input
               v-model="newTaskStartTime"
               type="time"
-              class="w-24 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              class="w-24 px-2 py-1 border border-line-strong rounded text-sm focus:outline-none focus:ring-2 focus:ring-accent"
             />
-            <label class="text-xs text-gray-500">終了</label>
+            <label class="text-xs text-fg-subtle">終了</label>
             <input
               v-model="newTaskEndTime"
               type="time"
               :disabled="!newTaskStartTime"
-              class="w-24 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+              class="w-24 px-2 py-1 border border-line-strong rounded text-sm focus:outline-none focus:ring-2 focus:ring-accent disabled:bg-surface-alt"
             />
           </div>
           <div class="flex items-center gap-1">
-            <label class="text-xs text-gray-500">優先度</label>
+            <label class="text-xs text-fg-subtle">優先度</label>
             <button
               v-for="option in priorityOptions"
               :key="option.value"
@@ -519,47 +519,47 @@ async function handleDeleteCompletedTasks() {
               class="px-2 py-0.5 rounded text-xs transition-colors"
               :class="[
                 newTaskPriority === option.value
-                  ? `${option.color} text-white`
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? `${option.color} text-on-solid`
+                  : 'bg-surface-alt text-fg-muted hover:bg-surface-strong'
               ]"
             >
               {{ option.label }}
             </button>
           </div>
         </div>
-        <div class="mt-3 rounded-lg border border-gray-200 p-2.5">
+        <div class="mt-3 rounded-lg border border-line p-2.5">
           <div class="flex items-center justify-between gap-2">
-            <span class="text-xs font-medium text-gray-600">関連書類</span>
+            <span class="text-xs font-medium text-fg-muted">関連書類</span>
             <DocumentAttachmentPicker
               :selected-ids="selectedDocumentIds"
               :disabled="isSubmitting"
               @confirm="handleDocumentSelection"
             />
           </div>
-          <p v-if="selectedDocuments.length === 0" class="mt-1 text-xs text-gray-400">添付なし</p>
+          <p v-if="selectedDocuments.length === 0" class="mt-1 text-xs text-fg-faint">添付なし</p>
           <div v-else class="mt-2 flex flex-wrap gap-1.5">
             <span
               v-for="document in selectedDocuments"
               :key="document.id"
-              class="max-w-full truncate rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700"
+              class="max-w-full truncate rounded-full bg-accent-soft px-2 py-1 text-xs text-accent-strong"
             >{{ document.name }}</span>
           </div>
           <div v-if="selectedDocumentIds.length > 0" class="mt-2 space-y-2">
             <select
               v-if="selectedDocumentIds.length > 1"
               v-model="sourceDocumentId"
-              class="w-full rounded border border-gray-300 px-2 py-1 text-xs"
+              class="w-full rounded border border-line-strong px-2 py-1 text-xs"
             >
               <option v-for="document in selectedDocuments" :key="document.id" :value="document.id">
                 内容の元にする書類: {{ document.name }}
               </option>
             </select>
-            <label class="flex cursor-pointer items-center gap-2 text-xs text-gray-600">
+            <label class="flex cursor-pointer items-center gap-2 text-xs text-fg-muted">
               <input
                 type="checkbox"
                 data-testid="use-document-content"
                 :checked="useDocumentContent"
-                class="rounded text-blue-600 focus:ring-blue-500"
+                class="rounded text-accent focus:ring-accent"
                 @change="handleUseDocumentContent"
               />
               書類の読み取り候補をタスク内容に反映
@@ -567,34 +567,34 @@ async function handleDeleteCompletedTasks() {
             <p
               v-if="useDocumentContent && sourceDocumentReading"
               data-testid="document-reading-status"
-              class="rounded bg-blue-50 px-2 py-1.5 text-xs text-blue-700"
+              class="rounded bg-accent-soft px-2 py-1.5 text-xs text-accent-strong"
             >書類を読み取り中です。完了後にタスク内容へ自動で反映します。</p>
             <p
               v-if="useDocumentContent && sourceDocumentReading && newTaskName.trim()"
-              class="text-[11px] text-gray-500"
+              class="text-[11px] text-fg-subtle"
             >現在入力している内容なら、読み取り完了を待たずに追加できます。</p>
             <p
               v-else-if="useDocumentContent && suggestionLoading"
-              class="rounded bg-blue-50 px-2 py-1.5 text-xs text-blue-700"
+              class="rounded bg-accent-soft px-2 py-1.5 text-xs text-accent-strong"
             >読み取り候補をタスク内容へ反映しています。</p>
-            <p v-if="suggestionError" class="rounded bg-amber-50 px-2 py-1.5 text-xs text-amber-800">{{ suggestionError }}</p>
+            <p v-if="suggestionError" class="rounded bg-warning-soft px-2 py-1.5 text-xs text-warning-strong">{{ suggestionError }}</p>
           </div>
         </div>
-        <label v-if="isFamilySpace && newTaskDueDate" class="mt-3 flex cursor-pointer items-center gap-2 text-xs text-gray-600">
+        <label v-if="isFamilySpace && newTaskDueDate" class="mt-3 flex cursor-pointer items-center gap-2 text-xs text-fg-muted">
           <input
             v-model="addToGoogleCalendar"
             data-testid="add-task-calendar"
             type="checkbox"
             :disabled="!calendarStore.configured || isSubmitting"
-            class="rounded text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+            class="rounded text-accent focus:ring-accent disabled:opacity-50"
           />
           Google Calendarにも登録
-          <span v-if="!calendarStore.configured" class="text-amber-700">（設定が必要です）</span>
+          <span v-if="!calendarStore.configured" class="text-warning-strong">（設定が必要です）</span>
         </label>
-        <p v-if="isFamilySpace && newTaskDueDate && calendarStore.configured" class="mt-1 text-[11px] text-gray-400">
+        <p v-if="isFamilySpace && newTaskDueDate && calendarStore.configured" class="mt-1 text-[11px] text-fg-faint">
           読み取り結果または手入力した日付を使って登録します。
         </p>
-        <p v-else-if="!isFamilySpace && newTaskDueDate" class="mt-1 text-[11px] text-gray-400">
+        <p v-else-if="!isFamilySpace && newTaskDueDate" class="mt-1 text-[11px] text-fg-faint">
           個人タスクは家族のGoogle Calendarへ登録されません。
         </p>
         <div class="flex gap-2 mt-3">
@@ -602,7 +602,7 @@ async function handleDeleteCompletedTasks() {
             @click="handleAddTask"
             data-testid="submit-task"
             :disabled="!newTaskListId || isSubmitting || blockingForDocumentContent"
-            class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 disabled:bg-gray-300"
+            class="px-4 py-2 bg-accent text-on-solid rounded-md text-sm hover:bg-accent-hover disabled:bg-surface-stronger"
           >
             {{ isSubmitting
               ? '追加中...'
@@ -613,7 +613,7 @@ async function handleDeleteCompletedTasks() {
           <button
             @click="resetAddForm"
             :disabled="isSubmitting"
-            class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm"
+            class="px-4 py-2 text-fg-muted hover:text-fg text-sm"
           >
             キャンセル
           </button>
@@ -623,16 +623,16 @@ async function handleDeleteCompletedTasks() {
 
     <!-- タスク一覧 -->
     <div class="flex-1 overflow-y-auto space-y-1">
-      <div v-if="tasksStore.loading" class="text-center text-gray-500 py-8">
+      <div v-if="tasksStore.loading" class="text-center text-fg-subtle py-8">
         読み込み中...
       </div>
 
       <!-- 検索モード（ローカルキャッシュ検索） -->
       <template v-else-if="tasksStore.isSearching">
-        <div v-if="tasksStore.searchCacheLoading" class="text-center text-gray-500 py-8">
+        <div v-if="tasksStore.searchCacheLoading" class="text-center text-fg-subtle py-8">
           全リストを検索中...
         </div>
-        <div v-else-if="localSearchResults.length === 0" class="text-center text-gray-500 py-8">
+        <div v-else-if="localSearchResults.length === 0" class="text-center text-fg-subtle py-8">
           検索結果がありません
         </div>
         <TaskItem
@@ -647,10 +647,10 @@ async function handleDeleteCompletedTasks() {
 
       <!-- スマートリストモード -->
       <template v-else-if="listsStore.selectedSmartList">
-        <div v-if="tasksStore.smartListTasksLoading" class="text-center text-gray-500 py-8">
+        <div v-if="tasksStore.smartListTasksLoading" class="text-center text-fg-subtle py-8">
           読み込み中...
         </div>
-        <div v-else-if="tasksStore.incompleteTasks.length === 0" class="text-center text-gray-500 py-8">
+        <div v-else-if="tasksStore.incompleteTasks.length === 0" class="text-center text-fg-subtle py-8">
           タスクがありません
         </div>
         <TaskItem
@@ -677,17 +677,17 @@ async function handleDeleteCompletedTasks() {
 
         <!-- 完了タスク（折りたたみ式・遅延読み込み） -->
         <div
-          class="mt-6 pt-4 border-t border-gray-200 transition-opacity"
+          class="mt-6 pt-4 border-t border-line transition-opacity"
           :class="{ 'opacity-60 pointer-events-none': isDeletingCompletedTasks }"
         >
           <div class="flex items-center justify-between gap-2 mb-2">
             <button
               @click="toggleCompletedTasks"
-              class="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
+              class="flex items-center gap-2 text-sm text-fg-subtle hover:text-fg-secondary"
             >
               <span class="text-xs">{{ showCompletedTasks ? '▼' : '▶' }}</span>
               <span>完了済み</span>
-              <span v-if="tasksStore.completedTasksLoading" class="text-xs text-gray-400">(読み込み中...)</span>
+              <span v-if="tasksStore.completedTasksLoading" class="text-xs text-fg-faint">(読み込み中...)</span>
               <span v-else-if="showCompletedTasks || tasksStore.completedTasks.length > 0">({{ tasksStore.completedTasks.length }})</span>
             </button>
             <button
@@ -696,22 +696,22 @@ async function handleDeleteCompletedTasks() {
               :disabled="isDeletingCompletedTasks"
               class="text-xs transition-colors"
               :class="isDeletingCompletedTasks
-                ? 'text-gray-400 cursor-not-allowed'
-                : 'text-red-500 hover:text-red-700'"
+                ? 'text-fg-faint cursor-not-allowed'
+                : 'text-danger hover:text-danger-strong'"
             >
               {{ isDeletingCompletedTasks ? '削除中...' : '完了タスクを削除' }}
             </button>
           </div>
           <template v-if="showCompletedTasks">
-            <div v-if="isDeletingCompletedTasks" class="text-xs text-gray-500 py-2">
+            <div v-if="isDeletingCompletedTasks" class="text-xs text-fg-subtle py-2">
               完了タスクを削除中...
             </div>
             <!-- Phase 4: 初回読み込み中（まだタスクが0件の場合のみ） -->
-            <div v-if="tasksStore.completedTasksLoading && tasksStore.completedTasks.length === 0" class="text-center text-gray-400 py-4 text-sm">
+            <div v-if="tasksStore.completedTasksLoading && tasksStore.completedTasks.length === 0" class="text-center text-fg-faint py-4 text-sm">
               完了タスクを読み込み中...
             </div>
             <!-- タスクが0件（読み込み完了後） -->
-            <div v-else-if="!tasksStore.completedTasksLoading && tasksStore.completedTasks.length === 0" class="text-center text-gray-400 py-4 text-sm">
+            <div v-else-if="!tasksStore.completedTasksLoading && tasksStore.completedTasks.length === 0" class="text-center text-fg-faint py-4 text-sm">
               完了したタスクはありません
             </div>
             <!-- Phase 4: タスク一覧（1件以上ある場合は追加読み込み中でも表示） -->
@@ -730,7 +730,7 @@ async function handleDeleteCompletedTasks() {
               <button
                 @click="tasksStore.loadMoreCompletedTasks()"
                 :disabled="tasksStore.completedTasksLoading"
-                class="px-4 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors disabled:text-gray-400 disabled:cursor-not-allowed"
+                class="px-4 py-2 text-sm text-accent hover:text-accent-strong hover:bg-accent-soft rounded-md transition-colors disabled:text-fg-faint disabled:cursor-not-allowed"
               >
                 {{ tasksStore.completedTasksLoading ? '読み込み中...' : 'さらに読み込む' }}
               </button>
@@ -741,7 +741,7 @@ async function handleDeleteCompletedTasks() {
         <!-- 空の状態 -->
         <div
           v-if="tasksStore.incompleteTasks.length === 0 && tasksStore.completedTasks.length === 0"
-          class="text-center text-gray-500 py-8"
+          class="text-center text-fg-subtle py-8"
         >
           タスクがありません
         </div>
