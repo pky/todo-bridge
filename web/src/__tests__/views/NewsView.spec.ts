@@ -599,7 +599,7 @@ describe('NewsView', () => {
     const buttons = wrapper.findAll('button')
     expect(buttons.find((button) => button.text() === '重要事項')).toBeUndefined()
     const allButton = buttons.find((button) => button.text() === 'すべて')
-    expect(allButton?.classes()).toContain('bg-gray-900')
+    expect(allButton?.classes()).toContain('bg-inverse-strong')
 
     const allTitles = wrapper.findAll('[data-testid="card-title"]').map((node) => node.text())
     expect(allTitles).toContain('Android review only')
