@@ -457,7 +457,7 @@ async function handleDeleteCompletedTasks() {
       <div v-if="!isAdding">
         <button
           @click="openAddForm"
-          class="w-full text-left px-3 py-2 text-fg-subtle hover:bg-surface-hover rounded-lg border border-dashed border-line-strong hover:border-line-strong transition-colors"
+          class="w-full text-left px-3 py-2 text-fg-subtle hover:bg-surface-hover rounded-lg border border-dashed border-line-strong hover:border-fg-faint transition-colors"
         >
           + タスクを追加
         </button>

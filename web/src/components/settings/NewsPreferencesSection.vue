@@ -135,7 +135,7 @@ async function saveCurrentPreferences(): Promise<void> {
 
     <div class="px-4 py-3 border-t border-line-subtle">
       <button
-        class="w-full bg-accent text-on-solid text-sm rounded-lg py-2 hover:bg-accent"
+        class="w-full bg-accent text-on-solid text-sm rounded-lg py-2 hover:bg-accent-hover"
         @click="saveCurrentPreferences"
       >
         保存

@@ -83,7 +83,7 @@ async function savePreferences(): Promise<void> {
 
     <div class="px-4 py-3 border-t border-line-subtle">
       <button
-        class="w-full bg-inverse-strong text-on-solid text-sm rounded-lg py-2 hover:bg-inverse-strong disabled:opacity-50"
+        class="w-full bg-inverse-strong text-on-solid text-sm rounded-lg py-2 hover:bg-inverse disabled:opacity-50"
         :disabled="saving"
         @click="savePreferences"
       >

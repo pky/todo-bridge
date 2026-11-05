@@ -660,7 +660,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
       <button
         v-if="showScrollTop"
         @click="scrollToTop"
-        class="fixed bottom-6 right-6 p-3 bg-surface text-fg-muted border border-line rounded-full shadow-lg hover:bg-surface-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 z-40 transition-all"
+        class="fixed bottom-6 right-6 p-3 bg-surface text-fg-muted border border-line rounded-full shadow-lg hover:bg-surface-hover hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-surface z-40 transition-all"
         aria-label="トップに戻る"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -975,7 +975,7 @@ async function handleRunDataMigration(): Promise<void> {
             <button
               @click="handleClear"
               :disabled="importing || clearing || exporting || migrating"
-              class="w-full bg-danger-soft-strong text-danger-strong text-sm rounded-lg py-2 hover:bg-danger-soft-strong disabled:opacity-50"
+              class="w-full bg-danger-soft-strong text-danger-strong text-sm rounded-lg py-2 hover:bg-danger-line disabled:opacity-50"
             >
               {{ clearing ? '削除中...' : 'このスペースのデータを削除' }}
             </button>

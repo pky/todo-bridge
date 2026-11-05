@@ -254,7 +254,7 @@ function goToHome() {
           <button
             @click="handleClear"
             :disabled="importing || clearing || migrating || exporting"
-            class="w-full px-4 py-2 bg-danger-soft-strong text-danger-strong rounded-lg hover:bg-danger-soft-strong disabled:opacity-50 disabled:cursor-not-allowed"
+            class="w-full px-4 py-2 bg-danger-soft-strong text-danger-strong rounded-lg hover:bg-danger-line disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {{ clearing ? '削除中...' : '既存データを全て削除' }}
           </button>
