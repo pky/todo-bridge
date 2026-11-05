@@ -14,6 +14,7 @@ import {
   updateFamilySpaceNameApi,
 } from '@/services/cloudFunctionsService'
 import { db } from '@/services/firebase'
+import ThemeSection from '@/components/settings/ThemeSection.vue'
 import {
   clearAllUserData,
   exportUserData,
@@ -560,6 +561,7 @@ async function handleRunDataMigration(): Promise<void> {
         class="space-y-6"
         data-testid="settings-account"
       >
+        <ThemeSection />
         <!-- アカウント -->
         <section class="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div class="px-4 py-3 border-b border-gray-100">
