@@ -36,6 +36,7 @@ iOS / Android アプリ開発で見逃したくない更新を、確認優先の
 - フロントエンド: Vue 3, TypeScript, Vite, Pinia
 - バックエンド: Firebase Authentication, Firestore, Cloud Functions, Cloud Storage
 - テスト: Vitest, Playwright
+- 開発環境: Claude Code, Codex, Worktrunk（git worktree の作成と片付け）, Herdr（エージェントを並べて動かす作業環境）, superpowers（設計・TDD・デバッグの進め方を定めるスキル集）, mobile-mcp（iOS 実機での画面確認）
 
 ### 構成図
 
@@ -45,6 +46,8 @@ iOS / Android アプリ開発で見逃したくない更新を、確認優先の
 </picture>
 
 画面は Firestore を直接購読します。権限の要る処理と外部 API の呼び出しは Cloud Functions が受け持ち、文書ファイルだけは Web から署名 URL で Cloudflare R2 に直接読み書きします。
+
+図は [stack-diagram](https://github.com/caru-ini/stack-diagram) で作成しています。
 
 ## 主な機能
 
@@ -95,7 +98,7 @@ CLAUDE_NEWS_DAILY_MAX_REQUESTS=
 
 AI ニュースは技術記事だけを1日最大20件表示します。対象は AI コーディングツールの使い方と検証、LLM アプリの実装・評価・運用、AI のセキュリティ、新しいモデルや API の能力と制約、機械学習の実装、AI 開発用のツールです。企業動向、政治や訴訟、宣伝、業務アプリの操作方法、AI が道具として登場するだけの記事は表示しません。
 
-選別は2段階です。軽量な Claude モデルがタイトルと説明文から主題の分類と採用・保留・除外を判定し、明らかな対象外だけを外します。採用と保留の候補は本文（GitHub は README）を取得し、上位の候補だけを上位の Claude モデルが本文で技術内容を確認したうえで日本語の概要を作ります。確認できなかった記事と概要のない記事は表示せず、次の候補で補います。20件に満たない日は埋めません。順位は開発者への有用性を主に、世間での重要度、人気、キーワード設定、直近90日の操作履歴を加えて決めます。操作履歴は、後で読むを +2、記事を開くを +1、興味なしを -1 として新しいものほど重く数え（30日で半分）、好みの語を含む記事を上げ、苦手な語だけを含む記事を下げます。集約サイト経由の記事は実際の掲載元を主に表示し、紹介元を併記します。判定と確認の結果は判定基準の版ごとに7日間再利用し、それを過ぎた記事やタイトルが変わった記事は判定し直します。次の環境変数で調整できます。省略時の既定値は `functions/src/news/aiClaudeTriage.ts` と `functions/src/news/aiClaudeSummary.ts` を参照してください。
+選別は2段階です。軽量な Claude モデルがタイトルと説明文から主題の分類と採用・保留・除外を判定し、明らかな対象外だけを外します。採用と保留の候補は本文（GitHub は README）を取得し、上位の候補だけを上位の Claude モデルが本文で技術内容を確認したうえで日本語の概要を作ります。確認できなかった記事と概要のない記事は表示せず、次の候補で補います。20件に満たない日は埋めません。AI ニュースは全員に同じ一覧を表示し、順位は管理ユーザーの設定と操作から決めます。開発者への有用性を主に、世間での重要度、人気、キーワード設定、操作から学習した好みの語を加えます。好みの語を含む記事を上げ、苦手な語だけを含む記事を下げます。学習の仕組みは後述の「AI 固定フィード」を参照してください。集約サイト経由の記事は実際の掲載元を主に表示し、紹介元を併記します。判定と確認の結果は判定基準の版ごとに7日間再利用し、それを過ぎた記事やタイトルが変わった記事は判定し直します。次の環境変数で調整できます。省略時の既定値は `functions/src/news/aiClaudeTriage.ts` と `functions/src/news/aiClaudeSummary.ts` を参照してください。
 
 ```bash
 CLAUDE_AI_TRIAGE_MODEL=
@@ -188,19 +191,19 @@ npm run test:rules
 
 ## AI活用方針
 
-このリポジトリでは AI コーディングエージェントを開発補助に利用しています。ただし、変更方針、根本原因の特定、最終的なレビューと検証は人間が責任を持って行う前提です。
+このリポジトリでは AI コーディングエージェントを開発に使っています。要件、設計判断、マージ、デプロイは人間が決めます。
 
-`AGENTS.md` は Codex 向けの設定ファイルであると同時に、このリポジトリで重視している開発原則を機械可読な形でまとめたものです。最小差分、根本原因の修正、対象を絞った検証を重視しています。
+- 設計、計画、レビューは Claude Code、実装は Codex が担当します
+- テストと実装は別々のエージェントに書かせます。失敗するテストを先にコミットし、実装側はテストを変えずに通します
+- PR を開く前に、実装の文脈を持たないエージェントが差分をレビューします。PR を開いた後は Codex の自動レビューと CI（lint、型チェック、テスト、ビルド、Firestore ルールテスト）を通します
+- 画面の動きは `.agents/skills/verify-todobridge/` のスキルと e2e の MCP サーバー（`.mcp.json`）を使い、Emulator 上でエージェントが実際に操作して確かめます
+- 独立した作業は Worktrunk で git worktree に分け、同じ作業ツリーを複数のエージェントで同時に編集しません。Codex は Herdr のペインで動かし、実行中か完了かを一覧で確かめます
+- 実データ、実環境の ID、秘密情報はコード、テスト、ドキュメントに入れません
+
+エージェント共通のルールは `AGENTS.md` にまとめ、Claude Code 用の `CLAUDE.md` からも読み込んでいます。
 
 ## 補足
 
-- 設計メモや実装計画は `doc/` 配下にあります。
-- AI を使った開発の進め方は `doc/AI_DEVELOPMENT_WORKFLOW.md` にまとめています。
-- プロダクト全体の要件整理は `doc/PRODUCT_REQUIREMENTS.md` にまとめています。
 - 要件定義テンプレートは `doc/REQUIREMENTS_TEMPLATE.md` に置いています。
-- retrospective な要件定義の例は `doc/RETROSPECTIVE_REQUIREMENTS_EXAMPLE.md` にまとめています。
-- テーマ選択型の情報機能の要件と設計メモは `doc/THEMED_FEED_REQUIREMENTS.md` と `doc/THEMED_FEED_DESIGN.md` にまとめています。
-- 家族書類ボックスの要件、設計メモ、実装計画、保存プライバシー方針は `doc/FAMILY_DOCUMENT_REQUIREMENTS.md`、`doc/FAMILY_DOCUMENT_DESIGN.md`、`doc/FAMILY_DOCUMENT_IMPLEMENTATION_PLAN.md`、`doc/FAMILY_DOCUMENT_STORAGE_PRIVACY.md` にまとめています。
-- OCR方式、外部送信範囲、同意文、費用上限は `doc/FAMILY_DOCUMENT_OCR_DECISION.md` にまとめています。
 - 機能追加時に使うテンプレートは `doc/FEATURE_IMPLEMENTATION_TEMPLATE.md` に置いています。
 - Firebase や API キーなどの秘密情報はリポジトリに含めない前提です。
