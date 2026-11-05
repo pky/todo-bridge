@@ -21,7 +21,7 @@ TodoBridge は、RTM代替を目指した、共有対応のタスク管理アプ
 
 iOS / Android アプリ開発で見逃したくない更新を、確認優先の項目と通常の記事一覧に分けて把握しやすくしています。
 要対応の記事は公開から180日間、対応済みまたは興味なしにするまで持ち越します。処理済みの一覧から戻すこともでき、あとで読むへの追加や記事のクリックでは消えません。
-情報源は Apple と Google の公式ページ7本です（Apple Developer News の日本語版と英語版、App Store Connect のリリースノート、Apple のセキュリティアップデート一覧、Android Developers Blog、Play Console のお知らせ、Android Security Bulletin）。Claude（Sonnet 5.5）がセキュリティ、SDK 要件、ポリシーの記事だけを選び、概要、対象、期限、やることの4項目に日本語でまとめます。
+情報源は Apple と Google の公式ページ7本です（Apple Developer News の日本語版と英語版、App Store Connect のリリースノート、Apple のセキュリティアップデート一覧、Android Developers Blog、Play Console のお知らせ、Android Security Bulletin）。Claude がセキュリティ、SDK 要件、ポリシーの記事だけを選び、概要、対象、期限、やることの4項目に日本語でまとめます。
 
 ## このアプリを作った目的
 
@@ -60,9 +60,10 @@ iOS / Android アプリ開発で見逃したくない更新を、確認優先の
 
 ### 必要環境
 
-- Node.js
-- pnpm
+- Node.js（バージョンは `functions/package.json` の `engines` に合わせる）
+- npm
 - Firebase CLI
+- Java（Firebase Emulator が要求するバージョン。Emulator を使う確認とルールテストで必要）
 
 ### 環境変数
 
@@ -84,25 +85,25 @@ Cloud Functions では ANTHROPIC_API_KEY を secret として使用し、AI ニ�
 ANTHROPIC_API_KEY=
 ```
 
-モバイルニュースの判定は次の環境変数で調整できます（省略時は既定値）。
+モバイルニュースの判定は次の環境変数で調整できます。省略時の既定値は `functions/src/news/mobileClaudeClassifier.ts` を参照してください。
 
 ```bash
-CLAUDE_NEWS_MODEL=claude-sonnet-5-5
-CLAUDE_NEWS_EFFORT=low
-CLAUDE_NEWS_DAILY_MAX_REQUESTS=5
+CLAUDE_NEWS_MODEL=
+CLAUDE_NEWS_EFFORT=
+CLAUDE_NEWS_DAILY_MAX_REQUESTS=
 ```
 
 AI ニュースは技術記事だけを1日最大20件表示します。対象は AI コーディングツールの使い方と検証、LLM アプリの実装・評価・運用、AI のセキュリティ、新しいモデルや API の能力と制約、機械学習の実装、AI 開発用のツールです。企業動向、政治や訴訟、宣伝、業務アプリの操作方法、AI が道具として登場するだけの記事は表示しません。
 
-選別は2段階です。Claude（Haiku 5.5）がタイトルと説明文から主題の分類と採用・保留・除外を判定し、明らかな対象外だけを外します。採用と保留の候補は本文（GitHub は README）を取得し、上位の候補だけを Claude（Sonnet 5.5）が本文で技術内容を確認したうえで日本語の概要を作ります。確認できなかった記事と概要のない記事は表示せず、次の候補で補います。20件に満たない日は埋めません。順位は開発者への有用性を主に、世間での重要度、人気、キーワード設定、直近90日の操作履歴を加えて決めます。操作履歴は、後で読むを +2、記事を開くを +1、興味なしを -1 として新しいものほど重く数え（30日で半分）、好みの語を含む記事を上げ、苦手な語だけを含む記事を下げます。集約サイト経由の記事は実際の掲載元を主に表示し、紹介元を併記します。判定と確認の結果は判定基準の版ごとに7日間再利用し、それを過ぎた記事やタイトルが変わった記事は判定し直します。次の環境変数で調整できます（省略時は既定値）。
+選別は2段階です。軽量な Claude モデルがタイトルと説明文から主題の分類と採用・保留・除外を判定し、明らかな対象外だけを外します。採用と保留の候補は本文（GitHub は README）を取得し、上位の候補だけを上位の Claude モデルが本文で技術内容を確認したうえで日本語の概要を作ります。確認できなかった記事と概要のない記事は表示せず、次の候補で補います。20件に満たない日は埋めません。順位は開発者への有用性を主に、世間での重要度、人気、キーワード設定、直近90日の操作履歴を加えて決めます。操作履歴は、後で読むを +2、記事を開くを +1、興味なしを -1 として新しいものほど重く数え（30日で半分）、好みの語を含む記事を上げ、苦手な語だけを含む記事を下げます。集約サイト経由の記事は実際の掲載元を主に表示し、紹介元を併記します。判定と確認の結果は判定基準の版ごとに7日間再利用し、それを過ぎた記事やタイトルが変わった記事は判定し直します。次の環境変数で調整できます。省略時の既定値は `functions/src/news/aiClaudeTriage.ts` と `functions/src/news/aiClaudeSummary.ts` を参照してください。
 
 ```bash
-CLAUDE_AI_TRIAGE_MODEL=claude-haiku-5-5
-CLAUDE_AI_TRIAGE_EFFORT=low
-CLAUDE_AI_TRIAGE_DAILY_MAX_REQUESTS=10
-CLAUDE_AI_SUMMARY_MODEL=claude-sonnet-5-5
-CLAUDE_AI_SUMMARY_EFFORT=low
-CLAUDE_AI_SUMMARY_DAILY_MAX_REQUESTS=6
+CLAUDE_AI_TRIAGE_MODEL=
+CLAUDE_AI_TRIAGE_EFFORT=
+CLAUDE_AI_TRIAGE_DAILY_MAX_REQUESTS=
+CLAUDE_AI_SUMMARY_MODEL=
+CLAUDE_AI_SUMMARY_EFFORT=
+CLAUDE_AI_SUMMARY_DAILY_MAX_REQUESTS=
 ```
 
 AI ニュースの呼び出し上限は日本時間の日付ごとに判定と要約を別々に数えます。API の再試行は同じ呼び出しとして数えます。
@@ -111,14 +112,23 @@ AI 固定フィードの生成には `NEWS_CURATOR_UID` で選別に使う管理
 
 AI 固定フィードは管理ユーザーの直近90日の操作イベントから学習し、後で読むを +2、興味なしを -1 として30日で重みを半減します。iOS の「あとで読む」も学習に使います。クリックと表示回数は使いません。旧履歴の移行には、`functions` で `npm run build` 後に `node scripts/migrate-news-action-events.js --uid <uid> --project <project-id>` を実行します。既定は件数確認だけの dry-run で、`--apply` を付けた場合だけ新規イベントを保存します。既存イベントと旧履歴は上書き・削除しません。Emulator を使う場合は `FIRESTORE_EMULATOR_HOST` を設定します。本番では `newsActionEvents` の複合 index を事前にデプロイして構築完了を待ち、dry-run の確認、`--apply` による移行を済ませてから、イベント学習への切替をデプロイしてください。切替のデプロイ直後に移行スクリプトをもう一度 `--apply` 付きで実行し、最初の移行から切替までに旧経路で記録された操作を回収してください。
 
+家族書類ボックスの保存先は Cloudflare R2 です。Cloud Functions では次の4つを secret として使います。Emulator では R2 を使わず、ローカル保存になります。
+
+```bash
+R2_ACCOUNT_ID=
+R2_BUCKET=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+```
+
 ### 開発コマンド
 
 フロントエンド:
 
 ```bash
 cd web
-pnpm install
-pnpm dev
+npm install
+npm run dev
 ```
 
 Cloud Functions:
@@ -129,10 +139,10 @@ npm install
 npm run build
 ```
 
-家族書類ボックスをローカルで確認する場合は、リポジトリ直下で Auth、Firestore、Functions の Emulator と Web をまとめて起動します。
+家族書類ボックスをローカルで確認する場合は、Java を PATH に通したうえで、リポジトリ直下で Auth、Firestore、Functions の Emulator と Web をまとめて起動します。
 
 ```bash
-PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH" pnpm --dir web dev:documents
+npm --prefix web run dev:documents
 ```
 
 `http://localhost:5173` を開き、「ローカル確認用にログイン」からログインした後、ホームの「書類」を選択します。ローカル保存データは Emulator の確認用であり、プロセスを終了するとリセットされます。
@@ -140,25 +150,40 @@ PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH" pnpm --dir web dev:documents
 同じWi-Fiに接続したスマホから確認する場合は、次のコマンドを使います。MacのLANアドレスを自動検出し、表示された `スマホ確認URL` をスマホで開きます。
 
 ```bash
-PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH" pnpm --dir web dev:documents:mobile
+npm --prefix web run dev:documents:mobile
 ```
 
 LAN内へ開発用ポートを公開するため、信頼できる家庭内ネットワークでのみ使用してください。接続できない場合は、macOSファイアウォールでNode.jsとJavaの受信接続を許可します。
 
 ## 検証コマンド
 
+リポジトリ直下で、web と functions の lint、型チェック、テスト、ビルドをまとめて実行します。
+
 ```bash
-cd web
-pnpm test:run
-pnpm type-check
-pnpm build
+npm run verify
 ```
 
-Functions:
+個別に実行する場合:
+
+```bash
+cd web
+npm run lint
+npm run type-check
+npm run test:run
+npm run build
+```
 
 ```bash
 cd functions
+npm run lint
 npm test
+```
+
+Firestore ルールのテストは Emulator を使うため、Java が必要です。
+
+```bash
+cd web
+npm run test:rules
 ```
 
 ## AI活用方針
