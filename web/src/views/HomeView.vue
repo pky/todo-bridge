@@ -238,7 +238,7 @@ function expandTaskDetail() {
           <!-- ハンバーガーメニュー（モバイルのみ） -->
           <button
             @click="toggleSidebar"
-            class="md:hidden p-1.5 sm:p-2 -ml-1 sm:-ml-2 text-fg-muted hover:text-fg hover:bg-surface-hover rounded-lg"
+            class="md:hidden p-1.5 sm:p-2 -ml-1 sm:-ml-2 text-fg-muted hover:text-fg hover:bg-surface-alt rounded-lg"
             aria-label="メニュー"
           >
             <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -276,7 +276,7 @@ function expandTaskDetail() {
           <!-- モバイル検索ボタン -->
           <button
             @click="isSearchOpen = !isSearchOpen"
-            class="md:hidden p-1.5 text-fg-muted hover:text-fg hover:bg-surface-hover rounded-lg"
+            class="md:hidden p-1.5 text-fg-muted hover:text-fg hover:bg-surface-alt rounded-lg"
             aria-label="検索"
           >
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -507,7 +507,7 @@ watch(textResult, async () => {
       <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3">
         <div class="flex min-w-0 items-center gap-3">
           <button
-            class="rounded-lg px-3 py-2 text-sm text-fg-muted hover:bg-surface-hover"
+            class="rounded-lg px-3 py-2 text-sm text-fg-muted hover:bg-surface-alt"
             @click="router.push({ name: 'home' })"
           >
             ← Todo
@@ -660,7 +660,7 @@ watch(textResult, async () => {
               role="button"
               tabindex="0"
               class="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-surface-hover"
-              :class="document.id === documentsStore.selectedDocumentId ? 'bg-accent-soft' : ''"
+              :class="document.id === documentsStore.selectedDocumentId ? 'bg-accent-soft dark:bg-accent-soft-strong' : ''"
               @click="selectDocument(document.id)"
               @keydown.enter="selectDocument(document.id)"
             >
@@ -706,7 +706,7 @@ watch(textResult, async () => {
               <h2 class="truncate font-medium">{{ selectedDocument.name }}</h2>
               <p class="mt-1 text-xs text-fg-subtle">{{ categoryLabels[selectedDocument.category] }}・{{ formatBytes(selectedDocument.sizeBytes) }}</p>
             </div>
-            <button data-testid="document-detail-close" class="shrink-0 rounded-lg px-3 py-2 text-sm text-fg-subtle hover:bg-surface-hover md:hidden" @click="closeDetail">閉じる</button>
+            <button data-testid="document-detail-close" class="shrink-0 rounded-lg px-3 py-2 text-sm text-fg-subtle hover:bg-surface-alt md:hidden" @click="closeDetail">閉じる</button>
           </div>
 
           <div class="flex-1 p-3 sm:p-4">

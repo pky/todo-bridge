@@ -442,7 +442,7 @@ async function handleRunDataMigration(): Promise<void> {
               'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
               activeSettingsTab === tab.id
                 ? 'bg-inverse text-on-solid'
-                : 'text-fg-muted hover:bg-surface-hover hover:text-fg',
+                : 'text-fg-muted hover:bg-surface-alt hover:text-fg',
             ]"
             @click="activeSettingsTab = tab.id"
           >

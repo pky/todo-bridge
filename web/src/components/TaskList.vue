@@ -420,7 +420,7 @@ async function handleDeleteCompletedTasks() {
         class="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded border transition-colors flex-shrink-0"
         :class="hasSelectedTask
           ? (selectedTaskCompleted
-              ? 'border-line-strong bg-surface-muted text-fg-muted hover:bg-surface-hover'
+              ? 'border-line-strong bg-surface-muted text-fg-muted hover:bg-surface-alt'
               : 'border-line-strong bg-surface text-fg-secondary hover:bg-surface-hover')
           : 'border-line bg-surface-muted text-fg-faint cursor-not-allowed'"
         :title="selectedTaskCompleted ? '未完了に戻す' : '完了にする'"

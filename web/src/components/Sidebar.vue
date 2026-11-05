@@ -621,7 +621,7 @@ watch(
           :class="
             listsStore.selectedSmartList === smartList.type
               ? 'bg-accent-soft-strong text-accent-strong'
-              : 'hover:bg-surface-hover text-fg-muted'
+              : 'hover:bg-surface-alt text-fg-muted'
           "
         >
           <span class="flex items-center gap-1 truncate">
@@ -634,7 +634,7 @@ watch(
             :class="
               smartList.type === 'overdue'
                 ? 'bg-danger-soft-strong text-danger'
-                : 'bg-surface-strong text-fg-subtle'
+                : 'bg-surface-strong text-fg-muted'
             "
           >
             {{ smartList.count }}
@@ -707,7 +707,7 @@ watch(
             :class="[
               isSelectedList(list)
                 ? 'bg-accent-soft-strong text-accent-strong'
-                : 'hover:bg-surface-hover text-fg-secondary',
+                : 'hover:bg-surface-alt text-fg-secondary',
               dragOverIndex === index && isCurrentSpaceList(list) ? 'border-t-2 border-accent' : '',
               draggedListId === list.id ? 'opacity-50' : ''
             ]"

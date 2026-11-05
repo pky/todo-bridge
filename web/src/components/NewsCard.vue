@@ -69,12 +69,12 @@ const accentColor = computed(() => {
 
 const cardClass = computed(() => {
   if (props.variant === 'hero') {
-    return 'border-line bg-surface p-3 hover:bg-surface-hover active:bg-surface-hover xl:min-h-[360px] xl:border-line-strong xl:bg-surface/95 xl:p-4 xl:shadow-sm xl:hover:bg-surface'
+    return 'border-line bg-surface p-3 hover:bg-surface-hover active:bg-surface-alt xl:min-h-[360px] xl:border-line-strong xl:bg-surface/95 xl:p-4 xl:shadow-sm xl:hover:bg-surface'
   }
   if (props.variant === 'featured') {
-    return 'border-line bg-surface p-3 hover:bg-surface-hover active:bg-surface-hover xl:min-h-[180px] xl:p-4 xl:shadow-sm xl:hover:bg-surface'
+    return 'border-line bg-surface p-3 hover:bg-surface-hover active:bg-surface-alt xl:min-h-[180px] xl:p-4 xl:shadow-sm xl:hover:bg-surface'
   }
-  return 'border-line bg-surface p-3 hover:bg-surface-hover active:bg-surface-hover'
+  return 'border-line bg-surface p-3 hover:bg-surface-hover active:bg-surface-alt'
 })
 
 const thumbnailClass = computed(() => {
@@ -220,7 +220,7 @@ function handleImageError(): void {
             :title="readLaterLabel"
             :aria-label="readLaterLabel"
             :disabled="readLaterDisabled"
-            :class="readLaterState === 'added' ? 'text-accent bg-accent-soft' : ''"
+            :class="readLaterState === 'added' ? 'text-accent bg-accent-soft dark:bg-accent-soft-strong dark:text-accent' : ''"
           >
             <span v-if="readLaterState && readLaterState !== 'idle'" class="text-xs">{{ readLaterLabel }}</span>
             <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -259,7 +259,7 @@ function handleImageError(): void {
             :title="readLaterLabel"
             :aria-label="readLaterLabel"
             :disabled="readLaterDisabled"
-            :class="readLaterState === 'added' ? 'text-accent bg-accent-soft' : ''"
+            :class="readLaterState === 'added' ? 'text-accent bg-accent-soft dark:bg-accent-soft-strong dark:text-accent' : ''"
           >
             <span v-if="readLaterState && readLaterState !== 'idle'" class="text-xs">{{ readLaterLabel }}</span>
             <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -337,7 +337,7 @@ function handleImageError(): void {
           :title="readLaterLabel"
             :aria-label="readLaterLabel"
             :disabled="readLaterDisabled"
-            :class="readLaterState === 'added' ? 'text-accent bg-accent-soft' : ''"
+            :class="readLaterState === 'added' ? 'text-accent bg-accent-soft dark:bg-accent-soft-strong dark:text-accent' : ''"
         >
           <span v-if="readLaterState && readLaterState !== 'idle'" class="text-xs">{{ readLaterLabel }}</span>
             <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
