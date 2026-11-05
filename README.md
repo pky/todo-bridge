@@ -37,6 +37,15 @@ iOS / Android アプリ開発で見逃したくない更新を、確認優先の
 - バックエンド: Firebase Authentication, Firestore, Cloud Functions, Cloud Storage
 - テスト: Vitest, Playwright
 
+### 構成図
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./img/todobridge-architecture-dark.png">
+  <img alt="TodoBridge の構成図。Web App と iOS ウィジェットが Firebase と外部 API にどう接続するかを示す" src="./img/todobridge-architecture.png">
+</picture>
+
+画面は Firestore を直接購読します。権限の要る処理と外部 API の呼び出しは Cloud Functions が受け持ち、文書ファイルだけは Web から署名 URL で Cloudflare R2 に直接読み書きします。
+
 ## 主な機能
 
 - タスク一覧と詳細表示
