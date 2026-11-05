@@ -62,7 +62,7 @@ onMounted(async () => {
 
 <template>
   <div v-if="authStore.loading" class="min-h-screen flex items-center justify-center">
-    <div class="text-gray-500">読み込み中...</div>
+    <div class="text-fg-subtle">読み込み中...</div>
   </div>
   <router-view v-else-if="authStore.accessMode !== 'newsViewer' || route.name === 'news-ai'" />
 
@@ -70,16 +70,16 @@ onMounted(async () => {
   <Transition name="slide-up">
     <div
       v-if="needRefresh && showUpdateToast"
-      class="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-80 bg-blue-600 text-white rounded-lg shadow-lg p-4 z-50"
+      class="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-80 bg-accent text-on-solid rounded-lg shadow-lg p-4 z-50"
     >
       <div class="flex items-start gap-3">
         <div class="flex-1">
           <p class="font-medium">新しいバージョンがあります</p>
-          <p class="text-sm text-blue-100 mt-1">更新して最新版を使用しますか？</p>
+          <p class="text-sm text-on-solid-muted mt-1">更新して最新版を使用しますか？</p>
         </div>
         <button
           @click="dismissUpdate"
-          class="text-blue-200 hover:text-white"
+          class="text-on-solid-muted hover:text-on-solid"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -89,13 +89,13 @@ onMounted(async () => {
       <div class="flex gap-2 mt-3">
         <button
           @click="handleUpdate"
-          class="flex-1 px-4 py-2 bg-white text-blue-600 rounded font-medium hover:bg-blue-50 transition-colors"
+          class="flex-1 px-4 py-2 bg-surface text-accent rounded font-medium hover:bg-accent-soft transition-colors"
         >
           更新する
         </button>
         <button
           @click="dismissUpdate"
-          class="px-4 py-2 text-blue-100 hover:text-white transition-colors"
+          class="px-4 py-2 text-on-solid-muted hover:text-on-solid transition-colors"
         >
           後で
         </button>

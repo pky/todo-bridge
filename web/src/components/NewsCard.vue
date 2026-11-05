@@ -69,12 +69,12 @@ const accentColor = computed(() => {
 
 const cardClass = computed(() => {
   if (props.variant === 'hero') {
-    return 'border-gray-200 bg-white p-3 hover:bg-gray-50 active:bg-gray-100 xl:min-h-[360px] xl:border-gray-300 xl:bg-white/95 xl:p-4 xl:shadow-sm xl:hover:bg-white'
+    return 'border-line bg-surface p-3 hover:bg-surface-hover active:bg-surface-alt xl:min-h-[360px] xl:border-line-strong xl:bg-surface/95 xl:p-4 xl:shadow-sm xl:hover:bg-surface'
   }
   if (props.variant === 'featured') {
-    return 'border-gray-200 bg-white p-3 hover:bg-gray-50 active:bg-gray-100 xl:min-h-[180px] xl:p-4 xl:shadow-sm xl:hover:bg-white'
+    return 'border-line bg-surface p-3 hover:bg-surface-hover active:bg-surface-alt xl:min-h-[180px] xl:p-4 xl:shadow-sm xl:hover:bg-surface'
   }
-  return 'border-gray-200 bg-white p-3 hover:bg-gray-50 active:bg-gray-100'
+  return 'border-line bg-surface p-3 hover:bg-surface-hover active:bg-surface-alt'
 })
 
 const thumbnailClass = computed(() => {
@@ -84,20 +84,20 @@ const thumbnailClass = computed(() => {
 })
 
 const titleClass = computed(() => {
-  if (props.variant === 'hero') return 'text-sm font-semibold leading-snug text-gray-900 xl:text-xl xl:text-gray-950 xl:line-clamp-3'
-  if (props.variant === 'featured') return 'text-sm font-semibold leading-snug text-gray-900 xl:text-base xl:line-clamp-2'
-  return 'text-sm font-semibold leading-snug text-gray-900'
+  if (props.variant === 'hero') return 'text-sm font-semibold leading-snug text-fg xl:text-xl xl:text-fg xl:line-clamp-3'
+  if (props.variant === 'featured') return 'text-sm font-semibold leading-snug text-fg xl:text-base xl:line-clamp-2'
+  return 'text-sm font-semibold leading-snug text-fg'
 })
 
 const summaryClass = computed(() => {
-  if (props.variant === 'hero') return 'mt-2 text-xs leading-relaxed text-gray-500 xl:mt-3 xl:text-sm xl:text-gray-600'
-  if (props.variant === 'featured') return 'mt-2 text-xs leading-relaxed text-gray-500'
-  return 'mt-2 text-xs leading-relaxed text-gray-500'
+  if (props.variant === 'hero') return 'mt-2 text-xs leading-relaxed text-fg-subtle xl:mt-3 xl:text-sm xl:text-fg-muted'
+  if (props.variant === 'featured') return 'mt-2 text-xs leading-relaxed text-fg-subtle'
+  return 'mt-2 text-xs leading-relaxed text-fg-subtle'
 })
 
 const metaClass = computed(() => {
-  if (props.variant === 'hero') return 'mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400 xl:mt-2 xl:text-gray-500'
-  return 'mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400'
+  if (props.variant === 'hero') return 'mt-1 flex flex-wrap items-center gap-2 text-xs text-fg-faint xl:mt-2 xl:text-fg-subtle'
+  return 'mt-1 flex flex-wrap items-center gap-2 text-xs text-fg-faint'
 })
 
 const showsHeaderContent = computed(() => props.variant === 'hero' || props.variant === 'featured')
@@ -172,7 +172,7 @@ function handleImageError(): void {
   >
     <div v-if="showsHeaderContent" class="space-y-3 xl:space-y-3">
       <div
-        class="hidden overflow-hidden bg-gray-100 xl:block"
+        class="hidden overflow-hidden bg-surface-alt xl:block"
         :class="thumbnailClass"
       >
         <img
@@ -182,13 +182,13 @@ function handleImageError(): void {
           class="h-full w-full object-cover"
           @error="handleImageError"
         />
-        <div v-else class="flex h-full w-full items-center justify-center p-4 text-center text-xs text-gray-400">
+        <div v-else class="flex h-full w-full items-center justify-center p-4 text-center text-xs text-fg-faint">
           {{ displayedSource }}
         </div>
       </div>
 
       <div class="flex gap-3 xl:hidden">
-        <div class="flex h-14 w-14 flex-shrink-0 overflow-hidden bg-gray-100 xl:hidden" :class="thumbnailClass">
+        <div class="flex h-14 w-14 flex-shrink-0 overflow-hidden bg-surface-alt xl:hidden" :class="thumbnailClass">
           <img
             v-if="thumbnailUrl"
             :src="thumbnailUrl"
@@ -196,7 +196,7 @@ function handleImageError(): void {
             class="h-full w-full object-cover"
             @error="handleImageError"
           />
-          <div v-else class="flex h-full w-full items-center justify-center p-1 text-center text-xs text-gray-400">
+          <div v-else class="flex h-full w-full items-center justify-center p-1 text-center text-xs text-fg-faint">
             {{ displayedSource }}
           </div>
         </div>
@@ -215,12 +215,12 @@ function handleImageError(): void {
 
         <div v-if="canManage !== false" class="flex flex-shrink-0 flex-col gap-1 self-start">
           <button
-            class="rounded-full p-1 text-gray-400 hover:text-blue-500"
+            class="rounded-full p-1 text-fg-faint hover:text-accent"
             @click.stop="!readLaterDisabled && emit('bookmark', article)"
             :title="readLaterLabel"
             :aria-label="readLaterLabel"
             :disabled="readLaterDisabled"
-            :class="readLaterState === 'added' ? 'text-blue-600 bg-blue-50' : ''"
+            :class="readLaterState === 'added' ? 'text-accent bg-accent-soft dark:bg-accent-soft-strong dark:text-accent' : ''"
           >
             <span v-if="readLaterState && readLaterState !== 'idle'" class="text-xs">{{ readLaterLabel }}</span>
             <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -228,7 +228,7 @@ function handleImageError(): void {
             </svg>
           </button>
           <button
-            class="rounded-full p-1 text-gray-300 hover:text-red-400"
+            class="rounded-full p-1 text-fg-faint hover:text-danger-faint"
             @click.stop="emit('dismiss', article)"
             title="興味なし"
           >
@@ -254,12 +254,12 @@ function handleImageError(): void {
 
         <div v-if="canManage !== false" class="flex flex-shrink-0 flex-col gap-1 self-start">
           <button
-            class="rounded-full p-1 text-gray-400 hover:text-blue-500"
+            class="rounded-full p-1 text-fg-faint hover:text-accent"
             @click.stop="!readLaterDisabled && emit('bookmark', article)"
             :title="readLaterLabel"
             :aria-label="readLaterLabel"
             :disabled="readLaterDisabled"
-            :class="readLaterState === 'added' ? 'text-blue-600 bg-blue-50' : ''"
+            :class="readLaterState === 'added' ? 'text-accent bg-accent-soft dark:bg-accent-soft-strong dark:text-accent' : ''"
           >
             <span v-if="readLaterState && readLaterState !== 'idle'" class="text-xs">{{ readLaterLabel }}</span>
             <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -267,7 +267,7 @@ function handleImageError(): void {
             </svg>
           </button>
           <button
-            class="rounded-full p-1 text-gray-300 hover:text-red-400"
+            class="rounded-full p-1 text-fg-faint hover:text-danger-faint"
             @click.stop="emit('dismiss', article)"
             title="興味なし"
           >
@@ -287,7 +287,7 @@ function handleImageError(): void {
         <span
           v-for="badge in mobileBadges"
           :key="badge"
-          class="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700"
+          class="rounded-full bg-success-soft px-2 py-1 text-[10px] font-semibold text-success-strong"
         >
           {{ badge }}
         </span>
@@ -297,7 +297,7 @@ function handleImageError(): void {
         <span
           v-for="tag in article.tags"
           :key="tag"
-          class="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-medium text-gray-600"
+          class="rounded-full bg-surface-alt px-2 py-1 text-[10px] font-medium text-fg-muted"
         >
           #{{ tag }}
         </span>
@@ -305,7 +305,7 @@ function handleImageError(): void {
     </div>
 
     <div v-else class="flex gap-3">
-      <div class="flex h-14 w-14 flex-shrink-0 overflow-hidden bg-gray-100" :class="thumbnailClass">
+      <div class="flex h-14 w-14 flex-shrink-0 overflow-hidden bg-surface-alt" :class="thumbnailClass">
         <img
           v-if="thumbnailUrl"
           :src="thumbnailUrl"
@@ -313,7 +313,7 @@ function handleImageError(): void {
           class="h-full w-full object-cover"
           @error="handleImageError"
         />
-        <div v-else class="flex h-full w-full items-center justify-center p-1 text-center text-xs text-gray-400">
+        <div v-else class="flex h-full w-full items-center justify-center p-1 text-center text-xs text-fg-faint">
           {{ displayedSource }}
         </div>
       </div>
@@ -332,12 +332,12 @@ function handleImageError(): void {
 
       <div v-if="canManage !== false" class="flex flex-shrink-0 flex-col gap-1 self-start">
         <button
-          class="rounded-full p-1 text-gray-400 hover:text-blue-500"
+          class="rounded-full p-1 text-fg-faint hover:text-accent"
           @click.stop="!readLaterDisabled && emit('bookmark', article)"
           :title="readLaterLabel"
             :aria-label="readLaterLabel"
             :disabled="readLaterDisabled"
-            :class="readLaterState === 'added' ? 'text-blue-600 bg-blue-50' : ''"
+            :class="readLaterState === 'added' ? 'text-accent bg-accent-soft dark:bg-accent-soft-strong dark:text-accent' : ''"
         >
           <span v-if="readLaterState && readLaterState !== 'idle'" class="text-xs">{{ readLaterLabel }}</span>
             <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -345,7 +345,7 @@ function handleImageError(): void {
           </svg>
         </button>
         <button
-          class="rounded-full p-1 text-gray-300 hover:text-red-400"
+          class="rounded-full p-1 text-fg-faint hover:text-danger-faint"
           @click.stop="emit('dismiss', article)"
           title="興味なし"
         >
@@ -365,14 +365,14 @@ function handleImageError(): void {
       {{ article.summaryJa }}
     </p>
 
-    <p v-if="article.topic === 'ai' && article.summaryStatus === 'fallback'" class="mt-2 text-xs text-gray-500">
+    <p v-if="article.topic === 'ai' && article.summaryStatus === 'fallback'" class="mt-2 text-xs text-fg-subtle">
       元の説明文
     </p>
-    <p v-else-if="article.topic === 'ai' && article.summarySource === 'description'" class="mt-2 text-xs text-gray-500">
+    <p v-else-if="article.topic === 'ai' && article.summarySource === 'description'" class="mt-2 text-xs text-fg-subtle">
       説明文をもとに作成
     </p>
 
-    <p v-if="article.topic === 'ai' && article.readReason" class="mt-2 break-words text-xs leading-relaxed text-teal-700">
+    <p v-if="article.topic === 'ai' && article.readReason" class="mt-2 break-words text-xs leading-relaxed text-success-strong">
       読む理由: {{ article.readReason }}
     </p>
 
@@ -380,7 +380,7 @@ function handleImageError(): void {
       <span
         v-for="badge in mobileBadges"
         :key="badge"
-        class="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
+        class="rounded-full bg-success-soft px-1.5 py-0.5 text-[10px] font-semibold text-success-strong"
       >
         {{ badge }}
       </span>
@@ -390,7 +390,7 @@ function handleImageError(): void {
       <span
         v-for="tag in article.tags"
         :key="tag"
-        class="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500"
+        class="rounded-full bg-surface-alt px-1.5 py-0.5 text-[10px] font-medium text-fg-subtle"
       >
         #{{ tag }}
       </span>

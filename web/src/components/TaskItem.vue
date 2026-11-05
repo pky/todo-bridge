@@ -102,17 +102,17 @@ const isOverdue = computed(() => {
     <!-- スワイプ時の背景（チェックマーク） -->
     <div
       class="absolute inset-0 flex items-center justify-end pr-4 rounded-lg transition-opacity"
-      :class="task.completed ? 'bg-orange-400' : 'bg-green-500'"
+      :class="task.completed ? 'bg-warning' : 'bg-success'"
       :style="{ opacity: Math.min(Math.abs(swipeOffset) / SWIPE_THRESHOLD, 1) }"
     >
-      <span class="text-white text-lg font-bold">{{ task.completed ? '↩' : '✓' }}</span>
+      <span class="text-on-solid text-lg font-bold">{{ task.completed ? '↩' : '✓' }}</span>
     </div>
     <!-- タスク本体（スワイプでスライド） -->
   <div
     @click="emit('select')"
-    class="relative flex items-start gap-1.5 sm:gap-2 py-3 px-2 sm:py-3 sm:px-3 rounded-lg cursor-pointer transition-colors bg-white"
+    class="relative flex items-start gap-1.5 sm:gap-2 py-3 px-2 sm:py-3 sm:px-3 rounded-lg cursor-pointer transition-colors bg-surface"
     :class="[
-      selected ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50 border border-transparent',
+      selected ? 'bg-accent-soft border border-accent-line' : 'hover:bg-surface-hover border border-transparent',
       task.completed ? 'opacity-60' : ''
     ]"
     :style="isSwiping ? { transform: `translateX(${swipeOffset}px)`, transition: 'none' } : { transform: 'translateX(0)', transition: 'transform 0.2s ease' }"
@@ -122,9 +122,9 @@ const isOverdue = computed(() => {
       v-if="task.priority < 4"
       class="w-2 h-2 rounded-full flex-shrink-0 mt-1.5"
       :class="{
-        'bg-red-500': task.priority === 1,
-        'bg-orange-500': task.priority === 2,
-        'bg-blue-500': task.priority === 3,
+        'bg-priority-high': task.priority === 1,
+        'bg-priority-medium': task.priority === 2,
+        'bg-priority-low': task.priority === 3,
       }"
     ></div>
     <div v-else class="w-2 flex-shrink-0"></div>
@@ -132,8 +132,8 @@ const isOverdue = computed(() => {
     <!-- タスク情報 -->
     <div class="flex-1 min-w-0 overflow-hidden">
       <p
-        class="text-gray-800 truncate text-sm sm:text-base"
-        :class="{ 'line-through text-gray-500': task.completed }"
+        class="truncate text-sm sm:text-base"
+        :class="task.completed ? 'line-through text-fg' : 'text-fg'"
       >
         {{ task.name }}
       </p>
@@ -143,7 +143,7 @@ const isOverdue = computed(() => {
         <span
           v-if="task.dueDate"
           class="flex items-center gap-0.5 sm:gap-1"
-          :class="isOverdue ? 'text-red-500' : 'text-gray-500'"
+          :class="isOverdue ? 'text-danger' : 'text-fg-subtle'"
         >
           <span class="hidden sm:inline">📅</span> {{ formatDate(task.dueDate) }}
         </span>
@@ -152,22 +152,22 @@ const isOverdue = computed(() => {
         <span
           v-for="tag in task.tags.slice(0, 1)"
           :key="tag"
-          class="text-gray-400 truncate max-w-[60px] sm:max-w-none"
+          class="text-fg-faint truncate max-w-[60px] sm:max-w-none"
         >
           #{{ tag }}
         </span>
-        <span v-if="task.tags.length > 1" class="text-gray-400 sm:hidden">
+        <span v-if="task.tags.length > 1" class="text-fg-faint sm:hidden">
           +{{ task.tags.length - 1 }}
         </span>
         <!-- デスクトップでは2つまで表示 -->
         <span
           v-for="tag in task.tags.slice(1, 2)"
           :key="tag"
-          class="text-gray-400 hidden sm:inline"
+          class="text-fg-faint hidden sm:inline"
         >
           #{{ tag }}
         </span>
-        <span v-if="task.tags.length > 2" class="text-gray-400 hidden sm:inline">
+        <span v-if="task.tags.length > 2" class="text-fg-faint hidden sm:inline">
           +{{ task.tags.length - 2 }}
         </span>
       </div>

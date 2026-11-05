@@ -2,6 +2,20 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
+    <script data-theme-init>
+      (() => {
+        let theme = 'light'
+        try {
+          const preference = localStorage.getItem('rertm-theme')
+          if (preference === 'dark' || (preference === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            theme = 'dark'
+          }
+        } catch {
+          // 保存値を読めない端末ではライトで開始する。
+        }
+        document.documentElement.dataset.theme = theme
+      })()
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>ReRTM</title>
 

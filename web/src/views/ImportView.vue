@@ -149,14 +149,14 @@ function goToHome() {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-100 py-12 px-4">
+  <div class="min-h-screen bg-canvas py-12 px-4">
     <div class="max-w-xl mx-auto">
-      <div class="bg-white rounded-lg shadow-md p-8">
-        <h1 class="text-2xl font-bold text-gray-800 mb-6">
+      <div class="bg-surface rounded-lg shadow-md p-8">
+        <h1 class="text-2xl font-bold text-fg mb-6">
           RTMデータインポート
         </h1>
 
-        <p class="text-gray-600 mb-6">
+        <p class="text-fg-muted mb-6">
           Remember The Milk からエクスポートしたJSONファイルを選択してください。
         </p>
 
@@ -172,7 +172,7 @@ function goToHome() {
           <button
             @click="fileInput?.click()"
             :disabled="importing"
-            class="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-500 hover:text-blue-600 transition-colors disabled:opacity-50"
+            class="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-line-strong rounded-lg text-fg-muted hover:border-accent hover:text-accent transition-colors disabled:opacity-50"
           >
             <span v-if="selectedFile">{{ selectedFile.name }}</span>
             <span v-else>ファイルを選択</span>
@@ -181,25 +181,25 @@ function goToHome() {
 
         <!-- プログレスバー -->
         <div v-if="importing && progress" class="mb-6">
-          <div class="flex justify-between text-sm text-gray-600 mb-2">
+          <div class="flex justify-between text-sm text-fg-muted mb-2">
             <span>{{ progress.message }}</span>
             <span>{{ progressPercent }}%</span>
           </div>
-          <div class="w-full bg-gray-200 rounded-full h-2">
+          <div class="w-full bg-surface-strong rounded-full h-2">
             <div
-              class="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              class="bg-accent h-2 rounded-full transition-all duration-300"
               :style="{ width: `${progressPercent}%` }"
             ></div>
           </div>
-          <p class="text-sm text-gray-500 mt-2">
+          <p class="text-sm text-fg-subtle mt-2">
             {{ progress.current }} / {{ progress.total }}
           </p>
         </div>
 
         <!-- 削除結果表示 -->
-        <div v-if="clearResult && clearResult.success" class="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <h3 class="font-semibold text-yellow-800 mb-2">データ削除完了</h3>
-          <ul class="text-yellow-700 text-sm space-y-1">
+        <div v-if="clearResult && clearResult.success" class="mb-6 p-4 bg-warning-soft border border-warning-line rounded-lg">
+          <h3 class="font-semibold text-warning-strong mb-2">データ削除完了</h3>
+          <ul class="text-warning-strong text-sm space-y-1">
             <li>タスク: {{ clearResult.tasksDeleted }}件削除</li>
             <li>リスト: {{ clearResult.listsDeleted }}件削除</li>
             <li>タグ: {{ clearResult.tagsDeleted }}件削除</li>
@@ -207,9 +207,9 @@ function goToHome() {
         </div>
 
         <!-- インポート結果表示 -->
-        <div v-if="result && result.success" class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <h3 class="font-semibold text-green-800 mb-2">インポート完了！</h3>
-          <ul class="text-green-700 text-sm space-y-1">
+        <div v-if="result && result.success" class="mb-6 p-4 bg-success-soft border border-success-line rounded-lg">
+          <h3 class="font-semibold text-success-strong mb-2">インポート完了！</h3>
+          <ul class="text-success-strong text-sm space-y-1">
             <li>リスト: {{ result.listsImported }}件</li>
             <li>タスク: {{ result.tasksImported }}件</li>
             <li>タグ: {{ result.tagsImported }}件</li>
@@ -217,8 +217,8 @@ function goToHome() {
         </div>
 
         <!-- エラー表示 -->
-        <div v-if="error" class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p class="text-red-700">{{ error }}</p>
+        <div v-if="error" class="mb-6 p-4 bg-danger-soft border border-danger-line rounded-lg">
+          <p class="text-danger-strong">{{ error }}</p>
         </div>
 
         <!-- アクションボタン -->
@@ -228,14 +228,14 @@ function goToHome() {
               v-if="!result?.success"
               @click="handleImport"
               :disabled="!selectedFile || importing || clearing"
-              class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              class="flex-1 px-4 py-2 bg-accent text-on-solid rounded-lg hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {{ importing ? 'インポート中...' : 'インポート開始' }}
             </button>
 
             <button
               @click="goToHome"
-              class="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+              class="flex-1 px-4 py-2 bg-surface-alt text-fg-secondary rounded-lg hover:bg-surface-strong"
             >
               {{ result?.success ? 'ホームへ' : 'キャンセル' }}
             </button>
@@ -245,7 +245,7 @@ function goToHome() {
           <button
             @click="handleExport"
             :disabled="importing || clearing || migrating || exporting"
-            class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="w-full px-4 py-2 bg-success text-on-solid rounded-lg hover:bg-success-hover disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {{ exporting ? 'エクスポート中...' : 'データをエクスポート（バックアップ）' }}
           </button>
@@ -254,7 +254,7 @@ function goToHome() {
           <button
             @click="handleClear"
             :disabled="importing || clearing || migrating || exporting"
-            class="w-full px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="w-full px-4 py-2 bg-danger-soft-strong text-danger-strong rounded-lg hover:bg-danger-line disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {{ clearing ? '削除中...' : '既存データを全て削除' }}
           </button>
@@ -262,18 +262,18 @@ function goToHome() {
       </div>
 
       <!-- タスク数マイグレーション -->
-      <div class="bg-white rounded-lg shadow-md p-8 mt-6">
-        <h2 class="text-xl font-bold text-gray-800 mb-4">
+      <div class="bg-surface rounded-lg shadow-md p-8 mt-6">
+        <h2 class="text-xl font-bold text-fg mb-4">
           タスク数の初期化
         </h2>
-        <p class="text-gray-600 mb-4 text-sm">
+        <p class="text-fg-muted mb-4 text-sm">
           リストごとの未完了タスク数を計算してサイドバーに表示します。
           インポート後に一度だけ実行してください。
         </p>
 
         <!-- マイグレーション結果 -->
-        <div v-if="migrateResult" class="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <p class="text-green-700">
+        <div v-if="migrateResult" class="mb-4 p-4 bg-success-soft border border-success-line rounded-lg">
+          <p class="text-success-strong">
             {{ migrateResult.listsUpdated }}件のリストを更新しました
           </p>
         </div>
@@ -281,14 +281,14 @@ function goToHome() {
         <button
           @click="handleMigrate"
           :disabled="importing || clearing || migrating"
-          class="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="w-full px-4 py-2 bg-special text-on-solid rounded-lg hover:bg-special-hover disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {{ migrating ? '処理中...' : 'タスク数を初期化' }}
         </button>
       </div>
 
       <!-- 注意事項 -->
-      <div class="mt-6 text-sm text-gray-500">
+      <div class="mt-6 text-sm text-fg-subtle">
         <h4 class="font-medium mb-2">注意事項:</h4>
         <ul class="list-disc list-inside space-y-1">
           <li>大量のデータのインポートには時間がかかります</li>

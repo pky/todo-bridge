@@ -28,7 +28,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="border-b border-slate-100 p-3">
+  <div class="border-b border-line-subtle p-3">
     <label class="relative block">
       <span class="sr-only">書類を検索</span>
       <input
@@ -36,21 +36,21 @@ onUnmounted(() => {
         data-testid="document-search-input"
         type="search"
         placeholder="書類名・読み取った文字を検索"
-        class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 pr-9 text-sm outline-none focus:border-blue-400 focus:bg-white"
+        class="w-full rounded-lg border border-line bg-surface-muted px-3 py-2 pr-9 text-sm outline-none focus:border-accent focus:bg-surface"
       />
-      <span class="pointer-events-none absolute right-3 top-2 text-slate-400">⌕</span>
+      <span class="pointer-events-none absolute right-3 top-2 text-fg-faint">⌕</span>
     </label>
-    <p v-if="searchStore.loading" class="mt-2 text-xs text-slate-500">検索中...</p>
-    <p v-else-if="searchStore.error" class="mt-2 text-xs text-red-600">{{ searchStore.error }}</p>
-    <p v-else-if="input.trim() && searchStore.results.length === 0" class="mt-2 text-xs text-slate-500">
+    <p v-if="searchStore.loading" class="mt-2 text-xs text-fg-subtle">検索中...</p>
+    <p v-else-if="searchStore.error" class="mt-2 text-xs text-danger">{{ searchStore.error }}</p>
+    <p v-else-if="input.trim() && searchStore.results.length === 0" class="mt-2 text-xs text-fg-subtle">
       一致する書類はありません。
     </p>
-    <ul v-if="searchStore.results.length" data-testid="document-search-results" class="mt-2 max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 bg-white">
+    <ul v-if="searchStore.results.length" data-testid="document-search-results" class="mt-2 max-h-64 divide-y divide-line-subtle overflow-y-auto rounded-lg border border-line bg-surface">
       <li v-for="result in searchStore.results" :key="`${result.documentId}-${result.pageNumber ?? 'document'}`">
-        <button type="button" class="w-full px-3 py-2 text-left hover:bg-blue-50" @click="emit('select', result)">
-          <span class="block truncate text-sm font-medium text-slate-700">{{ result.name }}</span>
-          <span v-if="result.pageNumber" class="mt-0.5 block text-xs font-medium text-blue-600">{{ result.pageNumber }}ページ</span>
-          <span class="mt-0.5 block line-clamp-2 text-xs text-slate-500">{{ result.excerpt }}</span>
+        <button type="button" class="w-full px-3 py-2 text-left hover:bg-accent-soft" @click="emit('select', result)">
+          <span class="block truncate text-sm font-medium text-fg-secondary">{{ result.name }}</span>
+          <span v-if="result.pageNumber" class="mt-0.5 block text-xs font-medium text-accent">{{ result.pageNumber }}ページ</span>
+          <span class="mt-0.5 block line-clamp-2 text-xs text-fg-subtle">{{ result.excerpt }}</span>
         </button>
       </li>
     </ul>

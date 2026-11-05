@@ -1,0 +1,146 @@
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+@theme {
+  --color-*: initial;
+  --color-canvas: oklch(96.7% 0.003 264.542);
+  --color-surface: #fff;
+  --color-surface-muted: oklch(98.5% 0.002 247.839);
+  --color-surface-alt: oklch(96.7% 0.003 264.542);
+  --color-surface-strong: oklch(92.8% 0.006 264.531);
+  --color-surface-stronger: oklch(87.2% 0.01 258.338);
+  --color-surface-hover: oklch(98.5% 0.002 247.839);
+  --color-inverse: oklch(27.8% 0.033 256.848);
+  --color-inverse-strong: oklch(21% 0.034 264.665);
+  --color-scrim: #000;
+  --color-line-subtle: oklch(96.7% 0.003 264.542);
+  --color-line: oklch(92.8% 0.006 264.531);
+  --color-line-strong: oklch(87.2% 0.01 258.338);
+  --color-fg: oklch(21% 0.034 264.665);
+  --color-fg-secondary: oklch(37.3% 0.034 259.733);
+  --color-fg-muted: oklch(44.6% 0.03 256.802);
+  --color-fg-subtle: oklch(55.1% 0.027 264.364);
+  --color-fg-faint: oklch(70.7% 0.022 261.325);
+  --color-on-solid: #fff;
+  --color-on-solid-muted: oklch(93.2% 0.032 255.585);
+  --color-accent: oklch(54.6% 0.245 262.881);
+  --color-accent-hover: oklch(48.8% 0.243 264.376);
+  --color-accent-strong: oklch(48.8% 0.243 264.376);
+  --color-accent-soft: oklch(97% 0.014 254.604);
+  --color-accent-soft-strong: oklch(93.2% 0.032 255.585);
+  --color-accent-line: oklch(88.2% 0.059 254.128);
+  --color-danger: oklch(57.7% 0.245 27.325);
+  --color-danger-faint: oklch(70.4% 0.191 22.216);
+  --color-danger-strong: oklch(50.5% 0.213 27.518);
+  --color-danger-soft: oklch(97.1% 0.013 17.38);
+  --color-danger-soft-strong: oklch(93.6% 0.032 17.717);
+  --color-danger-line: oklch(88.5% 0.062 18.334);
+  --color-success: oklch(62.7% 0.194 149.214);
+  --color-success-hover: oklch(52.7% 0.154 150.069);
+  --color-success-strong: oklch(52.7% 0.154 150.069);
+  --color-success-soft: oklch(98.2% 0.018 155.826);
+  --color-success-soft-strong: oklch(96.2% 0.044 156.743);
+  --color-success-line: oklch(92.5% 0.084 155.995);
+  --color-warning: oklch(76.9% 0.188 70.08);
+  --color-warning-hover: oklch(66.6% 0.179 58.318);
+  --color-warning-strong: oklch(55.5% 0.163 48.998);
+  --color-warning-soft: oklch(98.7% 0.022 95.277);
+  --color-warning-soft-strong: oklch(96.2% 0.059 95.617);
+  --color-warning-line: oklch(92.4% 0.12 95.746);
+  --color-special: oklch(55.8% 0.288 302.321);
+  --color-special-hover: oklch(49.6% 0.265 301.924);
+  --color-priority-high: oklch(63.7% 0.237 25.331);
+  --color-priority-medium: oklch(70.5% 0.213 47.604);
+  --color-priority-low: oklch(62.3% 0.214 259.815);
+  --color-deco-sky: oklch(68.5% 0.169 237.323);
+  --color-deco-cyan: oklch(71.5% 0.143 215.221);
+  --color-deco-emerald: oklch(69.6% 0.17 162.48);
+  --color-deco-teal: oklch(70.4% 0.14 182.503);
+}
+
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --tn-bg-dark: #16161e;
+  --tn-bg: #1a1b26;
+  --tn-bg-highlight: #292e42;
+  --tn-bg-alt: #24283b;
+  --tn-bg-visual: #283457;
+  --tn-gutter: #3b4261;
+  --tn-comment: #565f89;
+  --tn-dark5: #737aa2;
+  --tn-fg-muted: #9aa5ce;
+  --tn-fg-dark: #a9b1d6;
+  --tn-fg: #c0caf5;
+  --tn-blue: #7aa2f7;
+  --tn-cyan: #7dcfff;
+  --tn-green: #9ece6a;
+  --tn-teal: #73daca;
+  --tn-yellow: #e0af68;
+  --tn-orange: #ff9e64;
+  --tn-red: #f7768e;
+  --tn-magenta: #bb9af7;
+
+  --color-canvas: var(--tn-bg-dark);
+  --color-surface: var(--tn-bg);
+  --color-surface-muted: var(--tn-bg-dark);
+  --color-surface-alt: var(--tn-bg-alt);
+  --color-surface-strong: var(--tn-gutter);
+  --color-surface-stronger: var(--tn-dark5);
+  --color-surface-hover: var(--tn-bg-highlight);
+  --color-inverse: var(--tn-fg-dark);
+  --color-inverse-strong: var(--tn-fg);
+  --color-scrim: #000000;
+  --color-line-subtle: var(--tn-bg-alt);
+  --color-line: var(--tn-bg-highlight);
+  --color-line-strong: var(--tn-gutter);
+  --color-fg: var(--tn-fg);
+  --color-fg-secondary: var(--tn-fg-dark);
+  --color-fg-muted: var(--tn-fg-muted);
+  --color-fg-subtle: var(--tn-dark5);
+  --color-fg-faint: var(--tn-comment);
+  --color-on-solid: var(--tn-bg);
+  --color-on-solid-muted: var(--tn-bg-visual);
+  --color-accent: var(--tn-blue);
+  --color-accent-hover: color-mix(in oklab, var(--tn-blue) 75%, var(--tn-fg));
+  --color-accent-strong: color-mix(in oklab, var(--tn-blue) 60%, var(--tn-fg));
+  --color-accent-soft: color-mix(in oklab, var(--tn-blue) 14%, var(--tn-bg));
+  --color-accent-soft-strong: color-mix(in oklab, var(--tn-blue) 24%, var(--tn-bg));
+  --color-accent-line: color-mix(in oklab, var(--tn-blue) 40%, var(--tn-bg));
+  --color-danger: var(--tn-red);
+  --color-danger-faint: color-mix(in oklab, var(--tn-red) 70%, var(--tn-bg));
+  --color-danger-strong: color-mix(in oklab, var(--tn-red) 65%, var(--tn-fg));
+  --color-danger-soft: color-mix(in oklab, var(--tn-red) 14%, var(--tn-bg));
+  --color-danger-soft-strong: color-mix(in oklab, var(--tn-red) 24%, var(--tn-bg));
+  --color-danger-line: color-mix(in oklab, var(--tn-red) 40%, var(--tn-bg));
+  --color-success: var(--tn-green);
+  --color-success-hover: color-mix(in oklab, var(--tn-green) 75%, var(--tn-fg));
+  --color-success-strong: color-mix(in oklab, var(--tn-green) 65%, var(--tn-fg));
+  --color-success-soft: color-mix(in oklab, var(--tn-green) 14%, var(--tn-bg));
+  --color-success-soft-strong: color-mix(in oklab, var(--tn-green) 24%, var(--tn-bg));
+  --color-success-line: color-mix(in oklab, var(--tn-green) 40%, var(--tn-bg));
+  --color-warning: var(--tn-yellow);
+  --color-warning-hover: color-mix(in oklab, var(--tn-yellow) 75%, var(--tn-fg));
+  --color-warning-strong: color-mix(in oklab, var(--tn-yellow) 70%, var(--tn-fg));
+  --color-warning-soft: color-mix(in oklab, var(--tn-yellow) 14%, var(--tn-bg));
+  --color-warning-soft-strong: color-mix(in oklab, var(--tn-yellow) 24%, var(--tn-bg));
+  --color-warning-line: color-mix(in oklab, var(--tn-yellow) 40%, var(--tn-bg));
+  --color-special: var(--tn-magenta);
+  --color-special-hover: color-mix(in oklab, var(--tn-magenta) 75%, var(--tn-fg));
+  --color-priority-high: var(--tn-red);
+  --color-priority-medium: var(--tn-orange);
+  --color-priority-low: var(--tn-blue);
+  --color-deco-sky: var(--tn-blue);
+  --color-deco-cyan: var(--tn-cyan);
+  --color-deco-emerald: var(--tn-green);
+  --color-deco-teal: var(--tn-teal);
+}
+
+@layer base {
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-fg);
+  }
+}
