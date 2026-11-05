@@ -132,8 +132,8 @@ const isOverdue = computed(() => {
     <!-- タスク情報 -->
     <div class="flex-1 min-w-0 overflow-hidden">
       <p
-        class="text-fg truncate text-sm sm:text-base"
-        :class="{ 'line-through text-fg-subtle': task.completed }"
+        class="truncate text-sm sm:text-base"
+        :class="task.completed ? 'line-through text-fg' : 'text-fg'"
       >
         {{ task.name }}
       </p>

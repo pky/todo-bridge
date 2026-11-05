@@ -87,7 +87,7 @@
   --color-surface: var(--tn-bg);
   --color-surface-muted: var(--tn-bg-dark);
   --color-surface-alt: var(--tn-bg-alt);
-  --color-surface-strong: var(--tn-bg-highlight);
+  --color-surface-strong: color-mix(in oklab, var(--tn-bg-highlight) 60%, var(--tn-gutter));
   --color-surface-stronger: var(--tn-dark5);
   --color-surface-hover: var(--tn-bg-highlight);
   --color-inverse: var(--tn-fg-dark);

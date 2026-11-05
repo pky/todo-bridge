@@ -38,7 +38,7 @@ function moveSelection(event: KeyboardEvent, index: number): void {
         :aria-checked="preference === option.value"
         :tabindex="preference === option.value ? 0 : -1"
         class="px-3 py-2 rounded-lg text-sm transition-colors focus-visible:outline-2 focus-visible:outline-accent"
-        :class="preference === option.value ? 'bg-accent text-on-solid' : 'bg-surface-alt text-fg-secondary hover:bg-surface-hover'"
+        :class="preference === option.value ? 'bg-accent text-on-solid' : 'bg-surface-alt text-fg-secondary hover:bg-surface-strong'"
         @click="setPreference(option.value)"
         @keydown="moveSelection($event, index)"
       >{{ option.label }}</button>
