@@ -196,13 +196,13 @@ function buildAiBase(raw: RawArticle, today: string, fetchedAt: admin.firestore.
     description: raw.description,
     url: raw.url,
     normalizedUrl: normalizeUrl(raw.url),
-    thumbnailUrl: raw.thumbnailUrl,
+    thumbnailUrl: raw.thumbnailUrl ?? null,
     topic: 'ai',
     source: raw.source,
     sourceName: raw.sourceName,
     ...(raw.publisherDomain ? { publisherDomain: raw.publisherDomain } : {}),
     ...(typeof raw.generalSource === 'boolean' ? { generalSource: raw.generalSource } : {}),
-    score: raw.score,
+    score: raw.score ?? null,
     publishedAt: admin.firestore.Timestamp.fromDate(raw.publishedAt),
     fetchedAt,
     date: today,
@@ -237,7 +237,7 @@ export function buildReusedAiArticle(
 ): NewsArticle {
   return {
     ...buildAiBase(raw, today, fetchedAt),
-    thumbnailUrl: raw.thumbnailUrl ?? source.thumbnailUrl,
+    thumbnailUrl: raw.thumbnailUrl ?? source.thumbnailUrl ?? null,
     triageStatus: 'done',
     ...(source.triageVersion ? { triageVersion: source.triageVersion } : {}),
     ...(source.triageDecision ? { triageDecision: source.triageDecision } : {}),
@@ -338,6 +338,36 @@ async function fetchExistingAiArticles(): Promise<NewsArticle[]> {
   return snap.docs.map(doc => doc.data() as NewsArticle)
 }
 
+function restoreAiRawArticle(article: Omit<NewsArticle, 'publishedAt'> & { publishedAt: unknown }): RawArticle | null {
+  if (typeof article.title !== 'string' || typeof article.url !== 'string' ||
+    typeof article.description !== 'string' || typeof article.source !== 'string' ||
+    typeof article.sourceName !== 'string') return null
+
+  let publishedAt: unknown = article.publishedAt
+  try {
+    if (!(publishedAt instanceof Date) && typeof publishedAt === 'object' && publishedAt !== null &&
+      'toDate' in publishedAt && typeof publishedAt.toDate === 'function') {
+      publishedAt = publishedAt.toDate()
+    }
+  } catch {
+    return null
+  }
+  if (!(publishedAt instanceof Date) || !Number.isFinite(publishedAt.getTime())) return null
+
+  return {
+    title: article.title,
+    url: article.url,
+    description: article.description,
+    thumbnailUrl: article.thumbnailUrl ?? null,
+    source: article.source,
+    sourceName: article.sourceName,
+    ...(article.publisherDomain ? { publisherDomain: article.publisherDomain } : {}),
+    ...(typeof article.generalSource === 'boolean' ? { generalSource: article.generalSource } : {}),
+    score: article.score ?? null,
+    publishedAt,
+  }
+}
+
 export async function cleanupOldArticles(topic: NewsTopic): Promise<void> {
   const collectionRef = db.collection(`topics/${topic}/articles`)
   try {
@@ -402,15 +432,28 @@ export async function runCollectArticles(): Promise<AiCollectResult> {
   const collectionRef = db.collection('topics/ai/articles')
   const todaySnap = await collectionRef.where('date', '==', today).get()
   const processedUrls = new Set(todaySnap.docs.map(doc => (doc.data() as NewsArticle).url))
-  const toProcess = allRaw.filter(raw => !processedUrls.has(raw.url))
+  const retryRefs = new Map<RawArticle, admin.firestore.DocumentReference>()
+  const retryRaw: RawArticle[] = []
+  for (const doc of todaySnap.docs) {
+    const article = doc.data() as Omit<NewsArticle, 'publishedAt'> & { publishedAt: unknown }
+    if (article.triageStatus === 'done' && article.triageVersion === AI_TRIAGE_VERSION) continue
+    const raw = restoreAiRawArticle(article)
+    if (!raw) {
+      console.warn(`[collectArticles:ai] invalid stored article id=${doc.id}`)
+      continue
+    }
+    retryRaw.push(raw)
+    retryRefs.set(raw, doc.ref)
+  }
+  const toProcess = [...retryRaw, ...allRaw.filter(raw => !processedUrls.has(raw.url))]
   const existing = toProcess.length > 0 ? await fetchExistingAiArticles() : []
   const { reuse, fresh } = planAiArticleProcessing(toProcess, existing)
   const fetchedAt = admin.firestore.Timestamp.now()
   await commitInBatches(reuse.map(({ raw, source }) => ({
-    ref: collectionRef.doc(), data: buildReusedAiArticle(raw, source, today, fetchedAt),
+    ref: retryRefs.get(raw) ?? collectionRef.doc(), data: buildReusedAiArticle(raw, source, today, fetchedAt),
   })))
 
-  const items = fresh.map(raw => ({ raw, ref: collectionRef.doc() }))
+  const items = fresh.map(raw => ({ raw, ref: retryRefs.get(raw) ?? collectionRef.doc() }))
   const triageConfig = getAiTriageConfig(process.env)
   const { results, pendingIds, requestCount } = items.length > 0
     ? await triageAiArticles(items.map(({ raw, ref }) => buildTriageInput(ref.id, raw)), {
