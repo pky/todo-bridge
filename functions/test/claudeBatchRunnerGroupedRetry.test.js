@@ -97,7 +97,7 @@ test('欠落がbatchSizeを超えたら元の順序のままbatchSizeごとに�
   assert.equal(out.results.size, 8)
 })
 
-test('1回目の5xxで未処理になったまとまりをまとめて再送する', async () => {
+test('1回目の5xxで未処理になったまとまりを1件ずつ再送する', async () => {
   const articles = inputs(5)
   const APIError = Anthropic.APIError || Anthropic.default.APIError
   const { calls, deps } = setup((ids, index) => {
@@ -108,8 +108,8 @@ test('1回目の5xxで未処理になったまとまりをまとめて再送す�
   }, { batchSize: 3 })
   const out = await runClaudeBatches(articles, deps)
   assertPartition(out, articles, calls)
-  assert.deepEqual(calls, [articles.slice(0, 3).map(item => item.id), articles.slice(3).map(item => item.id), articles.slice(0, 3).map(item => item.id)])
-  assert.equal(out.requestCount, 3)
+  assert.deepEqual(calls, [articles.slice(0, 3).map(item => item.id), articles.slice(3).map(item => item.id), ['article-1'], ['article-2'], ['article-3']])
+  assert.equal(out.requestCount, 5)
   assert.deepEqual(out.pendingIds, [])
   assert.equal(out.results.size, 5)
 })
