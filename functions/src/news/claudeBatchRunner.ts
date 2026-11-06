@@ -26,12 +26,12 @@ export async function runClaudeBatches<TInput extends { id: string }, TResult ex
 
   if (!client) return { results, pendingIds: inputs.map((i) => i.id), requestCount }
 
-  // Returns ids that were not processed. Never throws.
-  const send = async (batch: TInput[]): Promise<string[]> => {
+  // 返答の欠落と再送対象エラーを区別する。例外は呼び出し元へ送出しない。
+  const send = async (batch: TInput[]): Promise<{ missingIds: string[]; failedIds: string[] }> => {
     const ids = batch.map((i) => i.id)
     if (expired()) {
       pending.push(...ids)
-      return []
+      return { missingIds: [], failedIds: [] }
     }
     if (deps.reserveRequest) {
       let reserved = false
@@ -53,7 +53,7 @@ export async function runClaudeBatches<TInput extends { id: string }, TResult ex
       }
       if (!reserved || expired()) {
         pending.push(...ids)
-        return []
+        return { missingIds: [], failedIds: [] }
       }
     }
     const remaining = deadlineAt === undefined ? undefined : deadlineAt - now()
@@ -72,12 +72,12 @@ export async function runClaudeBatches<TInput extends { id: string }, TResult ex
       )
       const parsed = deps.parseResponse(message, ids)
       for (const r of parsed.results) results.set(r.id, r)
-      return parsed.missingIds
+      return { missingIds: parsed.missingIds, failedIds: [] }
     } catch (err) {
       if (signal?.aborted || expired()) {
         console.warn(`[${logPrefix}] request aborted by deadline articles=${batch.length}`)
         pending.push(...ids)
-        return []
+        return { missingIds: [], failedIds: [] }
       }
       const status = err instanceof Anthropic.APIError ? err.status : undefined
       console.warn(
@@ -85,33 +85,57 @@ export async function runClaudeBatches<TInput extends { id: string }, TResult ex
       )
       if (status !== undefined && status >= 400 && status < 500 && status !== 429) {
         pending.push(...ids)
-        return []
+        return { missingIds: [], failedIds: [] }
       }
-      return ids
+      return { missingIds: [], failedIds: ids }
     } finally {
       if (abortTimer !== undefined) clearTimeout(abortTimer)
     }
   }
 
   const missing: string[] = []
+  const failed = new Set<string>()
   for (let i = 0; i < inputs.length; i += batchSize) {
     const batch = inputs.slice(i, i + batchSize)
     if (requestCount >= dailyMaxRequests || expired()) {
       pending.push(...batch.map((b) => b.id))
       continue
     }
-    missing.push(...(await send(batch)))
+    const sent = await send(batch)
+    missing.push(...sent.missingIds)
+    for (const id of sent.failedIds) failed.add(id)
   }
 
-  const byId = new Map(inputs.map((i) => [i.id, i]))
-  for (const id of missing) {
-    const item = byId.get(id)
-    if (!item || requestCount >= dailyMaxRequests || expired()) {
-      pending.push(id)
+  const missingIds = new Set(missing)
+  const retryInputs = inputs.filter(item => missingIds.has(item.id) && !results.has(item.id))
+  for (let i = 0; i < retryInputs.length; i += batchSize) {
+    const batch = retryInputs.slice(i, i + batchSize)
+    if (requestCount >= dailyMaxRequests || expired()) {
+      pending.push(...batch.map(item => item.id))
       continue
     }
-    pending.push(...(await send([item])))
+    const sent = await send(batch)
+    const stillMissing = new Set([...sent.missingIds, ...sent.failedIds])
+    for (const item of batch) {
+      if (!stillMissing.has(item.id) || results.has(item.id)) continue
+      if (batch.length === 1 || requestCount >= dailyMaxRequests || expired()) {
+        pending.push(item.id)
+        continue
+      }
+      const retried = await send([item])
+      pending.push(...retried.missingIds, ...retried.failedIds)
+    }
   }
 
-  return { results, pendingIds: pending, requestCount }
+  for (const item of inputs) {
+    if (!failed.has(item.id) || results.has(item.id)) continue
+    if (requestCount >= dailyMaxRequests || expired()) {
+      pending.push(item.id)
+      continue
+    }
+    const retried = await send([item])
+    pending.push(...retried.missingIds, ...retried.failedIds)
+  }
+
+  return { results, pendingIds: [...new Set(pending)].filter(id => !results.has(id)), requestCount }
 }

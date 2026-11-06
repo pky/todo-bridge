@@ -402,15 +402,35 @@ export async function runCollectArticles(): Promise<AiCollectResult> {
   const collectionRef = db.collection('topics/ai/articles')
   const todaySnap = await collectionRef.where('date', '==', today).get()
   const processedUrls = new Set(todaySnap.docs.map(doc => (doc.data() as NewsArticle).url))
-  const toProcess = allRaw.filter(raw => !processedUrls.has(raw.url))
+  const retryRefs = new Map<RawArticle, admin.firestore.DocumentReference>()
+  const retryRaw: RawArticle[] = []
+  for (const doc of todaySnap.docs) {
+    const article = doc.data() as Omit<NewsArticle, 'publishedAt'> & { publishedAt: admin.firestore.Timestamp | Date }
+    if (article.triageStatus === 'done' && article.triageVersion === AI_TRIAGE_VERSION) continue
+    const raw: RawArticle = {
+      title: article.title,
+      url: article.url,
+      description: article.description,
+      thumbnailUrl: article.thumbnailUrl,
+      source: article.source,
+      sourceName: article.sourceName,
+      publisherDomain: article.publisherDomain,
+      generalSource: article.generalSource,
+      score: article.score,
+      publishedAt: article.publishedAt instanceof Date ? article.publishedAt : article.publishedAt.toDate(),
+    }
+    retryRaw.push(raw)
+    retryRefs.set(raw, doc.ref)
+  }
+  const toProcess = [...retryRaw, ...allRaw.filter(raw => !processedUrls.has(raw.url))]
   const existing = toProcess.length > 0 ? await fetchExistingAiArticles() : []
   const { reuse, fresh } = planAiArticleProcessing(toProcess, existing)
   const fetchedAt = admin.firestore.Timestamp.now()
   await commitInBatches(reuse.map(({ raw, source }) => ({
-    ref: collectionRef.doc(), data: buildReusedAiArticle(raw, source, today, fetchedAt),
+    ref: retryRefs.get(raw) ?? collectionRef.doc(), data: buildReusedAiArticle(raw, source, today, fetchedAt),
   })))
 
-  const items = fresh.map(raw => ({ raw, ref: collectionRef.doc() }))
+  const items = fresh.map(raw => ({ raw, ref: retryRefs.get(raw) ?? collectionRef.doc() }))
   const triageConfig = getAiTriageConfig(process.env)
   const { results, pendingIds, requestCount } = items.length > 0
     ? await triageAiArticles(items.map(({ raw, ref }) => buildTriageInput(ref.id, raw)), {
