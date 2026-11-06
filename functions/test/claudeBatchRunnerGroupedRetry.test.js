@@ -159,3 +159,44 @@ test('まとめた再送の完了時に締め切りを迎えたら個別再送�
   assert.deepEqual(calls, [articles.map(item => item.id), articles.map(item => item.id)])
   assert.deepEqual(out.pendingIds, ['article-2'])
 })
+
+test('上限10回でも全まとめ再送を先に送り後続10件を救ってから入力順に個別再送する', async () => {
+  const articles = inputs(120)
+  const wholeBatch = articles.slice(30, 60).map(item => item.id)
+  const scattered = [62, 68, 74, 80, 86, 92, 98, 104, 110, 116].map(index => `article-${index}`)
+  const missing = [...wholeBatch, ...scattered]
+  const { calls, deps } = setup((ids, index) => {
+    if (index < 4) return message(ids.filter(id => !missing.includes(id)))
+    return message(ids.length > 1 && ids.every(id => wholeBatch.includes(id)) ? [] : ids)
+  }, { batchSize: 30, dailyMaxRequests: 10 })
+  const out = await runClaudeBatches(articles, deps)
+  assertPartition(out, articles, calls)
+  assert.deepEqual(calls.slice(4, 6), [wholeBatch, scattered])
+  assert.ok(scattered.every(id => out.results.has(id)), '後続のまとめ再送で10件とも結果に入る')
+  assert.deepEqual(calls.slice(6), wholeBatch.slice(0, 4).map(id => [id]))
+  assert.equal(out.requestCount, 10)
+  assert.deepEqual(out.pendingIds, wholeBatch.slice(4))
+  assert.equal(out.results.size, 94)
+})
+
+test('全まとめ再送後に再欠落と初回503の対象を混ぜて元の入力順に個別再送する', async () => {
+  const articles = inputs(12)
+  const APIError = Anthropic.APIError || Anthropic.default.APIError
+  const failed = ['article-1', 'article-2', 'article-3']
+  const missing = ['article-5', 'article-6', 'article-8', 'article-11']
+  const missingAgain = ['article-5', 'article-8']
+  const { calls, deps } = setup((ids, index) => {
+    if (index === 0) {
+      throw APIError.generate(503, { error: { type: 'api_error', message: '架空の一時障害' } }, '架空の一時障害', new Headers())
+    }
+    if (index < 4) return message(ids.filter(id => !missing.includes(id)))
+    return message(ids.length > 1 ? ids.filter(id => !missingAgain.includes(id)) : ids)
+  }, { batchSize: 3 })
+  const out = await runClaudeBatches(articles, deps)
+  assertPartition(out, articles, calls)
+  assert.deepEqual(calls.slice(4, 6), [missing.slice(0, 3), missing.slice(3)])
+  assert.deepEqual(calls.slice(6), [...failed, ...missingAgain].map(id => [id]))
+  assert.deepEqual(out.pendingIds, [])
+  assert.equal(out.results.size, 12)
+  assert.equal(out.requestCount, 11)
+})

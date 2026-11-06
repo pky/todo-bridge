@@ -260,3 +260,59 @@ test('当日記事がない初回はincludeとholdだけ本文取得し全新着
     }
   }
 })
+
+for (const brokenField of ['publishedAt', 'title']) {
+  test(`当日未判定の${brokenField}が壊れていてもその記事だけ飛ばし正常記事と新着を保存する`, async t => {
+    const fetchedBroken = raw(`broken-${brokenField}`)
+    const broken = { ...fetchedBroken }
+    if (brokenField === 'publishedAt') broken.publishedAt = null
+    else delete broken.title
+    const brokenId = `broken-${brokenField}-id`
+    const valid = raw(`valid-${brokenField}`)
+    const fresh = raw(`fresh-${brokenField}`)
+    const warn = t.mock.method(console, 'warn', () => {})
+    let result
+    try {
+      await assert.doesNotReject(async () => {
+        result = await collect([fetchedBroken, fresh], {
+          [fetchedBroken.title]: 'include', [valid.title]: 'include', [fresh.title]: 'include',
+        }, [stored(brokenId, broken), stored('valid-unfinished-id', valid)])
+      })
+      assert.deepEqual(result.triaged.map(input => input.title).sort(), [valid.title, fresh.title].sort())
+      assert.equal(result.triaged.some(input => input.id === brokenId), false)
+      assert.equal(result.saved.length, 2)
+      assert.equal(result.saved.some(item => item.id === brokenId || item.data.url === broken.url), false)
+      assert.equal(result.saved.find(item => item.data.url === valid.url).id, 'valid-unfinished-id')
+      assert.match(result.saved.find(item => item.data.url === fresh.url).id, /^generated-/)
+      assert.deepEqual(result.scraped.sort(), [valid.url, fresh.url].sort())
+      for (const item of result.saved) {
+        assert.equal(item.data.triageStatus, 'done')
+        assert.equal(item.data.triageVersion, AI_TRIAGE_VERSION)
+      }
+      const warnings = warn.mock.calls.map(call => require('node:util').inspect(call.arguments, { depth: null }))
+      assert.ok(warnings.some(warning => warning.includes(brokenId)), '警告には壊れた記事のdoc idを含める')
+      assert.ok(warnings.every(warning => !warning.includes(fetchedBroken.title) && !warning.includes(fetchedBroken.url)), '警告には記事のタイトルとURLを含めない')
+    } finally {
+      warn.mock.restore()
+    }
+  })
+}
+
+test('当日未判定の任意値undefinedはnullにそろえ未設定の任意キーを保存しない', async () => {
+  const article = raw('undefined-optionals', { thumbnailUrl: undefined, score: undefined })
+  delete article.publisherDomain
+  delete article.generalSource
+  const result = await collect([], { [article.title]: 'exclude' }, [stored('undefined-optionals-id', article)])
+  assert.deepEqual(result.triaged.map(input => input.id), ['undefined-optionals-id'])
+  assert.deepEqual(result.scraped, [])
+  assert.equal(result.saved.length, 1)
+  assert.equal(result.saved[0].id, 'undefined-optionals-id')
+  const saved = result.saved[0].data
+  assert.equal(saved.triageStatus, 'done')
+  assert.equal(saved.triageDecision, 'exclude')
+  assert.equal(saved.thumbnailUrl, null)
+  assert.equal(saved.score, null)
+  assert.equal(Object.values(saved).some(value => value === undefined), false, '保存値にundefinedを含めない')
+  assert.equal(Object.hasOwn(saved, 'publisherDomain'), false)
+  assert.equal(Object.hasOwn(saved, 'generalSource'), false)
+})
