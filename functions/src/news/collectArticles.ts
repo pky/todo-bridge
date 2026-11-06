@@ -196,13 +196,13 @@ function buildAiBase(raw: RawArticle, today: string, fetchedAt: admin.firestore.
     description: raw.description,
     url: raw.url,
     normalizedUrl: normalizeUrl(raw.url),
-    thumbnailUrl: raw.thumbnailUrl,
+    thumbnailUrl: raw.thumbnailUrl ?? null,
     topic: 'ai',
     source: raw.source,
     sourceName: raw.sourceName,
     ...(raw.publisherDomain ? { publisherDomain: raw.publisherDomain } : {}),
     ...(typeof raw.generalSource === 'boolean' ? { generalSource: raw.generalSource } : {}),
-    score: raw.score,
+    score: raw.score ?? null,
     publishedAt: admin.firestore.Timestamp.fromDate(raw.publishedAt),
     fetchedAt,
     date: today,
@@ -237,7 +237,7 @@ export function buildReusedAiArticle(
 ): NewsArticle {
   return {
     ...buildAiBase(raw, today, fetchedAt),
-    thumbnailUrl: raw.thumbnailUrl ?? source.thumbnailUrl,
+    thumbnailUrl: raw.thumbnailUrl ?? source.thumbnailUrl ?? null,
     triageStatus: 'done',
     ...(source.triageVersion ? { triageVersion: source.triageVersion } : {}),
     ...(source.triageDecision ? { triageDecision: source.triageDecision } : {}),
@@ -338,6 +338,36 @@ async function fetchExistingAiArticles(): Promise<NewsArticle[]> {
   return snap.docs.map(doc => doc.data() as NewsArticle)
 }
 
+function restoreAiRawArticle(article: Omit<NewsArticle, 'publishedAt'> & { publishedAt: unknown }): RawArticle | null {
+  if (typeof article.title !== 'string' || typeof article.url !== 'string' ||
+    typeof article.description !== 'string' || typeof article.source !== 'string' ||
+    typeof article.sourceName !== 'string') return null
+
+  let publishedAt: unknown = article.publishedAt
+  try {
+    if (!(publishedAt instanceof Date) && typeof publishedAt === 'object' && publishedAt !== null &&
+      'toDate' in publishedAt && typeof publishedAt.toDate === 'function') {
+      publishedAt = publishedAt.toDate()
+    }
+  } catch {
+    return null
+  }
+  if (!(publishedAt instanceof Date) || !Number.isFinite(publishedAt.getTime())) return null
+
+  return {
+    title: article.title,
+    url: article.url,
+    description: article.description,
+    thumbnailUrl: article.thumbnailUrl ?? null,
+    source: article.source,
+    sourceName: article.sourceName,
+    ...(article.publisherDomain ? { publisherDomain: article.publisherDomain } : {}),
+    ...(typeof article.generalSource === 'boolean' ? { generalSource: article.generalSource } : {}),
+    score: article.score ?? null,
+    publishedAt,
+  }
+}
+
 export async function cleanupOldArticles(topic: NewsTopic): Promise<void> {
   const collectionRef = db.collection(`topics/${topic}/articles`)
   try {
@@ -405,19 +435,12 @@ export async function runCollectArticles(): Promise<AiCollectResult> {
   const retryRefs = new Map<RawArticle, admin.firestore.DocumentReference>()
   const retryRaw: RawArticle[] = []
   for (const doc of todaySnap.docs) {
-    const article = doc.data() as Omit<NewsArticle, 'publishedAt'> & { publishedAt: admin.firestore.Timestamp | Date }
+    const article = doc.data() as Omit<NewsArticle, 'publishedAt'> & { publishedAt: unknown }
     if (article.triageStatus === 'done' && article.triageVersion === AI_TRIAGE_VERSION) continue
-    const raw: RawArticle = {
-      title: article.title,
-      url: article.url,
-      description: article.description,
-      thumbnailUrl: article.thumbnailUrl,
-      source: article.source,
-      sourceName: article.sourceName,
-      publisherDomain: article.publisherDomain,
-      generalSource: article.generalSource,
-      score: article.score,
-      publishedAt: article.publishedAt instanceof Date ? article.publishedAt : article.publishedAt.toDate(),
+    const raw = restoreAiRawArticle(article)
+    if (!raw) {
+      console.warn(`[collectArticles:ai] invalid stored article id=${doc.id}`)
+      continue
     }
     retryRaw.push(raw)
     retryRefs.set(raw, doc.ref)

@@ -118,12 +118,11 @@ export async function runClaudeBatches<TInput extends { id: string }, TResult ex
     const stillMissing = new Set([...sent.missingIds, ...sent.failedIds])
     for (const item of batch) {
       if (!stillMissing.has(item.id) || results.has(item.id)) continue
-      if (batch.length === 1 || requestCount >= dailyMaxRequests || expired()) {
+      if (batch.length === 1) {
         pending.push(item.id)
         continue
       }
-      const retried = await send([item])
-      pending.push(...retried.missingIds, ...retried.failedIds)
+      failed.add(item.id)
     }
   }
 
