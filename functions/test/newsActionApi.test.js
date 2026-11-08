@@ -184,3 +184,24 @@ test('成功時もログにUID・トークン・原本タイトル・概要・UR
   const output = JSON.stringify(res.body) + logs.flat().map(v => v instanceof Error ? v.stack : JSON.stringify(v)).join(' ')
   for (const value of [UID, TOKEN, ARTICLE.title, ARTICLE.summary, ARTICLE.url]) assert.ok(!output.includes(value), '応答・ログに機密データを含めない')
 })
+
+test('openを受け付け記事照合済みのevent保存へ渡しタスク結果を返さない', async () => {
+  const ctx = setup({ store: { async findReceipt() { return null }, async apply(input) { ctx.calls.push(['apply', input]); return result({ ...BODY, action: 'open' }) } } })
+  const response = await run(ctx, { body: { ...BODY, action: 'open' } })
+  assert.equal(response.statusCode, 200)
+  assert.deepEqual(response.body, result({ ...BODY, action: 'open' }))
+  assert.equal(ctx.calls.find(call => call[0] === 'apply')[1].action, 'open')
+  assert.ok(!('taskId' in response.body))
+})
+test('未知のactionは400で保存を呼ばない', async () => {
+  const ctx = setup()
+  assert.equal((await run(ctx, { body: { ...BODY, action: 'fiction-unknown' } })).statusCode, 400)
+  assert.ok(!kinds(ctx).includes('apply'))
+})
+test('同じoperationIdでもdismissとopenは別指紋として409にする', async () => {
+  let fingerprint
+  const first = setup({ store: { async findReceipt() { return null }, async apply(input) { fingerprint = input.fingerprint; return result() } } })
+  assert.equal((await run(first)).statusCode, 200)
+  const second = setup({ store: { async findReceipt() { return { fingerprint, result: result() } }, async apply() { assert.fail('保存は呼ばない') } } })
+  assert.equal((await run(second, { body: { ...BODY, action: 'open' } })).statusCode, 409)
+})

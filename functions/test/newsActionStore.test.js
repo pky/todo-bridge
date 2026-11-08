@@ -272,3 +272,17 @@ for (const spaced of [false, true]) test(`名前が変わった固定IDのあと
   assert.deepEqual(ctx.db.writes.slice(count).map(w => w.path), [receiptPath(OP2)])
   assert.deepEqual(ctx.db.docs.get(listPath), list)
 })
+
+test('openはeventとreceiptだけ保存しタスクを作らず、再度開くとalready', async () => {
+  const ctx = setup()
+  const value = input({ action: 'open', article: { id: ARTICLE.id, title: '架空の開封記事', tags: ['fable'] } })
+  assert.deepEqual(await ctx.store.apply(value), expected(value, 'applied'))
+  assert.deepEqual([...ctx.db.docs.keys()].sort(), [eventPath('open'), receiptPath()].sort())
+  assert.equal(ctx.db.docs.get(eventPath('open')).action, 'open')
+  assert.deepEqual(ctx.db.docs.get(receiptPath()).result, expected(value, 'applied'))
+  const saved = structuredClone(ctx.db.docs.get(eventPath('open')))
+  assert.deepEqual(await ctx.store.apply({ ...value, operationId: OP2 }), expected({ ...value, operationId: OP2 }, 'already'))
+  assert.deepEqual(ctx.db.docs.get(eventPath('open')), saved)
+  assert.ok(!ctx.db.writes.some(write => /\/(tasks|lists|newsInteractions)\//.test(write.path)))
+  assertAtomic(ctx.db)
+})

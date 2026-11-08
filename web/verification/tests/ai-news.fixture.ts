@@ -14,7 +14,7 @@ interface ActionBody {
   feedDate: string
   revision: string
   articleId: string
-  action: 'dismiss' | 'readLater'
+  action: 'dismiss' | 'readLater' | 'open'
   operationId: string
 }
 
@@ -30,7 +30,7 @@ function parseAction(value: unknown): ActionBody {
   const body = value as Record<string, unknown>
   if (body.schemaVersion !== 2 || body.topic !== 'ai' || typeof body.feedDate !== 'string'
     || typeof body.revision !== 'string' || typeof body.articleId !== 'string'
-    || (body.action !== 'dismiss' && body.action !== 'readLater')
+    || (body.action !== 'dismiss' && body.action !== 'readLater' && body.action !== 'open')
     || typeof body.operationId !== 'string') throw new Error('管理操作の本文が不正です')
   return { schemaVersion: 2, topic: 'ai', feedDate: body.feedDate, revision: body.revision,
     articleId: body.articleId, action: body.action, operationId: body.operationId }
@@ -74,6 +74,8 @@ export const test = base.extend<{ aiDemo: { actions: ActionBody[]; storageGets: 
     const storageGets: string[] = []
     await browser.route('**/*', async route => {
       const url = new URL(route.request.url)
+      // 架空の記事ページも外部通信せずに開く。
+      if (url.origin === 'https://example.test' && ['/dismiss', '/read-later'].includes(url.pathname)) { await route.fulfill({ status: 200, body: '<title>架空記事</title>' }); return }
       if (!allowed.has(url.origin)) { blocked.push(url.origin); await route.abort(); return }
       if (url.origin === actionOrigin) {
         if (url.pathname !== actionPath) throw new Error('管理操作先のパスが不正です')
@@ -86,7 +88,7 @@ export const test = base.extend<{ aiDemo: { actions: ActionBody[]; storageGets: 
         actions.push(body)
         // 現行runnerはFunctionsを起動しない。ここはHTTP/UI境界の成功応答を検証する。
         await route.fulfill({ status: 200, headers, json: { operationId: body.operationId, articleId: body.articleId, action: body.action,
-          status: body.action === 'dismiss' ? 'applied' : 'created' } })
+          status: body.action === 'readLater' ? 'created' : 'applied' } })
         return
       }
       if (url.origin === storage && route.request.method === 'GET') storageGets.push(url.pathname)
