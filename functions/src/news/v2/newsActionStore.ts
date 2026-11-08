@@ -47,6 +47,7 @@ export function createNewsActionStore({ db, serverTimestamp }: ReadLaterStoreDep
         const event = db.doc(`users/${uid}/newsActionEvents/${newsActionEventId(uid, topic, article.id, action)}`)
         const existingEvent = await tx.get(event)
         const result: NewsActionResult = { operationId, articleId: article.id, action, status: 'applied' }
+        if (action === 'open' && existingEvent.exists) result.status = 'already'
         let task: FirebaseFirestore.DocumentReference | undefined
         let taskData: FirebaseFirestore.DocumentData | undefined
         let list: FirebaseFirestore.DocumentReference | undefined

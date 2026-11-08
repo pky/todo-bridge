@@ -41,7 +41,7 @@ function isBody(value: unknown): value is NewsActionBody {
     && value.schemaVersion === 2 && value.topic === 'ai' && isFeedDate(value.feedDate)
     && typeof value.revision === 'string' && /^[0-9a-f]{64}$/.test(value.revision)
     && typeof value.articleId === 'string' && value.articleId.length > 0 && value.articleId.length <= 200 && !value.articleId.includes('/')
-    && (value.action === 'dismiss' || value.action === 'readLater')
+    && (value.action === 'dismiss' || value.action === 'readLater' || value.action === 'open')
     && typeof value.operationId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.operationId)
 }
 export function newsActionFingerprint(body: Omit<NewsActionBody, 'operationId'>): string {

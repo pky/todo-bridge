@@ -4,7 +4,7 @@ export interface NewsActionBody {
   feedDate: string
   revision: string
   articleId: string
-  action: 'dismiss' | 'readLater'
+  action: 'dismiss' | 'readLater' | 'open'
   operationId: string
 }
 interface UrlConfig { isEmulator: boolean; emulatorHost: string; functionsPort: number; projectId: string }
@@ -40,7 +40,7 @@ export async function postNewsAction(body: NewsActionBody, options: {
       if (!result || typeof result !== 'object' || !('operationId' in result) || result.operationId !== body.operationId
         || !('articleId' in result) || result.articleId !== body.articleId || !('action' in result) || result.action !== body.action
         || !('status' in result) || typeof result.status !== 'string'
-        || !(body.action === 'dismiss' ? ['applied'] : ['created', 'already']).includes(result.status)) return { kind: 'unknown' }
+        || !(body.action === 'readLater' ? ['created', 'already'] : body.action === 'open' ? ['applied', 'already'] : ['applied']).includes(result.status)) return { kind: 'unknown' }
       return { kind: 'ok', result: { operationId: body.operationId, articleId: body.articleId, action: body.action, status: result.status } }
     } catch { return { kind: 'unknown' } }
   }

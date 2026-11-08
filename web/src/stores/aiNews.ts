@@ -9,7 +9,7 @@ import { canManualRefresh, decideAutoFetch, refreshPeriodKey, type AiNewsFetchSt
 const UNCONFIRMED_MESSAGE = '操作結果が未確認です。再試行してください。'
 const REJECTED_PREFIX = '操作できませんでした'
 type PendingOperation = { operationId: string; payload: NewsActionBody }
-type Action = NewsActionBody['action']
+type Action = 'dismiss' | 'readLater'
 type FetchLease = { kind: 'acquired'; owner: string } | { kind: 'storage-unavailable' } | { kind: 'skipped' }
 interface Operation {
   dismissed?: boolean
@@ -52,6 +52,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
   let active: Promise<void> | null = null
   let tokenRefresh: Promise<string> | null = null
   const savingOperations = new Set<string>()
+  const openedArticles = new Set<string>()
   let fetchState = emptyFetch()
   let hasMemoryOnlyCache = false
   const key = () => `todobridge:aiNewsV2:v1:${uid}:ai`
@@ -69,6 +70,7 @@ export const useAiNewsStore = defineStore('aiNews', () => {
     operations.value = {}
     sending.value = {}
     savingOperations.clear()
+    openedArticles.clear()
     fetchState = emptyFetch()
     hasMemoryOnlyCache = false
     blocked.value = false
@@ -337,7 +339,22 @@ export const useAiNewsStore = defineStore('aiNews', () => {
       }
     } catch { if (valid(session, user)) error.value = '操作結果を保存できませんでした。再試行してください。' }
   }
-  async function act(articleId: string, action: NewsActionBody['action']) {
+  async function open(articleId: string): Promise<void> {
+    if (!feed.value || !uid || blocked.value || !canManage.value || openedArticles.has(articleId)
+      || !feed.value.articles.some(article => article.id === articleId)) return
+    openedArticles.add(articleId)
+    const user = uid
+    try {
+      await postNewsAction({ schemaVersion: 2, topic: 'ai', feedDate: feed.value.feedDate,
+        revision: feed.value.revision, articleId, action: 'open', operationId: crypto.randomUUID() }, {
+        getIdToken: async () => {
+          if (auth.currentUser?.uid !== user) throw new Error('ログインが必要です')
+          return auth.currentUser.getIdToken()
+        },
+      })
+    } catch { /* 閲覧記録の失敗は記事表示や管理操作へ影響させない。 */ }
+  }
+  async function act(articleId: string, action: Action) {
     if (!feed.value || !uid || blocked.value || !feed.value.articles.some(article => article.id === articleId)) return
     if (pendingFor(operations.value[articleId], action)) { await retryPending(articleId, action); return }
     if (action === 'readLater' && operations.value[articleId]?.readLaterAdded) return
@@ -376,5 +393,5 @@ export const useAiNewsStore = defineStore('aiNews', () => {
     await retryPending(articleId, action)
   }
   return { feed, feedDate, visibleArticles, loading, error, canManage, pendingArticles,
-    load, reset, dismiss: (id: string) => act(id, 'dismiss'), readLater: (id: string) => act(id, 'readLater'), retryPending, readLaterState }
+    load, reset, open, dismiss: (id: string) => act(id, 'dismiss'), readLater: (id: string) => act(id, 'readLater'), retryPending, readLaterState }
 })
