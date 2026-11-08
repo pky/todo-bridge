@@ -24,3 +24,13 @@ test('StorageのAI記事は興味なしで消え、あとで読む追加後も�
   expect(aiDemo.storageGets).toHaveLength(1)
   await app.screenshot('03-ai-read-later-added')
 })
+
+test('AI記事を開くとopenを送りカードを残す', async ({ app, screen, aiDemo }) => {
+  await app.open('/news/ai')
+  await expect(screen.getByText(dismissTitle, { visible: true })).toBeVisible()
+  await screen.getByText(dismissTitle, { visible: true }).tap()
+  await expect.poll(() => aiDemo.actions.filter(body => body.action === 'open').length).toBe(1)
+  expect(aiDemo.actions[0]).toMatchObject({ schemaVersion: 2, topic: 'ai', articleId: 'demo-dismiss', action: 'open' })
+  await expect(screen.getByText(dismissTitle, { visible: true })).toBeVisible()
+  await expect(screen.getByRole('button', '興味なし')).toHaveCount(2)
+})

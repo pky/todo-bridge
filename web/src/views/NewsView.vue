@@ -299,6 +299,7 @@ async function handleDismiss(article: NewsArticle): Promise<void> {
 
 async function handleArticleClick(article: NewsArticle): Promise<void> {
   if (isMobileTopic.value) await newsStore.trackClick(article, currentTopic.value)
+  else void aiNewsStore.value.open(article.id)
 }
 
 function actionItemArticle(item: MobileActionItem): NewsArticle {

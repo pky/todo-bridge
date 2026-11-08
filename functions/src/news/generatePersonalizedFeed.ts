@@ -25,6 +25,7 @@ import {
 } from './interactionLearning'
 import type { NewsArticle, NewsPreferences, NewsTopic } from './types'
 import { selectCuratorAiFeed } from './v2/curatorSelection'
+import { getAiFitConfig, judgeCuratorPersonalFit, type PersonalFit } from './v2/curatorPersonalFit'
 import type { GenerateAiFeedResult } from './v2/aiStaticFeedPipeline'
 import { evaluateCuratorSummaryOutcome, getCuratorSummarySkipReason, getSummaryEvidence, type CuratorSummarySkipReason } from './v2/curatorSummaryOutcome'
 
@@ -484,6 +485,22 @@ export async function runGeneratePersonalizedFeed(
       }
     }
 
+    // 好みの判定は要約ラウンドと独立して一度だけ行い、失敗しても配信を継続する。
+    let personalFit: Map<string, PersonalFit> | undefined
+    if (options.curatorUid && curatorReady) {
+      try {
+        const config = getAiFitConfig(process.env)
+        const result = await judgeCuratorPersonalFit(articles, curatorEvents, {
+          client: createClaudeMessagesClient(process.env.ANTHROPIC_API_KEY), config, scoreLimits, now: Date.now,
+          reserveRequest: createClaudeDailyRequestReservation(db, 'ai-fit', config.dailyMaxRequests),
+        })
+        if (result.status === 'judged') personalFit = result.fit
+        console.log(`[generatePersonalizedFeed] personalFit status=${result.status} judged=${result.judged} missing=${result.missing} requests=${result.requestCount}`)
+      } catch {
+        console.warn('[generatePersonalizedFeed] personalFit status=error judged=0 missing=0 requests=0')
+      }
+    }
+
     // 要約が得られず今日は再送しない記事。保存はせず、翌日に再試行する。
     const skippedIds = new Set<string>()
     const rank = (user: FeedUser): RankedFeedItem[] => user.articles
@@ -498,6 +515,7 @@ export async function runGeneratePersonalizedFeed(
       ? selectCuratorAiFeed({
         articles: articles.filter(article => !skippedIds.has(article.id)),
         preferences: curatorPreferences, events: curatorEvents, learningCutoffMs, scoreLimits,
+        ...(personalFit ? { personalFit } : {}),
       })
       : []
 

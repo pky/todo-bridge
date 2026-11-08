@@ -1,6 +1,7 @@
 import { calcAiBaseScore, selectAiFeed } from '../aiSelection'
 import { buildEventSignals, buildInteractionSignals, calcPreferenceMultiplier, learnKeywordPreferences } from '../interactionLearning'
 import type { NewsArticle, NewsPreferences } from '../types'
+import type { PersonalFit } from './curatorPersonalFit'
 
 export type NewsArticleWithId = NewsArticle & { id: string }
 export interface RankedFeedItem {
@@ -13,6 +14,7 @@ interface CuratorSelectionBase {
   preferences: NewsPreferences
   learningCutoffMs: number
   scoreLimits: { maxHnScore: number; maxGithubScore: number }
+  personalFit?: Map<string, PersonalFit>
 }
 
 export type CuratorSelectionInput = CuratorSelectionBase & (
@@ -27,10 +29,11 @@ export function selectCuratorAiFeed(input: CuratorSelectionInput): RankedFeedIte
     : input.interactions.filter(data => !data.topic || data.topic === 'ai').flatMap(buildInteractionSignals)
   const signals = sourceSignals
     .filter(signal => signal.atMs <= input.learningCutoffMs)
-  const learned = learnKeywordPreferences(signals, input.learningCutoffMs)
+  const learned = input.personalFit ? { positive: [], negative: [] } : learnKeywordPreferences(signals, input.learningCutoffMs)
   return selectAiFeed(input.articles.map(article => ({
     article,
     displayScore: calcAiBaseScore(article, input.scoreLimits)
-      * calcPreferenceMultiplier(article, input.preferences, learned),
+      * calcPreferenceMultiplier(article, input.preferences, learned)
+      * (input.personalFit?.get(article.id) === 'high' ? 1.3 : input.personalFit?.get(article.id) === 'low' ? 0.7 : 1),
   })))
 }

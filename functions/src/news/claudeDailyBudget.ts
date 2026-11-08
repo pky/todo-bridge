@@ -2,7 +2,7 @@ import type { Firestore } from 'firebase-admin/firestore'
 
 export function createClaudeDailyRequestReservation(
   db: Pick<Firestore, 'doc' | 'runTransaction'>,
-  stage: 'ai-triage' | 'ai-summary',
+  stage: 'ai-triage' | 'ai-summary' | 'ai-fit',
   dailyMaxRequests: number,
   now: () => Date = () => new Date()
 ): () => Promise<boolean> {
