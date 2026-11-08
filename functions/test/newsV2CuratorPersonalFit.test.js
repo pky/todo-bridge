@@ -141,7 +141,7 @@ test('personalFitがある日は学習キーワードによる押上げを使わ
 })
 test('personalFitがあっても明示キーワードの倍率は維持する', () => {
   const rows = [article('baseline'), article('preferred', { title: 'fabletoken' })]
-  const explicit = select(rows, new Map([['preferred', 'high']]), { keywords: ['fabletoken'] })
-  const baseline = select(rows, undefined, { keywords: ['fabletoken'] })
+  const explicit = select(rows, new Map([['preferred', 'high']]), { keywords: [{ word: 'fabletoken', weight: 1.4 }] })
+  const baseline = select(rows, undefined, { keywords: [{ word: 'fabletoken', weight: 1.4 }] })
   assert.equal(explicit.find(item => item.article.id === 'preferred').displayScore, baseline.find(item => item.article.id === 'preferred').displayScore * 1.3)
 })
