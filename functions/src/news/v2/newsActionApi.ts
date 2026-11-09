@@ -4,7 +4,7 @@ import * as admin from 'firebase-admin'
 import { validateAiFeedV2, computeFeedRevision } from './feedContract'
 import { aiFeedDailyPath, type AiFeedDaily, type FeedBucket } from './publishAiFeed'
 import { createStorageFeedBucket } from './storageFeedBucket'
-import { createNewsActionStore, NewsActionConflictError, type NewsAction, type NewsActionInput, type NewsActionResult, type StoredReceipt } from './newsActionStore'
+import { createNewsActionStore, NewsActionConflictError, type NewsActionRequest, type NewsActionInput, type NewsActionResult, type StoredReceipt } from './newsActionStore'
 
 interface NewsActionBody {
   schemaVersion: 2
@@ -12,7 +12,7 @@ interface NewsActionBody {
   feedDate: string
   revision: string
   articleId: string
-  action: NewsAction
+  action: NewsActionRequest
   operationId: string
 }
 interface NewsActionDeps {
@@ -41,7 +41,7 @@ function isBody(value: unknown): value is NewsActionBody {
     && value.schemaVersion === 2 && value.topic === 'ai' && isFeedDate(value.feedDate)
     && typeof value.revision === 'string' && /^[0-9a-f]{64}$/.test(value.revision)
     && typeof value.articleId === 'string' && value.articleId.length > 0 && value.articleId.length <= 200 && !value.articleId.includes('/')
-    && (value.action === 'dismiss' || value.action === 'readLater' || value.action === 'open')
+    && (value.action === 'dismiss' || value.action === 'readLater' || value.action === 'open' || value.action === 'undismiss')
     && typeof value.operationId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.operationId)
 }
 export function newsActionFingerprint(body: Omit<NewsActionBody, 'operationId'>): string {
