@@ -25,6 +25,7 @@
     "verify:e2e:mobile-news": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 npm exec --no -- e2e run verification/tests/mobile-news.e2e.ts --output .e2e/proof/mobile-news --trace on --video",
     "verify:e2e:ai-news": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 npm exec --no -- e2e run verification/tests/ai-news.e2e.ts --output .e2e/proof/ai-news --trace on --video",
     "verify:e2e:ai-news-viewer": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 npm exec --no -- e2e run verification/tests/ai-news-viewer.e2e.ts --output .e2e/proof/ai-news-viewer --trace on --video",
+    "verify:e2e:ai-news-header": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 npm exec --no -- e2e run verification/tests/ai-news-header.e2e.ts --output .e2e/proof/ai-news-header --trace on --video",
     "verify:e2e:task-counts": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 npm exec --no -- e2e run verification/tests/task-counts.e2e.ts --output .e2e/proof/task-counts --trace on --video",
     "verify:e2e:theme": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 npm exec --no -- e2e run verification/tests/theme.e2e.ts --output .e2e/proof/theme --trace on --video",
     "verify:e2e:guide": "E2E_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 npm exec --no -- e2e guide",

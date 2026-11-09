@@ -350,27 +350,39 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
         </svg>
       </button>
-      <div>
-        <h1 class="text-base font-semibold text-fg">{{ pageTitle }}</h1>
-        <p class="text-xs text-fg-faint">{{ pageSubtitle }}</p>
-        <p class="text-[11px] text-fg-faint">{{ formatFeedDate(latestFeedDate) }}</p>
+      <div class="min-w-0">
+        <h1 class="truncate text-base font-semibold text-fg">{{ pageTitle }}</h1>
+        <p class="truncate text-xs text-fg-faint">{{ pageSubtitle }}</p>
+        <p class="truncate text-[11px] text-fg-faint">{{ formatFeedDate(latestFeedDate) }}</p>
       </div>
-      <button
-        type="button"
-        class="ml-auto inline-flex items-center gap-2 rounded-full border border-line bg-surface-muted px-3 py-1.5 text-xs font-medium text-fg-secondary transition hover:border-line-strong hover:bg-surface hover:text-fg"
-        v-if="canManage"
-        @click="openReadLaterInTodo"
-      >
-        あとで読むを開く
-      </button>
-      <button
-        v-if="authStore.accessMode === 'newsViewer'"
-        type="button"
-        class="ml-auto rounded-full border border-line px-3 py-1.5 text-xs font-medium text-fg-secondary hover:bg-surface-hover"
-        @click="handleLogout"
-      >
-        ログアウト
-      </button>
+      <div class="ml-auto flex items-center gap-2 shrink-0">
+        <button
+          v-if="!isMobileTopic"
+          type="button"
+          aria-label="ニュースを更新"
+          class="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-line bg-surface-muted px-3 py-1.5 text-xs font-medium text-fg-secondary transition hover:border-line-strong hover:bg-surface hover:text-fg"
+          @click="aiNewsStore.load(authStore.user!.uid, true)"
+        >
+          <span class="sm:hidden">更新</span>
+          <span class="hidden sm:inline">ニュースを更新</span>
+        </button>
+        <button
+          type="button"
+          class="ml-auto inline-flex items-center gap-2 rounded-full border border-line bg-surface-muted px-3 py-1.5 text-xs font-medium text-fg-secondary transition hover:border-line-strong hover:bg-surface hover:text-fg"
+          v-if="canManage"
+          @click="openReadLaterInTodo"
+        >
+          あとで読むを開く
+        </button>
+        <button
+          v-if="authStore.accessMode === 'newsViewer'"
+          type="button"
+          class="ml-auto rounded-full border border-line px-3 py-1.5 text-xs font-medium text-fg-secondary hover:bg-surface-hover"
+          @click="handleLogout"
+        >
+          ログアウト
+        </button>
+      </div>
       <p v-if="viewerLogoutError" role="alert" class="w-full text-right text-xs text-danger">{{ viewerLogoutError }}</p>
     </header>
 
@@ -402,8 +414,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
         </div>
       </div>
 
-      <div v-if="!isMobileTopic" class="px-3 py-2">
-        <button class="text-sm text-accent" @click="aiNewsStore.load(authStore.user!.uid, true)">ニュースを更新</button>
+      <div v-if="!isMobileTopic && (aiNewsStore.error || (canManage && aiNewsStore.pendingArticles?.length > 0))" class="px-3 py-2">
         <p v-if="aiNewsStore.error" role="alert" class="text-sm text-danger">{{ aiNewsStore.error }}</p>
         <button v-for="id in canManage ? aiNewsStore.pendingArticles : []" :key="id" class="block text-sm text-accent" @click="aiNewsStore.retryPending(id)">操作結果が未確認・再試行</button>
       </div>

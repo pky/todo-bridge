@@ -31,3 +31,11 @@
 記事が実際に表示されることと Storage の取得を確認し、「あとで読む」「興味なし」「あとで読むを開く」が無いことを検証する。Home の URL を直接開いた場合も `/news/ai` で記事を表示する。管理操作の POST と外部通信が0件であることは fixture の終了時にも確認する。Functions の実処理と本番の権限設定は対象外。
 
 証跡は `.e2e/proof/ai-news-viewer/` に保存する。状態は成功実行後にだけ `tested` にする。
+
+## ヘッダーの更新ボタン
+
+| 対象 | 実行 | 確認する挙動 |
+| --- | --- | --- |
+| 375px 幅のヘッダー | `cd web && npm run verify:e2e:ai-news-header` | 「ニュースを更新」が header の中で画面内に収まる、header の高さが上余白 88px を超えない、押すと Storage を取得し直して記事が残る、管理操作の POST が0件 |
+
+証跡は `.e2e/proof/ai-news-header/` に保存する。ヘッダーのボタンや見出しを変えたときは、`verify:e2e:ai-news` に加えてこれも実行する。
