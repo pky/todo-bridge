@@ -1,13 +1,13 @@
 import { readLaterTaskId, type ReadLaterStoreDeps } from '../widgetReadLaterStore'
 import type { AiFeedDaily } from './publishAiFeed'
-import { newsActionEventId, type NewsAction } from './newsActionEventId'
+import { newsActionEventId, type NewsActionRequest } from './newsActionEventId'
 
-export { newsActionEventId, type NewsAction } from './newsActionEventId'
+export { newsActionEventId, type NewsAction, type NewsActionRequest } from './newsActionEventId'
 
 export interface NewsActionResult {
   operationId: string
   articleId: string
-  action: NewsAction
+  action: NewsActionRequest
   status: 'applied' | 'created' | 'already'
   taskId?: string
 }
@@ -16,7 +16,7 @@ export interface NewsActionInput {
   uid: string
   operationId: string
   fingerprint: string
-  action: NewsAction
+  action: NewsActionRequest
   topic: 'ai'
   feedDate: string
   revision: string
@@ -43,6 +43,16 @@ export function createNewsActionStore({ db, serverTimestamp }: ReadLaterStoreDep
           const data = saved.data() as StoredReceipt
           if (data.fingerprint !== fingerprint) throw new NewsActionConflictError('操作の内容が一致しません')
           return data.result
+        }
+        if (action === 'undismiss') {
+          const dismissedEvent = db.doc(`users/${uid}/newsActionEvents/${newsActionEventId(uid, topic, article.id, 'dismiss')}`)
+          const existingDismiss = await tx.get(dismissedEvent)
+          const result: NewsActionResult = {
+            operationId, articleId: article.id, action, status: existingDismiss.exists ? 'applied' : 'already',
+          }
+          if (existingDismiss.exists) tx.delete(dismissedEvent)
+          tx.create(receipt, { fingerprint, result, createdAt: serverTimestamp() })
+          return result
         }
         const event = db.doc(`users/${uid}/newsActionEvents/${newsActionEventId(uid, topic, article.id, action)}`)
         const existingEvent = await tx.get(event)
