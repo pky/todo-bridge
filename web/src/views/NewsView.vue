@@ -351,9 +351,9 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
         </svg>
       </button>
       <div class="min-w-0">
-        <h1 class="text-base font-semibold text-fg">{{ pageTitle }}</h1>
-        <p class="text-xs text-fg-faint">{{ pageSubtitle }}</p>
-        <p class="text-[11px] text-fg-faint">{{ formatFeedDate(latestFeedDate) }}</p>
+        <h1 class="truncate text-base font-semibold text-fg">{{ pageTitle }}</h1>
+        <p class="truncate text-xs text-fg-faint">{{ pageSubtitle }}</p>
+        <p class="truncate text-[11px] text-fg-faint">{{ formatFeedDate(latestFeedDate) }}</p>
       </div>
       <div class="ml-auto flex items-center gap-2 shrink-0">
         <button
