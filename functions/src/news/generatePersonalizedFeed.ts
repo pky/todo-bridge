@@ -511,6 +511,7 @@ export async function runGeneratePersonalizedFeed(
           * calcPreferenceMultiplier(article, user.preferences, user.learned),
       }))
     const select = (user: FeedUser) => selectAiFeed(rank(user))
+    const curatorMode = Boolean(options.curatorUid) && curatorReady
     const selectCurator = () => options.curatorUid && curatorReady
       ? selectCuratorAiFeed({
         articles: articles.filter(article => !skippedIds.has(article.id)),
@@ -545,7 +546,10 @@ export async function runGeneratePersonalizedFeed(
 
       for (let round = 0; round < AI_SUMMARY_MAX_ROUNDS; round++) {
         const wanted = new Map<string, RankedFeedItem>()
-        for (const selected of [...feedUsers.map(select), trackCuratorSelection()]) {
+        const selectedFeeds = curatorMode
+          ? [trackCuratorSelection()]
+          : [...feedUsers.map(select), trackCuratorSelection()]
+        for (const selected of selectedFeeds) {
           for (const item of selected) {
             const existing = wanted.get(item.article.id)
             if (needsAiSummary(item.article) && (!existing || item.displayScore > existing.displayScore)) {
@@ -638,7 +642,9 @@ export async function runGeneratePersonalizedFeed(
     const savedArticles = new Map<string, NewsArticleWithId>()
     for (const user of feedUsers) {
       try {
-        const displayable = select(user).filter(item => isDisplayableAiArticle(item.article))
+        const displayable = curatorMode
+          ? selectAiFeed(rank(user).filter(item => isDisplayableAiArticle(item.article)))
+          : select(user).filter(item => isDisplayableAiArticle(item.article))
         await saveRankedFeed(topic, user.uid, today, displayable)
         for (const item of displayable) savedArticles.set(item.article.id, item.article)
         console.log(
