@@ -25,9 +25,13 @@ export function getSafePdfRenderWidth(
 }
 
 export function assertSafePdfRenderArea(width: number, height: number, requestedWidth: number): void {
+  const maxArea = 2 * requestedWidth ** 2
+  // canvasは小数を切り捨てるため、各辺を切り上げず実数面積で判定する。
+  // viewportの倍率計算と面積の乗算による浮動小数点誤差だけを許容する。
+  const roundingTolerance = maxArea * Number.EPSILON * 4
   // 最小幅1でも面積上限を満たせないページは、canvas確保前に拒否する。
   if (![width, height].every(Number.isFinite) || width < 1 || height < 1
-    || Math.ceil(width) * Math.ceil(height) > 2 * requestedWidth ** 2) {
+    || width * height > maxArea + roundingTolerance) {
     throw new Error('PDFページが描画面積の上限を超えています')
   }
 }
