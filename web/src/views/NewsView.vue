@@ -10,6 +10,7 @@ import NewsCard from '@/components/NewsCard.vue'
 import MobileSummary from '@/components/MobileSummary.vue'
 import type { MobileActionItem, NewsArticle } from '@/types'
 import type { NewsTopic } from '@/types/news'
+import { isSafeExternalUrl } from '@/utils/safeUrl'
 import { isActionItemOverdue, matchesMobileActionItemPreferences, selectResolvedActionItems, selectUnresolvedActionItems } from '@/utils/mobileActionItems'
 
 const router = useRouter()
@@ -549,6 +550,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
                     あとで読む
                   </button>
                   <a
+                    v-if="isSafeExternalUrl(article.url)"
                     class="rounded-full bg-warning px-3 py-1 text-xs font-medium text-on-solid hover:bg-warning-hover"
                     :href="article.url"
                     target="_blank"
@@ -574,9 +576,10 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
           </button>
           <div v-if="showResolvedActionItems" class="mt-3 grid gap-3">
             <article v-for="item in resolvedActionItems" :key="item.key" class="flex items-start justify-between gap-3">
-              <a :href="item.url" target="_blank" rel="noopener noreferrer" class="min-w-0 break-words text-sm text-fg-muted">
+              <a v-if="isSafeExternalUrl(item.url)" :href="item.url" target="_blank" rel="noopener noreferrer" class="min-w-0 break-words text-sm text-fg-muted">
                 {{ item.titleJa || item.title }}
               </a>
+              <span v-else class="min-w-0 break-words text-sm text-fg-muted">{{ item.titleJa || item.title }}</span>
               <button
                 type="button"
                 class="shrink-0 rounded-full border border-line px-3 py-1 text-xs text-fg-muted disabled:opacity-50"

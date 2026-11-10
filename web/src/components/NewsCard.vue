@@ -3,6 +3,7 @@
 import { computed, ref } from 'vue'
 import MobileSummary from '@/components/MobileSummary.vue'
 import type { NewsArticle } from '@/types'
+import { isSafeExternalUrl } from '@/utils/safeUrl'
 
 const props = withDefaults(defineProps<{
   article: NewsArticle
@@ -154,6 +155,7 @@ function formatDate(article: NewsArticle): string {
 }
 
 function openArticle(): void {
+  if (!isSafeExternalUrl(props.article.url)) return
   emit('articleClick', props.article)
   window.open(props.article.url, '_blank', 'noopener,noreferrer')
 }

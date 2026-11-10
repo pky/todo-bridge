@@ -93,11 +93,13 @@ export class R2ObjectStorageProvider implements ObjectStorageProvider {
       Bucket: this.config.bucket,
       Key: input.objectKey,
       ContentType: input.contentType,
+      ContentLength: input.contentLength,
       Metadata: input.metadata,
     })
     const url = await getSignedUrl(this.client, command, {
       expiresIn: input.expiresInSeconds,
       unhoistableHeaders: new Set(Object.keys(metadataHeaders)),
+      signableHeaders: new Set(['content-length']),
     })
     const headers: Record<string, string> = {
       'Content-Type': input.contentType,

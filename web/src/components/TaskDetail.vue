@@ -12,6 +12,7 @@ import DocumentAttachmentPicker from '@/components/documents/DocumentAttachmentP
 // import { useCalendarStore } from '@/stores/calendar' // TODO: カレンダー自動登録機能を一時無効化
 import { Timestamp } from 'firebase/firestore'
 import { parseTaskInput } from '@/utils/parseTaskInput'
+import { isSafeExternalUrl } from '@/utils/safeUrl'
 import { isTextDocumentMimeType } from '@/utils/documentMimeTypes'
 import { useToast } from '@/composables/useToast'
 import { getDocumentSuggestionsApi } from '@/services/documentService'
@@ -816,7 +817,7 @@ const priorityOptions = [
           </div>
           <!-- 表示モード -->
           <a
-            v-else-if="task.url"
+            v-else-if="task.url && isSafeExternalUrl(task.url, { allowFtp: true })"
             :href="task.url"
             target="_blank"
             rel="noopener noreferrer"
@@ -824,6 +825,7 @@ const priorityOptions = [
           >
             {{ task.url }}
           </a>
+          <span v-else-if="task.url" class="text-fg-muted text-xs sm:text-sm break-all">{{ task.url }}</span>
           <span v-else class="text-fg-faint text-xs">なし</span>
         </div>
 

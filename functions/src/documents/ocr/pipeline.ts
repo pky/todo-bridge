@@ -7,6 +7,7 @@ import {
   OcrResult,
 } from '../providers/types'
 import { ensurePdfJsConfigured, extractPdfText } from './pdfText'
+import { assertSafePdfRenderArea, getSafePdfRenderWidth } from '../preview'
 
 export const OCR_IMAGE_MAX_EDGE_PIXELS = 2400
 export const PDF_OCR_RENDER_WIDTH = 2000
@@ -87,11 +88,16 @@ async function extractPdfDocumentText(
         pages.push(page)
         continue
       }
+      const pdfPage = await pdf.getPage(page.pageNumber)
+      const viewport = pdfPage.getViewport({ scale: 1 })
+      const width = getSafePdfRenderWidth(viewport.width, viewport.height, PDF_OCR_RENDER_WIDTH)
+      const renderedViewport = pdfPage.getViewport({ scale: width / viewport.width })
+      assertSafePdfRenderArea(renderedViewport.width, renderedViewport.height, PDF_OCR_RENDER_WIDTH)
       const rendered = await renderPageAsImage(pdf, page.pageNumber, {
         canvasImport: () => dynamicImport('@napi-rs/canvas') as Promise<
           typeof import('@napi-rs/canvas')
         >,
-        width: PDF_OCR_RENDER_WIDTH,
+        width,
       })
       const image = await normalizeOcrImage(Buffer.from(rendered))
       pages.push(await extractExternalPage(provider, {

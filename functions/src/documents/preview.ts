@@ -9,6 +9,29 @@ export const THUMBNAIL_MAX_EDGE_PIXELS = 320
 export const THUMBNAIL_WEBP_QUALITY = 75
 export const PDF_THUMBNAIL_RENDER_WIDTH = 960
 
+export function getSafePdfRenderWidth(
+  pageWidth: number,
+  pageHeight: number,
+  requestedWidth: number
+): number {
+  if (![pageWidth, pageHeight, requestedWidth].every(Number.isFinite)
+    || pageWidth <= 0 || pageHeight <= 0 || requestedWidth < 1) {
+    throw new Error('PDFページの寸法が不正です')
+  }
+  return Math.max(1, Math.floor(Math.min(
+    requestedWidth,
+    requestedWidth * Math.sqrt(2 * (pageWidth / pageHeight))
+  )))
+}
+
+export function assertSafePdfRenderArea(width: number, height: number, requestedWidth: number): void {
+  // 最小幅1でも面積上限を満たせないページは、canvas確保前に拒否する。
+  if (![width, height].every(Number.isFinite) || width < 1 || height < 1
+    || Math.ceil(width) * Math.ceil(height) > 2 * requestedWidth ** 2) {
+    throw new Error('PDFページが描画面積の上限を超えています')
+  }
+}
+
 const dynamicImport = new Function(
   'specifier',
   'return import(specifier)'
@@ -71,11 +94,16 @@ export async function createPdfThumbnail(
   await ensurePdfJsConfigured()
   const pdf = await getDocumentProxy(new Uint8Array(original))
   try {
+    const page = await pdf.getPage(1)
+    const viewport = page.getViewport({ scale: 1 })
+    const width = getSafePdfRenderWidth(viewport.width, viewport.height, PDF_THUMBNAIL_RENDER_WIDTH)
+    const renderedViewport = page.getViewport({ scale: width / viewport.width })
+    assertSafePdfRenderArea(renderedViewport.width, renderedViewport.height, PDF_THUMBNAIL_RENDER_WIDTH)
     const rendered = await renderPageAsImage(pdf, 1, {
       canvasImport: () => dynamicImport('@napi-rs/canvas') as Promise<
         typeof import('@napi-rs/canvas')
       >,
-      width: PDF_THUMBNAIL_RENDER_WIDTH,
+      width,
     })
     const { data, info } = await sharp(Buffer.from(rendered))
       .resize({

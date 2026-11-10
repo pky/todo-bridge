@@ -88,6 +88,22 @@ export function isFamilyCalendarSpace(space: { type?: unknown } | undefined): bo
   return space?.type === 'family'
 }
 
+export function isStoredTaskCalendarEventId(
+  storedId: string,
+  spaceId: string,
+  taskId: string,
+  currentVersion: number
+): boolean {
+  if (!/^[a-f0-9]{64}$/.test(storedId)
+    || !Number.isSafeInteger(currentVersion) || currentVersion < 0 || currentVersion > 1_000_000) {
+    return false
+  }
+  for (let version = 0; version <= currentVersion; version += 1) {
+    if (storedId === buildTaskCalendarEventId(spaceId, taskId, version)) return true
+  }
+  return false
+}
+
 export const createTaskCalendarEvent = functions
   .region('asia-northeast1')
   .https.onCall(async (data, context) => {
@@ -138,7 +154,9 @@ export const createTaskCalendarEvent = functions
     let eventId: string
     let alreadyRegistered = false
     try {
-      if (storedEventId && await updateDocumentCalendarEvent(storedEventId, eventInput, calendarId)) {
+      if (storedEventId
+        && isStoredTaskCalendarEventId(storedEventId, input.spaceId, input.taskId, nextVersion)
+        && await updateDocumentCalendarEvent(storedEventId, eventInput, calendarId)) {
         eventId = storedEventId
         alreadyRegistered = true
       } else {
