@@ -298,6 +298,11 @@ export const updateFamilySpaceName = functions
       throw new functions.https.HttpsError('permission-denied', 'スペース名を変更する権限がありません')
     }
 
+    const spaceSnapshot = await db.doc(`spaces/${spaceId}`).get()
+    if (!spaceSnapshot.exists || spaceSnapshot.data()?.ownerUid !== context.auth.uid) {
+      throw new functions.https.HttpsError('permission-denied', 'スペース名を変更する権限がありません')
+    }
+
     const now = Timestamp.now()
     const membersSnapshot = await db.collection(`spaces/${spaceId}/members`)
       .where('status', '==', 'active')
