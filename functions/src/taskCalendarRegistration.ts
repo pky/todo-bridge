@@ -10,6 +10,7 @@ import {
 const db = admin.firestore()
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000
+export const MAX_CALENDAR_REGISTRATION_VERSION = 100
 
 export interface CalendarTask {
   name?: string
@@ -95,7 +96,8 @@ export function isStoredTaskCalendarEventId(
   currentVersion: number
 ): boolean {
   if (!/^[a-f0-9]{64}$/.test(storedId)
-    || !Number.isSafeInteger(currentVersion) || currentVersion < 0 || currentVersion > 100) {
+    || !Number.isSafeInteger(currentVersion) || currentVersion < 0
+    || currentVersion > MAX_CALENDAR_REGISTRATION_VERSION) {
     return false
   }
   for (let version = 0; version <= currentVersion; version += 1) {
@@ -161,13 +163,17 @@ export const createTaskCalendarEvent = functions
         alreadyRegistered = true
       } else {
         if (storedEventId) nextVersion += 1
+        if (nextVersion > MAX_CALENDAR_REGISTRATION_VERSION) {
+          throw new functions.https.HttpsError('resource-exhausted', 'Google Calendarへの再登録回数が上限に達しました')
+        }
         eventId = await insertDocumentCalendarEvent(
           buildTaskCalendarEventId(input.spaceId, input.taskId, nextVersion),
           eventInput,
           calendarId
         )
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError && error.code === 'resource-exhausted') throw error
       throw new functions.https.HttpsError('internal', 'Google Calendarへの登録に失敗しました')
     }
 
