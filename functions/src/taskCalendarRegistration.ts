@@ -10,6 +10,7 @@ import {
 const db = admin.firestore()
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000
+export const MAX_CALENDAR_REGISTRATION_VERSION = 100
 
 export interface CalendarTask {
   name?: string
@@ -88,6 +89,23 @@ export function isFamilyCalendarSpace(space: { type?: unknown } | undefined): bo
   return space?.type === 'family'
 }
 
+export function isStoredTaskCalendarEventId(
+  storedId: string,
+  spaceId: string,
+  taskId: string,
+  currentVersion: number
+): boolean {
+  if (!/^[a-f0-9]{64}$/.test(storedId)
+    || !Number.isSafeInteger(currentVersion) || currentVersion < 0
+    || currentVersion > MAX_CALENDAR_REGISTRATION_VERSION) {
+    return false
+  }
+  for (let version = 0; version <= currentVersion; version += 1) {
+    if (storedId === buildTaskCalendarEventId(spaceId, taskId, version)) return true
+  }
+  return false
+}
+
 export const createTaskCalendarEvent = functions
   .region('asia-northeast1')
   .https.onCall(async (data, context) => {
@@ -138,18 +156,24 @@ export const createTaskCalendarEvent = functions
     let eventId: string
     let alreadyRegistered = false
     try {
-      if (storedEventId && await updateDocumentCalendarEvent(storedEventId, eventInput, calendarId)) {
+      if (storedEventId
+        && isStoredTaskCalendarEventId(storedEventId, input.spaceId, input.taskId, nextVersion)
+        && await updateDocumentCalendarEvent(storedEventId, eventInput, calendarId)) {
         eventId = storedEventId
         alreadyRegistered = true
       } else {
         if (storedEventId) nextVersion += 1
+        if (nextVersion > MAX_CALENDAR_REGISTRATION_VERSION) {
+          throw new functions.https.HttpsError('resource-exhausted', 'Google Calendarへの再登録回数が上限に達しました')
+        }
         eventId = await insertDocumentCalendarEvent(
           buildTaskCalendarEventId(input.spaceId, input.taskId, nextVersion),
           eventInput,
           calendarId
         )
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError && error.code === 'resource-exhausted') throw error
       throw new functions.https.HttpsError('internal', 'Google Calendarへの登録に失敗しました')
     }
 

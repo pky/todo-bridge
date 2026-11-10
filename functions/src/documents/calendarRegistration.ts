@@ -8,6 +8,7 @@ import {
   updateDocumentCalendarEvent,
 } from '../calendar'
 import { DocumentSuggestion, FamilyDocument } from './types'
+import { MAX_CALENDAR_REGISTRATION_VERSION } from '../taskCalendarRegistration'
 
 const db = admin.firestore()
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
@@ -59,6 +60,24 @@ export function buildDocumentCalendarEventId(
     ? `${spaceId}/${documentId}/${suggestionId}`
     : `${spaceId}/${documentId}/${suggestionId}/retry-${version}`
   return createHash('sha256').update(source).digest('hex')
+}
+
+export function isStoredDocumentCalendarEventId(
+  storedId: string,
+  spaceId: string,
+  documentId: string,
+  suggestionId: string,
+  currentVersion: number
+): boolean {
+  if (!/^[a-f0-9]{64}$/.test(storedId)
+    || !Number.isSafeInteger(currentVersion) || currentVersion < 0
+    || currentVersion > MAX_CALENDAR_REGISTRATION_VERSION) {
+    return false
+  }
+  for (let version = 0; version <= currentVersion; version += 1) {
+    if (storedId === buildDocumentCalendarEventId(spaceId, documentId, suggestionId, version)) return true
+  }
+  return false
 }
 
 export const createDocumentCalendarEvent = functions
@@ -123,16 +142,27 @@ export const createDocumentCalendarEvent = functions
       : 0
     let eventId: string
     let alreadyRegistered = false
+    const ownsExistingEvent = existingEventId !== null && isStoredDocumentCalendarEventId(
+      existingEventId,
+      input.spaceId,
+      input.documentId,
+      input.suggestionId,
+      nextRegistrationVersion
+    )
     try {
-      if (storedEventId && await updateDocumentCalendarEvent(storedEventId, eventInput, calendarId)) {
+      if (ownsExistingEvent && storedEventId
+        && await updateDocumentCalendarEvent(storedEventId, eventInput, calendarId)) {
         eventId = storedEventId
         alreadyRegistered = true
-      } else if (!storedEventId && legacyEventId
+      } else if (ownsExistingEvent && !storedEventId && legacyEventId
         && await documentCalendarEventExists(legacyEventId, calendarId)) {
         eventId = legacyEventId
         alreadyRegistered = true
       } else {
         if (existingEventId) nextRegistrationVersion += 1
+        if (nextRegistrationVersion > MAX_CALENDAR_REGISTRATION_VERSION) {
+          throw new functions.https.HttpsError('resource-exhausted', 'Google Calendarへの再登録回数が上限に達しました')
+        }
         eventId = await insertDocumentCalendarEvent(
           buildDocumentCalendarEventId(
             input.spaceId,
@@ -144,7 +174,8 @@ export const createDocumentCalendarEvent = functions
           calendarId
         )
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError && error.code === 'resource-exhausted') throw error
       throw new functions.https.HttpsError('internal', 'Google Calendarへの登録に失敗しました')
     }
 

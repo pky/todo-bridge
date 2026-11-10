@@ -47,13 +47,16 @@ export function buildOcrUsageReservation(
 export function buildOcrReservationId(
   month: string,
   documentId: string,
-  analysisVersion: number
+  analysisVersion: number,
+  retryCount: number = 0
 ): string {
   if (!/^\d{4}-\d{2}$/.test(month)
     || !/^[A-Za-z0-9_-]{1,128}$/.test(documentId)
     || !Number.isSafeInteger(analysisVersion)
-    || analysisVersion <= 0) {
+    || analysisVersion <= 0
+    || !Number.isSafeInteger(retryCount)
+    || retryCount < 0) {
     throw new Error('OCR利用予約キーが不正です')
   }
-  return `${month.replace('-', '')}_${documentId}_v${analysisVersion}`
+  return `${month.replace('-', '')}_${documentId}_v${analysisVersion}${retryCount > 0 ? `_r${retryCount}` : ''}`
 }

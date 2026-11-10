@@ -23,6 +23,17 @@ import { isTextDocumentMimeType, supportsDocumentText } from './textFormats'
 import { FamilyDocument } from './types'
 
 const db = admin.firestore()
+interface RetryableDocument extends FamilyDocument {
+  ocrRetryCount?: unknown
+}
+
+function getOcrRetryCount(document: RetryableDocument): number {
+  const count = document.ocrRetryCount ?? 0
+  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) {
+    throw new Error('OCR再試行回数が不正です')
+  }
+  return count
+}
 const R2_SECRETS = [
   'R2_ACCOUNT_ID',
   'R2_BUCKET',
@@ -55,10 +66,11 @@ async function reserveOcrPages(
   documentId: string,
   analysisVersion: number,
   pageCount: number,
+  retryCount: number,
   now: Date = new Date()
 ): Promise<void> {
   const month = getOcrUsageMonth(now)
-  const reservationId = buildOcrReservationId(month, documentId, analysisVersion)
+  const reservationId = buildOcrReservationId(month, documentId, analysisVersion, retryCount)
   const reservationRef = db.doc(`spaces/${spaceId}/ocrUsage/${reservationId}`)
   const usageRef = db.doc(`spaces/${spaceId}/usage/documents`)
   await db.runTransaction(async (transaction) => {
@@ -77,6 +89,7 @@ async function reserveOcrPages(
     transaction.create(reservationRef, {
       documentId,
       analysisVersion,
+      retryCount,
       pageCount,
       month,
       createdAt: timestamp,
@@ -222,7 +235,7 @@ async function processDocumentText(
   const initialDocument = await db.runTransaction(async (transaction) => {
     const snapshot = await transaction.get(documentRef)
     if (!snapshot.exists) return null
-    const document = snapshot.data() as FamilyDocument
+    const document = snapshot.data() as RetryableDocument
     if (!['uploaded', 'processing', 'ready'].includes(document.status)
       || document.ocrStatus !== 'pending') {
       return null
@@ -301,7 +314,8 @@ async function processDocumentText(
       spaceId,
       documentId,
       initialDocument.analysisVersion,
-      requiredExternalPages
+      requiredExternalPages,
+      getOcrRetryCount(initialDocument)
     )
     const original = await provider.readObject(initialDocument.originalObjectKey)
     if (!original) throw new Error('文字読み取り用の原本が見つかりません')
@@ -425,7 +439,7 @@ export const retryDocumentText = previewRuntime
       if (!snapshot.exists) {
         throw new functions.https.HttpsError('not-found', '書類が見つかりません')
       }
-      const document = snapshot.data() as FamilyDocument
+      const document = snapshot.data() as RetryableDocument
       if (document.status === 'trashed') {
         throw new functions.https.HttpsError('failed-precondition', 'ごみ箱内の書類は再読み取りできません')
       }
@@ -436,7 +450,12 @@ export const retryDocumentText = previewRuntime
       if (document.ocrStatus === 'processing') {
         throw new functions.https.HttpsError('already-exists', '文字読み取りはすでに処理中です')
       }
+      const nextRetryCount = getOcrRetryCount(document) + 1
+      if (!Number.isSafeInteger(nextRetryCount)) {
+        throw new functions.https.HttpsError('failed-precondition', 'OCR再試行回数が上限に達しました')
+      }
       transaction.update(documentRef, {
+        ocrRetryCount: nextRetryCount,
         ocrStatus: 'pending',
         ocrError: null,
         updatedAt: Timestamp.now(),
