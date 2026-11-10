@@ -1,14 +1,14 @@
 /**
  * 既存ユーザーデータを personal space へ複製するマイグレーション。
  *
- * 使い方: firebase functions:shell で実行
- * > migrateTaskCounts({ userId: 'YOUR_USER_ID' })
- * > migrateUserToPersonalSpace({ userId: 'YOUR_USER_ID' })
- * > checkPersonalSpaceMigration({ userId: 'YOUR_USER_ID' })
+ * 認証済みの呼び出し元から migrateTaskCounts または
+ * migrateCurrentUserToPersonalSpace を実行する。
  */
 import * as functions from 'firebase-functions/v1'
 import * as admin from 'firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
+import { assertActiveSpaceMembership, resolveCallerUserId } from './sharedTypes'
+import { getAllowedEmails, isAllowedEmail } from './spaces'
 
 const db = admin.firestore()
 const MAX_BATCH_WRITES = 400
@@ -34,12 +34,6 @@ interface PersonalSpaceMigrationDecision {
   lists: CollectionMigrationSummary
   tasks: CollectionMigrationSummary
   tags: CollectionMigrationSummary
-}
-
-function assertUserId(userId: unknown): asserts userId is string {
-  if (typeof userId !== 'string' || userId.trim() === '') {
-    throw new functions.https.HttpsError('invalid-argument', 'userId is required')
-  }
 }
 
 function resolveScopedCollectionPath(
@@ -197,9 +191,12 @@ async function seedPersonalSpace(userId: string): Promise<PersonalSpaceSeedData>
 // 既存リストの incompleteTaskCount を初期化するマイグレーションスクリプト
 export const migrateTaskCounts = functions
   .region('asia-northeast1')
-  .https.onCall(async (data) => {
-    const userId = data.userId
-    assertUserId(userId)
+  .https.onCall(async (data, context) => {
+    const userId = resolveCallerUserId(data?.userId, context)
+    await assertActiveSpaceMembership(userId, {
+      spaceId: typeof data?.spaceId === 'string' && data.spaceId.trim() !== '' ? data.spaceId : undefined,
+      useLegacyPath: data?.useLegacyPath === true,
+    })
 
     const listsRef = db.collection(resolveScopedCollectionPath(userId, 'lists', data))
     const tasksRef = db.collection(resolveScopedCollectionPath(userId, 'tasks', data))
@@ -234,28 +231,6 @@ export const migrateTaskCounts = functions
     }
   })
 
-export const migrateUserToPersonalSpace = functions
-  .region('asia-northeast1')
-  .https.onCall(async (data) => {
-    const userId = data.userId
-    assertUserId(userId)
-
-    const seedData = await seedPersonalSpace(userId)
-    const [lists, tasks, tags] = await Promise.all([
-      copyCollectionToPersonalSpace(userId, seedData.spaceId, 'lists'),
-      copyCollectionToPersonalSpace(userId, seedData.spaceId, 'tasks'),
-      copyCollectionToPersonalSpace(userId, seedData.spaceId, 'tags'),
-    ])
-
-    return {
-      success: true,
-      spaceId: seedData.spaceId,
-      lists,
-      tasks,
-      tags,
-    }
-  })
-
 export const migrateCurrentUserToPersonalSpace = functions
   .region('asia-northeast1')
   .https.onCall(async (_data, context) => {
@@ -264,6 +239,9 @@ export const migrateCurrentUserToPersonalSpace = functions
     }
 
     const userId = context.auth.uid
+    if (!isAllowedEmail(await getAllowedEmails(), context.auth.token.email ?? null)) {
+      throw new functions.https.HttpsError('permission-denied', 'このアカウントは利用を許可されていません')
+    }
     const seedData = await seedPersonalSpace(userId)
     const decision = await checkPersonalSpaceMigrationNeeded(userId, seedData.spaceId)
 
@@ -291,45 +269,5 @@ export const migrateCurrentUserToPersonalSpace = functions
       lists,
       tasks,
       tags,
-    }
-  })
-
-export const checkPersonalSpaceMigration = functions
-  .region('asia-northeast1')
-  .https.onCall(async (data) => {
-    const userId = data.userId
-    assertUserId(userId)
-
-    const spaceId = buildPersonalSpaceId(userId)
-    const [oldLists, oldTasks, oldTags, newLists, newTasks, newTags, membership, member] = await Promise.all([
-      db.collection(`users/${userId}/lists`).count().get(),
-      db.collection(`users/${userId}/tasks`).count().get(),
-      db.collection(`users/${userId}/tags`).count().get(),
-      db.collection(`spaces/${spaceId}/lists`).count().get(),
-      db.collection(`spaces/${spaceId}/tasks`).count().get(),
-      db.collection(`spaces/${spaceId}/tags`).count().get(),
-      db.doc(`users/${userId}/memberships/${spaceId}`).get(),
-      db.doc(`spaces/${spaceId}/members/${userId}`).get(),
-    ])
-
-    return {
-      success: true,
-      spaceId,
-      counts: {
-        lists: {
-          source: oldLists.data().count,
-          target: newLists.data().count,
-        },
-        tasks: {
-          source: oldTasks.data().count,
-          target: newTasks.data().count,
-        },
-        tags: {
-          source: oldTags.data().count,
-          target: newTags.data().count,
-        },
-      },
-      membershipExists: membership.exists,
-      memberExists: member.exists,
     }
   })

@@ -1,7 +1,7 @@
 import * as functions from 'firebase-functions/v1'
 import * as admin from 'firebase-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
-import { buildScopedCollectionPath, type ScopedRequest } from './sharedTypes'
+import { assertActiveSpaceMembership, buildScopedCollectionPath, type ScopedRequest } from './sharedTypes'
 
 const db = admin.firestore()
 
@@ -332,6 +332,7 @@ export const getSmartListTasks = functions
       throw new functions.https.HttpsError('invalid-argument', '無効なスマートリストタイプです')
     }
 
+    await assertActiveSpaceMembership(userId, { spaceId, useLegacyPath })
     const tasksRef = db.collection(buildScopedCollectionPath(userId, 'tasks', { spaceId, useLegacyPath }))
     const snapshot = await tasksRef.where('completed', '==', false).get()
 

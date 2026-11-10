@@ -1,3 +1,4 @@
+import * as functions from 'firebase-functions/v1'
 import * as admin from 'firebase-admin'
 
 export type SpaceType = 'personal' | 'family'
@@ -60,4 +61,32 @@ export function buildScopedCollectionPath(
   }
 
   return `spaces/${scope.spaceId}/${collectionName}`
+}
+
+// スペース配下へ進む前に、呼び出し元の有効な所属を確認する。
+export async function assertActiveSpaceMembership(
+  userId: string,
+  scope?: ScopedRequest
+): Promise<void> {
+  if (!scope?.spaceId || scope.useLegacyPath) return
+  if (typeof scope.spaceId !== 'string' || scope.spaceId.includes('/')) {
+    throw new functions.https.HttpsError('invalid-argument', '無効なスペースです')
+  }
+  const membership = await admin.firestore().doc(`spaces/${scope.spaceId}/members/${userId}`).get()
+  if (!membership.exists || membership.data()?.status !== 'active') {
+    throw new functions.https.HttpsError('permission-denied', 'スペースへのアクセス権がありません')
+  }
+}
+
+export function resolveCallerUserId(
+  requestedUserId: unknown,
+  context: functions.https.CallableContext
+): string {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', '認証が必要です')
+  }
+  if (requestedUserId !== undefined && requestedUserId !== context.auth.uid) {
+    throw new functions.https.HttpsError('permission-denied', '本人のデータだけを操作できます')
+  }
+  return context.auth.uid
 }
