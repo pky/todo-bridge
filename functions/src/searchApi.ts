@@ -1,6 +1,6 @@
 import * as functions from 'firebase-functions/v1'
 import * as admin from 'firebase-admin'
-import { buildScopedCollectionPath } from './sharedTypes'
+import { assertActiveSpaceMembership, buildScopedCollectionPath } from './sharedTypes'
 
 const db = admin.firestore()
 
@@ -78,6 +78,7 @@ export const searchTasks = functions
     }
 
     const searchTerms = query.toLowerCase().trim().split(/\s+/)
+    await assertActiveSpaceMembership(userId, { spaceId, useLegacyPath })
     const tasksRef = db.collection(buildScopedCollectionPath(userId, 'tasks', { spaceId, useLegacyPath }))
 
     // 基本クエリを構築
@@ -163,6 +164,7 @@ export const getTasksByFilter = functions
     }
     const userId = context.auth.uid
 
+    await assertActiveSpaceMembership(userId, { spaceId, useLegacyPath })
     const tasksRef = db.collection(buildScopedCollectionPath(userId, 'tasks', { spaceId, useLegacyPath }))
     let tasksQuery: FirebaseFirestore.Query = tasksRef
 

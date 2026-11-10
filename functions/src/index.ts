@@ -6,9 +6,7 @@ admin.initializeApp()
 // マイグレーション関数をエクスポート
 export {
   migrateTaskCounts,
-  migrateUserToPersonalSpace,
   migrateCurrentUserToPersonalSpace,
-  checkPersonalSpaceMigration,
 } from './migrate'
 
 // AIニュース収集・パーソナライズ関数をエクスポート
@@ -79,40 +77,6 @@ export {
   saveGoogleCalendarConfig,
 } from './calendar'
 
-// デバッグ用: タスク検索関数
-export const searchTask = functions
-  .region('asia-northeast1')
-  .https.onCall(async (data) => {
-    const { userId, listId, taskName } = data
-    if (!userId) {
-      throw new functions.https.HttpsError('invalid-argument', 'userId is required')
-    }
-
-    const tasksRef = db.collection(`users/${userId}/tasks`)
-    let q: FirebaseFirestore.Query = tasksRef
-
-    if (listId) {
-      q = q.where('listId', '==', listId)
-    }
-
-    const snapshot = await q.get()
-    const results: { id: string; name: string; listId: string; completed: boolean; parentId: string | null }[] = []
-
-    snapshot.docs.forEach((doc) => {
-      const data = doc.data()
-      if (!taskName || data.name.toLowerCase().includes(taskName.toLowerCase())) {
-        results.push({
-          id: doc.id,
-          name: data.name,
-          listId: data.listId,
-          completed: data.completed,
-          parentId: data.parentId || null,
-        })
-      }
-    })
-
-    return { count: results.length, tasks: results.slice(0, 50) }
-  })
 // TODO: カレンダー自動登録機能を一時無効化
 // import {
 //   createCalendarEvent,

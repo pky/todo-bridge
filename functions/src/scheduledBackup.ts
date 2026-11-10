@@ -7,6 +7,7 @@
  */
 import * as functions from 'firebase-functions/v1'
 import * as admin from 'firebase-admin'
+import { resolveCallerUserId } from './sharedTypes'
 
 const db = admin.firestore()
 const storage = admin.storage()
@@ -152,11 +153,8 @@ export async function runDailyBackup(): Promise<{ success: true; results: Backup
  */
 export const manualBackup = functions
   .region('asia-northeast1')
-  .https.onCall(async (data) => {
-    const { userId } = data
-    if (!userId) {
-      throw new functions.https.HttpsError('invalid-argument', 'userId is required')
-    }
+  .https.onCall(async (data, context) => {
+    const userId = resolveCallerUserId(data?.userId, context)
 
     const today = new Date().toISOString().split('T')[0]
 
@@ -184,11 +182,8 @@ export const manualBackup = functions
  */
 export const listBackups = functions
   .region('asia-northeast1')
-  .https.onCall(async (data) => {
-    const { userId } = data
-    if (!userId) {
-      throw new functions.https.HttpsError('invalid-argument', 'userId is required')
-    }
+  .https.onCall(async (data, context) => {
+    const userId = resolveCallerUserId(data?.userId, context)
 
     const bucket = storage.bucket()
     const [files] = await bucket.getFiles({ prefix: `backups/${userId}/` })
@@ -214,10 +209,11 @@ export const listBackups = functions
  */
 export const restoreFromBackup = functions
   .region('asia-northeast1')
-  .https.onCall(async (data) => {
-    const { userId, date } = data
-    if (!userId || !date) {
-      throw new functions.https.HttpsError('invalid-argument', 'userId and date are required')
+  .https.onCall(async (data, context) => {
+    const userId = resolveCallerUserId(data?.userId, context)
+    const { date } = data ?? {}
+    if (!date) {
+      throw new functions.https.HttpsError('invalid-argument', 'date is required')
     }
 
     const bucket = storage.bucket()

@@ -163,8 +163,17 @@ async function ensureFamilySpaceMemberships(
 
 export function appendMemberToVisibility(
   data: FirestoreData,
-  userId: string
+  userId: string,
+  options?: { sharedOnly?: boolean }
 ): FirestoreData | null {
+  if (options?.sharedOnly) {
+    const otherVisibleIds = new Set(
+      Array.isArray(data.visibleToMemberIds)
+        ? data.visibleToMemberIds.filter((value): value is string => typeof value === 'string' && value !== userId)
+        : []
+    )
+    if (otherVisibleIds.size < 2) return null
+  }
   const nextVisibleToMemberIds = Array.isArray(data.visibleToMemberIds)
     ? Array.from(new Set([...data.visibleToMemberIds.filter((value): value is string => typeof value === 'string'), userId]))
     : null
@@ -208,7 +217,7 @@ async function syncFamilySpaceVisibility(spaceId: string, userId: string): Promi
   const maybeQueueUpdate = (
     documentSnapshot: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>
   ) => {
-    const updateData = appendMemberToVisibility(documentSnapshot.data(), userId)
+    const updateData = appendMemberToVisibility(documentSnapshot.data(), userId, { sharedOnly: true })
     if (!updateData) return
 
     updates.push({ ref: documentSnapshot.ref, data: updateData })
@@ -242,6 +251,9 @@ export const createFamilySpace = functions
     const now = Timestamp.now()
     const userId = context.auth.uid
     const email = context.auth.token.email ?? null
+    if (!isAllowedEmail(await getAllowedEmails(), email)) {
+      throw new functions.https.HttpsError('permission-denied', 'このアカウントは利用を許可されていません')
+    }
     const displayName = typeof data?.displayName === 'string'
       ? data.displayName
       : (context.auth.token.name as string | undefined) ?? null
@@ -282,7 +294,7 @@ export const updateFamilySpaceName = functions
     }
 
     const requesterMemberSnapshot = await db.doc(`spaces/${spaceId}/members/${context.auth.uid}`).get()
-    if (!requesterMemberSnapshot.exists || requesterMemberSnapshot.data()?.role !== 'owner') {
+    if (!requesterMemberSnapshot.exists || requesterMemberSnapshot.data()?.role !== 'owner' || requesterMemberSnapshot.data()?.status !== 'active') {
       throw new functions.https.HttpsError('permission-denied', 'スペース名を変更する権限がありません')
     }
 
@@ -321,6 +333,9 @@ export const ensureCurrentUserSpaceAccess = functions
     const now = Timestamp.now()
     const userId = context.auth.uid
     const email = context.auth.token.email ?? null
+    if (!isAllowedEmail(await getAllowedEmails(), email)) {
+      throw new functions.https.HttpsError('permission-denied', 'このアカウントは利用を許可されていません')
+    }
     const displayName = (context.auth.token.name as string | undefined) ?? null
     const personalSpaceId = buildPersonalSpaceId(userId)
     const personalSpaceRef = db.doc(`spaces/${personalSpaceId}`)
