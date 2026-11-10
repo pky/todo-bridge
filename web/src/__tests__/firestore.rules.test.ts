@@ -197,6 +197,164 @@ describeWithEmulator('firestore rules', () => {
     }))
   })
 
+  it('activeメンバーは自分のmember文書のroleをownerに変更できない', async () => {
+    await seedSpace('member-self-role', 'bob')
+    await seedSpaceMember('member-self-role', 'alice', 'alice@example.com')
+
+    const db = testEnv.authenticatedContext('alice', { email: 'alice@example.com' }).firestore()
+    await assertFails(updateDoc(doc(db, 'spaces/member-self-role/members/alice'), {
+      role: 'owner',
+    }))
+  })
+
+  it('activeメンバーは自分のmember文書のstatusを変更できない', async () => {
+    await seedSpace('member-self-status', 'bob')
+    await seedSpaceMember('member-self-status', 'alice', 'alice@example.com')
+
+    const db = testEnv.authenticatedContext('alice', { email: 'alice@example.com' }).firestore()
+    await assertFails(updateDoc(doc(db, 'spaces/member-self-status/members/alice'), {
+      status: 'inactive',
+    }))
+  })
+
+  it('activeメンバーは他人のmember文書を作成できない', async () => {
+    await seedSpace('member-other-create', 'alice')
+    await seedSpaceMember('member-other-create', 'alice', 'alice@example.com')
+
+    const db = testEnv.authenticatedContext('alice', { email: 'alice@example.com' }).firestore()
+    await assertFails(setDoc(doc(db, 'spaces/member-other-create/members/bob'), {
+      uid: 'bob',
+      email: 'bob@example.com',
+      displayName: 'bob',
+      role: 'member',
+      status: 'active',
+    }))
+  })
+
+  it('activeメンバーは他人のmember文書を更新できない', async () => {
+    await seedSpace('member-other-update', 'bob')
+    await seedSpaceMember('member-other-update', 'alice', 'alice@example.com')
+    await seedSpaceMember('member-other-update', 'bob', 'bob@example.com', 'owner')
+
+    const db = testEnv.authenticatedContext('alice', { email: 'alice@example.com' }).firestore()
+    await assertFails(updateDoc(doc(db, 'spaces/member-other-update/members/bob'), {
+      role: 'member',
+    }))
+  })
+
+  it('編集権限のないactiveメンバーは家族タスクの編集ACLに自分を追加できない', async () => {
+    await seedSpace('acl-self-add-tasks', 'bob')
+    await seedSpaceMember('acl-self-add-tasks', 'alice', 'alice@example.com')
+    await seedSpaceMember('acl-self-add-tasks', 'bob', 'bob@example.com', 'owner')
+    await seedDoc('spaces/acl-self-add-tasks/tasks/resource-1', {
+      name: '閲覧専用のタスク',
+      visibleToMemberIds: ['alice', 'bob'],
+      editableByMemberIds: ['bob'],
+    })
+
+    const db = testEnv.authenticatedContext('alice', { email: 'alice@example.com' }).firestore()
+    await assertFails(updateDoc(doc(db, 'spaces/acl-self-add-tasks/tasks/resource-1'), {
+      editableByMemberIds: ['bob', 'alice'],
+    }))
+  })
+
+  it('編集権限のないactiveメンバーは家族リストの編集ACLに自分を追加できない', async () => {
+    await seedSpace('acl-self-add-lists', 'bob')
+    await seedSpaceMember('acl-self-add-lists', 'alice', 'alice@example.com')
+    await seedSpaceMember('acl-self-add-lists', 'bob', 'bob@example.com', 'owner')
+    await seedDoc('spaces/acl-self-add-lists/lists/resource-1', {
+      name: '閲覧専用のリスト',
+      visibleToMemberIds: ['alice', 'bob'],
+      editableByMemberIds: ['bob'],
+    })
+
+    const db = testEnv.authenticatedContext('alice', { email: 'alice@example.com' }).firestore()
+    await assertFails(updateDoc(doc(db, 'spaces/acl-self-add-lists/lists/resource-1'), {
+      editableByMemberIds: ['bob', 'alice'],
+    }))
+  })
+
+  it('編集権限のないactiveメンバーは家族タグの編集ACLに自分を追加できない', async () => {
+    await seedSpace('acl-self-add-tags', 'bob')
+    await seedSpaceMember('acl-self-add-tags', 'alice', 'alice@example.com')
+    await seedSpaceMember('acl-self-add-tags', 'bob', 'bob@example.com', 'owner')
+    await seedDoc('spaces/acl-self-add-tags/tags/resource-1', {
+      name: '閲覧専用のタグ',
+      visibleToMemberIds: ['alice', 'bob'],
+      editableByMemberIds: ['bob'],
+    })
+
+    const db = testEnv.authenticatedContext('alice', { email: 'alice@example.com' }).firestore()
+    await assertFails(updateDoc(doc(db, 'spaces/acl-self-add-tags/tags/resource-1'), {
+      editableByMemberIds: ['bob', 'alice'],
+    }))
+  })
+
+  it('編集者はリストを共有から非公開に変更できる', async () => {
+    await seedSpace('list-shared-to-private', 'bob')
+    await seedSpaceMember('list-shared-to-private', 'alice', 'alice@example.com')
+    await seedSpaceMember('list-shared-to-private', 'bob', 'bob@example.com', 'owner')
+    await seedDoc('spaces/list-shared-to-private/lists/list-1', {
+      name: '公開範囲を変更するリスト',
+      visibleToMemberIds: ['alice', 'bob'],
+      editableByMemberIds: ['alice', 'bob'],
+    })
+
+    const db = testEnv.authenticatedContext('alice', { email: 'alice@example.com' }).firestore()
+    await assertSucceeds(updateDoc(doc(db, 'spaces/list-shared-to-private/lists/list-1'), {
+      visibleToMemberIds: ['alice'],
+      editableByMemberIds: ['alice'],
+    }))
+  })
+
+  it('編集者はリストを非公開から共有に変更できる', async () => {
+    await seedSpace('list-private-to-shared', 'bob')
+    await seedSpaceMember('list-private-to-shared', 'alice', 'alice@example.com')
+    await seedSpaceMember('list-private-to-shared', 'bob', 'bob@example.com', 'owner')
+    await seedDoc('spaces/list-private-to-shared/lists/list-1', {
+      name: '公開範囲を変更するリスト',
+      visibleToMemberIds: ['alice'],
+      editableByMemberIds: ['alice'],
+    })
+
+    const db = testEnv.authenticatedContext('alice', { email: 'alice@example.com' }).firestore()
+    await assertSucceeds(updateDoc(doc(db, 'spaces/list-private-to-shared/lists/list-1'), {
+      visibleToMemberIds: ['alice', 'bob'],
+      editableByMemberIds: ['alice', 'bob'],
+    }))
+  })
+
+  it('編集者は家族タスクの名前を変更できる', async () => {
+    await seedSpace('task-editor-update', 'bob')
+    await seedSpaceMember('task-editor-update', 'alice', 'alice@example.com')
+    await seedDoc('spaces/task-editor-update/tasks/task-1', {
+      name: '変更前のタスク',
+      visibleToMemberIds: ['alice', 'bob'],
+      editableByMemberIds: ['alice', 'bob'],
+    })
+
+    const db = testEnv.authenticatedContext('alice', { email: 'alice@example.com' }).firestore()
+    await assertSucceeds(updateDoc(doc(db, 'spaces/task-editor-update/tasks/task-1'), {
+      name: '変更後のタスク',
+    }))
+  })
+
+  it('個人スペースの本人はACLのないタスクを更新できる', async () => {
+    await seedDoc('spaces/personal_alice-update', {
+      type: 'personal',
+      ownerUid: 'alice',
+    })
+    await seedSpaceMember('personal_alice-update', 'alice', 'alice@example.com', 'owner')
+    await seedDoc('spaces/personal_alice-update/tasks/task-1', {
+      name: '変更前の個人タスク',
+    })
+
+    const db = testEnv.authenticatedContext('alice', { email: 'alice@example.com' }).firestore()
+    await assertSucceeds(updateDoc(doc(db, 'spaces/personal_alice-update/tasks/task-1'), {
+      name: '変更後の個人タスク',
+    }))
+  })
+
   it('家族メンバーは書類情報を読めるが非メンバーは読めない', async () => {
     await seedSpace('documents-space', 'alice')
     await seedSpaceMember('documents-space', 'alice', 'alice@example.com', 'owner')
