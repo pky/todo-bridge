@@ -22,10 +22,27 @@ export function isPublicScrapeAddress(address: string): boolean {
   if (family !== 6 || address.includes('%')) return false
   // URLの正規化によりIPv4表記入り・省略表記も同じIPv6表現で判定する。
   const normalized = new URL(`http://[${address}]/`).hostname.slice(1, -1)
+  const [head, tail] = normalized.split('::')
+  const headParts = head ? head.split(':') : []
+  const tailParts = tail ? tail.split(':') : []
+  const parts = (tail === undefined
+    ? headParts
+    : [...headParts, ...Array<string>(8 - headParts.length - tailParts.length).fill('0'), ...tailParts])
+    .map((part) => Number.parseInt(part, 16))
+  // 変換・トンネル用IPv6は、実際の接続先となる埋め込みIPv4も検査する。
+  const embedded = parts[0] === 0x2002
+    ? parts.slice(1, 3)
+    : parts[0] === 0x64 && parts[1] === 0xff9b && parts.slice(2, 6).every((part) => part === 0)
+      ? parts.slice(6)
+      : null
+  if (embedded) {
+    return isPublicScrapeAddress(embedded.flatMap((part) => [part >> 8, part & 0xff]).join('.'))
+  }
   const first = Number.parseInt(normalized.split(':')[0] || '0', 16)
   return !normalized.startsWith('::')
     && (first & 0xfe00) !== 0xfc00
     && (first & 0xffc0) !== 0xfe80
+    && (first & 0xffc0) !== 0xfec0
     && (first & 0xff00) !== 0xff00
 }
 

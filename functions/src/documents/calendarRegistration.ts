@@ -61,6 +61,23 @@ export function buildDocumentCalendarEventId(
   return createHash('sha256').update(source).digest('hex')
 }
 
+export function isStoredDocumentCalendarEventId(
+  storedId: string,
+  spaceId: string,
+  documentId: string,
+  suggestionId: string,
+  currentVersion: number
+): boolean {
+  if (!/^[a-f0-9]{64}$/.test(storedId)
+    || !Number.isSafeInteger(currentVersion) || currentVersion < 0 || currentVersion > 100) {
+    return false
+  }
+  for (let version = 0; version <= currentVersion; version += 1) {
+    if (storedId === buildDocumentCalendarEventId(spaceId, documentId, suggestionId, version)) return true
+  }
+  return false
+}
+
 export const createDocumentCalendarEvent = functions
   .region('asia-northeast1')
   .https.onCall(async (data, context) => {
@@ -123,11 +140,19 @@ export const createDocumentCalendarEvent = functions
       : 0
     let eventId: string
     let alreadyRegistered = false
+    const ownsExistingEvent = existingEventId !== null && isStoredDocumentCalendarEventId(
+      existingEventId,
+      input.spaceId,
+      input.documentId,
+      input.suggestionId,
+      nextRegistrationVersion
+    )
     try {
-      if (storedEventId && await updateDocumentCalendarEvent(storedEventId, eventInput, calendarId)) {
+      if (ownsExistingEvent && storedEventId
+        && await updateDocumentCalendarEvent(storedEventId, eventInput, calendarId)) {
         eventId = storedEventId
         alreadyRegistered = true
-      } else if (!storedEventId && legacyEventId
+      } else if (ownsExistingEvent && !storedEventId && legacyEventId
         && await documentCalendarEventExists(legacyEventId, calendarId)) {
         eventId = legacyEventId
         alreadyRegistered = true

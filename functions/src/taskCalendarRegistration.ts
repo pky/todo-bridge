@@ -95,7 +95,7 @@ export function isStoredTaskCalendarEventId(
   currentVersion: number
 ): boolean {
   if (!/^[a-f0-9]{64}$/.test(storedId)
-    || !Number.isSafeInteger(currentVersion) || currentVersion < 0 || currentVersion > 1_000_000) {
+    || !Number.isSafeInteger(currentVersion) || currentVersion < 0 || currentVersion > 100) {
     return false
   }
   for (let version = 0; version <= currentVersion; version += 1) {
