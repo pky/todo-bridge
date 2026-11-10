@@ -210,28 +210,31 @@ service cloud.firestore {
 
     match /spaces/{spaceId}/members/{memberId} {
       allow read: if isActiveSpaceMember(spaceId);
-      allow create, update: if isActiveSpaceMember(spaceId);
+      allow create, update: if false;
       allow delete: if false;
     }
 
     match /spaces/{spaceId}/lists/{listId} {
       allow read: if canReadResource(spaceId, resource.data);
       allow create: if canWriteResource(spaceId, request.resource.data);
-      allow update: if canWriteResource(spaceId, request.resource.data);
+      allow update: if canWriteResource(spaceId, resource.data)
+        && canWriteResource(spaceId, request.resource.data);
       allow delete: if canWriteResource(spaceId, resource.data);
     }
 
     match /spaces/{spaceId}/tasks/{taskId} {
       allow read: if canReadResource(spaceId, resource.data);
       allow create: if canWriteResource(spaceId, request.resource.data);
-      allow update: if canWriteResource(spaceId, request.resource.data);
+      allow update: if canWriteResource(spaceId, resource.data)
+        && canWriteResource(spaceId, request.resource.data);
       allow delete: if canWriteResource(spaceId, resource.data);
     }
 
     match /spaces/{spaceId}/tags/{tagId} {
       allow read: if canReadResource(spaceId, resource.data);
       allow create: if canWriteResource(spaceId, request.resource.data);
-      allow update: if canWriteResource(spaceId, request.resource.data);
+      allow update: if canWriteResource(spaceId, resource.data)
+        && canWriteResource(spaceId, request.resource.data);
       allow delete: if canWriteResource(spaceId, resource.data);
     }
 
