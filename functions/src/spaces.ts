@@ -101,7 +101,7 @@ export function isAllowedEmail(
   return allowedEmails.map((value) => value.trim().toLowerCase()).includes(normalizedEmail)
 }
 
-async function getAllowedEmails(): Promise<string[]> {
+export async function getAllowedEmails(): Promise<string[]> {
   const authAccessSnapshot = await db.doc('appConfig/authAccess').get()
   const allowedEmails = authAccessSnapshot.data()?.allowedEmails
   return Array.isArray(allowedEmails)
@@ -166,18 +166,18 @@ export function appendMemberToVisibility(
   userId: string,
   options?: { sharedOnly?: boolean }
 ): FirestoreData | null {
-  if (options?.sharedOnly) {
-    const otherVisibleIds = new Set(
-      Array.isArray(data.visibleToMemberIds)
-        ? data.visibleToMemberIds.filter((value): value is string => typeof value === 'string' && value !== userId)
-        : []
+  const canExtend = (memberIds: unknown): boolean => {
+    if (!Array.isArray(memberIds)) return false
+    if (!options?.sharedOnly) return true
+    const otherMemberIds = new Set(
+      memberIds.filter((value): value is string => typeof value === 'string' && value !== userId)
     )
-    if (otherVisibleIds.size < 2) return null
+    return otherMemberIds.size >= 2
   }
-  const nextVisibleToMemberIds = Array.isArray(data.visibleToMemberIds)
+  const nextVisibleToMemberIds = Array.isArray(data.visibleToMemberIds) && canExtend(data.visibleToMemberIds)
     ? Array.from(new Set([...data.visibleToMemberIds.filter((value): value is string => typeof value === 'string'), userId]))
     : null
-  const nextEditableByMemberIds = Array.isArray(data.editableByMemberIds)
+  const nextEditableByMemberIds = Array.isArray(data.editableByMemberIds) && canExtend(data.editableByMemberIds)
     ? Array.from(new Set([...data.editableByMemberIds.filter((value): value is string => typeof value === 'string'), userId]))
     : null
 

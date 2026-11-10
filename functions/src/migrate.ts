@@ -8,6 +8,7 @@ import * as functions from 'firebase-functions/v1'
 import * as admin from 'firebase-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { assertActiveSpaceMembership, resolveCallerUserId } from './sharedTypes'
+import { getAllowedEmails, isAllowedEmail } from './spaces'
 
 const db = admin.firestore()
 const MAX_BATCH_WRITES = 400
@@ -238,6 +239,9 @@ export const migrateCurrentUserToPersonalSpace = functions
     }
 
     const userId = context.auth.uid
+    if (!isAllowedEmail(await getAllowedEmails(), context.auth.token.email ?? null)) {
+      throw new functions.https.HttpsError('permission-denied', 'このアカウントは利用を許可されていません')
+    }
     const seedData = await seedPersonalSpace(userId)
     const decision = await checkPersonalSpaceMigrationNeeded(userId, seedData.spaceId)
 
