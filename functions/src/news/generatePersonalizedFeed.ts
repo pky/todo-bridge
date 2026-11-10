@@ -24,7 +24,7 @@ import {
   type LearnedKeywords,
 } from './interactionLearning'
 import type { NewsArticle, NewsPreferences, NewsTopic } from './types'
-import { selectCuratorAiFeed } from './v2/curatorSelection'
+import { excludeActedArticles, selectCuratorAiFeed } from './v2/curatorSelection'
 import { getAiFitConfig, judgeCuratorPersonalFit, type PersonalFit } from './v2/curatorPersonalFit'
 import type { GenerateAiFeedResult } from './v2/aiStaticFeedPipeline'
 import { evaluateCuratorSummaryOutcome, getCuratorSummarySkipReason, getSummaryEvidence, type CuratorSummarySkipReason } from './v2/curatorSummaryOutcome'
@@ -411,6 +411,9 @@ export async function runGeneratePersonalizedFeed(
         console.error('[generatePersonalizedFeed] Curator loading failed', err)
       }
     }
+    const curatorCandidates = options.curatorUid && curatorReady
+      ? excludeActedArticles(articles, curatorEvents)
+      : []
 
     // 2. 全ユーザーのnewsPreferencesを取得
     const usersSnap = await db.collection('users').get()
@@ -490,7 +493,7 @@ export async function runGeneratePersonalizedFeed(
     if (options.curatorUid && curatorReady) {
       try {
         const config = getAiFitConfig(process.env)
-        const result = await judgeCuratorPersonalFit(articles, curatorEvents, {
+        const result = await judgeCuratorPersonalFit(curatorCandidates, curatorEvents, {
           client: createClaudeMessagesClient(process.env.ANTHROPIC_API_KEY), config, scoreLimits, now: Date.now,
           reserveRequest: createClaudeDailyRequestReservation(db, 'ai-fit', config.dailyMaxRequests),
         })
@@ -514,7 +517,7 @@ export async function runGeneratePersonalizedFeed(
     const curatorMode = Boolean(options.curatorUid) && curatorReady
     const selectCurator = () => options.curatorUid && curatorReady
       ? selectCuratorAiFeed({
-        articles: articles.filter(article => !skippedIds.has(article.id)),
+        articles: curatorCandidates.filter(article => !skippedIds.has(article.id)),
         preferences: curatorPreferences, events: curatorEvents, learningCutoffMs, scoreLimits,
         ...(personalFit ? { personalFit } : {}),
       })

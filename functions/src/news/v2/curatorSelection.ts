@@ -22,6 +22,19 @@ export type CuratorSelectionInput = CuratorSelectionBase & (
   | { events?: undefined; interactions: Record<string, unknown>[] }
 )
 
+export function excludeActedArticles(
+  articles: NewsArticleWithId[], events: Record<string, unknown>[]
+): NewsArticleWithId[] {
+  const excludedUrls = new Set<string>()
+  const excludedIds = new Set<string>()
+  for (const event of events) {
+    if (event.action !== 'readLater' && event.action !== 'dismiss') continue
+    if (typeof event.url === 'string' && event.url.length > 0) excludedUrls.add(event.url)
+    if (typeof event.articleId === 'string' && event.articleId.length > 0) excludedIds.add(event.articleId)
+  }
+  return articles.filter(article => !excludedUrls.has(article.url) && !excludedIds.has(article.id))
+}
+
 export function selectCuratorAiFeed(input: CuratorSelectionInput): RankedFeedItem[] {
   // 旧呼び出しの互換を保つが、events指定時は旧履歴を混ぜない。
   const sourceSignals = input.events !== undefined
