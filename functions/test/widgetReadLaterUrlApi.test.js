@@ -170,15 +170,20 @@ for (const [label, optional] of [
 }
 
 for (const [field, limit] of [['title', 300], ['description', 1000]]) {
-  for (const character of ['a', '😀']) {
-    for (const excess of [0, 1]) {
-      test(`${field}は${character}の${limit + excess}文字をコードポイント単位で${limit}文字まで渡す`, async () => {
-        const deps = createDeps()
-        const value = character.repeat(limit + excess)
-        assertResponse(await run(deps, request({ url: ENTRY.url, [field]: ` ${value} ` })), 200, { status: 'created' })
-        assert.deepEqual(deps.calls.add, [{ uid: UID, entry: { url: ENTRY.url, [field]: character.repeat(limit) } }])
-      })
-    }
+  const cases = [
+    ['aが上限ちょうどならそのまま渡す', 'a'.repeat(limit), 'a'.repeat(limit)],
+    ['aが上限+1なら上限まで切る', 'a'.repeat(limit + 1), 'a'.repeat(limit)],
+    ['上限-1個のaのあとに😀が続くなら絵文字の手前で切る', 'a'.repeat(limit - 1) + '😀', 'a'.repeat(limit - 1)],
+    ['😀が上限/2個ならそのまま渡す', '😀'.repeat(limit / 2), '😀'.repeat(limit / 2)],
+    ['😀が上限/2+1個なら上限/2個まで切る', '😀'.repeat(limit / 2 + 1), '😀'.repeat(limit / 2)],
+  ]
+  for (const [label, value, expected] of cases) {
+    test(`${field}は空白除去後にUTF-16 単位で数え、${label}`, async () => {
+      const deps = createDeps()
+      assertResponse(await run(deps, request({ url: ENTRY.url, [field]: ` \n${value}\t ` })), 200, { status: 'created' })
+      assert.ok(deps.calls.add[0].entry[field].length <= limit, '保存する文字列の長さが上限を超えている')
+      assert.deepEqual(deps.calls.add, [{ uid: UID, entry: { url: ENTRY.url, [field]: expected } }])
+    })
   }
 }
 
