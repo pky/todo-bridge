@@ -14,6 +14,7 @@ export {
   saveMobileNotificationPreferences,
   widgetNews,
   widgetReadLater,
+  widgetReadLaterUrl,
   newsAction,
 } from './news'
 

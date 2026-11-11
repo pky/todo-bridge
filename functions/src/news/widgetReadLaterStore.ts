@@ -14,6 +14,13 @@ export interface ReadLaterArticle {
   tags?: string[]
 }
 
+/** 端末が送った共有 URL と、検証・整形済みのプレビュー情報。 */
+export interface ReadLaterUrlEntry {
+  url: string
+  title?: string
+  description?: string
+}
+
 export interface ReadLaterStoreDeps {
   db: FirebaseFirestore.Firestore
   /** Firestore のサーバー時刻を表す値を返す。 */
@@ -33,6 +40,92 @@ async function resolveBasePath(db: FirebaseFirestore.Firestore, uid: string): Pr
 export function readLaterTaskId(topic: WidgetTopic, articleId: string): string {
   const digest = createHash('sha256').update(`${topic}:${articleId}`).digest('hex')
   return `readlater_${digest.slice(0, 32)}`
+}
+
+export function readLaterUrlTaskId(url: string): string {
+  const digest = createHash('sha256').update(`url:${url}`).digest('hex')
+  return `readlater_url_${digest.slice(0, 32)}`
+}
+
+/** 共有 URL を追加する。削除済み・完了済みなら同じ文書を新規の内容で作り直す。 */
+export async function addReadLaterUrlTask(
+  deps: ReadLaterStoreDeps,
+  uid: string,
+  entry: ReadLaterUrlEntry
+): Promise<'created' | 'already'> {
+  return addReadLaterUrlTaskAttempt(deps, uid, entry, 1)
+}
+
+async function addReadLaterUrlTaskAttempt(
+  deps: ReadLaterStoreDeps,
+  uid: string,
+  entry: ReadLaterUrlEntry,
+  attempt: number
+): Promise<'created' | 'already'> {
+  const { db, serverTimestamp } = deps
+  const base = await resolveBasePath(db, uid)
+  const spaceId = `personal_${uid}`
+  const taskRef = db.doc(`${base}/tasks/${readLaterUrlTaskId(entry.url)}`)
+  const found = await db.collection(`${base}/lists`).where('name', '==', LIST_NAME).limit(1).get()
+  const listId = found.empty ? LIST_ID : found.docs[0].id
+  let position = 1
+  if (found.empty) {
+    const latest = await db.collection(`${base}/lists`).orderBy('position', 'desc').limit(1).get()
+    const lastPosition: unknown = latest.docs[0]?.data().position
+    position = typeof lastPosition === 'number' ? lastPosition + 1 : 1
+  }
+
+  try {
+    return await db.runTransaction(async (tx): Promise<'created' | 'already'> => {
+      const snapshot = await tx.get(taskRef)
+      const existing = snapshot.data()
+      if (snapshot.exists && existing?.deleted !== true && existing?.completed !== true) return 'already'
+
+      if (found.empty) {
+        tx.create(db.doc(`${base}/lists/${listId}`), {
+          name: LIST_NAME,
+          position,
+          spaceId,
+          visibleToMemberIds: [uid],
+          editableByMemberIds: [uid],
+          dateCreated: serverTimestamp(),
+          dateModified: serverTimestamp(),
+        })
+      }
+
+      tx.set(taskRef, {
+        name: entry.title ?? entry.url,
+        listId,
+        parentId: null,
+        priority: 4,
+        tags: [],
+        dueDate: null,
+        startDate: null,
+        repeat: null,
+        notes: entry.description !== undefined ? [entry.description] : [],
+        url: entry.url,
+        completed: false,
+        dateCompleted: null,
+        deleted: false,
+        spaceId,
+        visibleToMemberIds: [uid],
+        editableByMemberIds: [uid],
+        allDay: false,
+        addToCalendar: false,
+        calendarEventId: null,
+        dateCreated: serverTimestamp(),
+        dateModified: serverTimestamp(),
+      })
+      return 'created'
+    })
+  } catch (error) {
+    // リストの同時作成だけを再試行し、保存先と既存リストを読み直す。
+    if (
+      !error || typeof error !== 'object' || !('code' in error) ||
+      error.code !== ALREADY_EXISTS || attempt >= MAX_ATTEMPTS
+    ) throw error
+    return addReadLaterUrlTaskAttempt(deps, uid, entry, attempt + 1)
+  }
 }
 
 /**
