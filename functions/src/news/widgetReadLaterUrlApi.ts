@@ -8,6 +8,13 @@ export interface WidgetReadLaterUrlDeps {
   add(uid: string, entry: ReadLaterUrlEntry): Promise<'created' | 'already'>
 }
 
+/** UTF-16 単位で上限を守り、サロゲートペアの途中で切らない。 */
+function truncateUtf16(value: string, limit: number): string {
+  if (value.length <= limit) return value
+  const lastCodeUnit = value.charCodeAt(limit - 1)
+  return value.slice(0, lastCodeUnit >= 0xD800 && lastCodeUnit <= 0xDBFF ? limit - 1 : limit)
+}
+
 /** URL の表記を保ったまま検証し、端末から届いたプレビュー情報を整形する。 */
 function parseEntry(body: unknown): ReadLaterUrlEntry | null {
   if (!body || typeof body !== 'object' || Array.isArray(body) || !('url' in body)) return null
@@ -27,8 +34,8 @@ function parseEntry(body: unknown): ReadLaterUrlEntry | null {
   const description = 'description' in body && typeof body.description === 'string' ? body.description.trim() : ''
   return {
     url,
-    ...(title ? { title: Array.from(title).slice(0, 300).join('') } : {}),
-    ...(description ? { description: Array.from(description).slice(0, 1000).join('') } : {}),
+    ...(title ? { title: truncateUtf16(title, 300) } : {}),
+    ...(description ? { description: truncateUtf16(description, 1000) } : {}),
   }
 }
 
