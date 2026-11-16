@@ -80,6 +80,53 @@ describe('NewsViewのAI専用storeへの配線', () => {
     for (const action of [actions.bookmarkArticle, actions.dismissArticle, actions.trackDisplayedArticles]) expect(action).not.toHaveBeenCalled()
   })
 
+  it('AIニュースの上位3枚は画像読み込み失敗後に別記事へ変わると新しい画像を表示する', async () => {
+    const { default: NewsCard } = await vi.importActual<typeof import('@/components/NewsCard.vue')>('@/components/NewsCard.vue')
+    const initialArticles = [0, 1, 2].map(index => ({
+      ...makeFeed().articles[0]!,
+      id: `demo-cached-${index}`,
+      title: `保存済みの架空記事${index}`,
+      url: `https://example.test/cached-${index}`,
+      imageUrl: `https://example.test/images/cached-${index}.jpg`,
+    }))
+    const replacementArticles = initialArticles.map((article, index) => ({
+      ...article,
+      id: `demo-updated-${index}`,
+      title: `更新後の架空記事${index}`,
+      url: `https://example.test/updated-${index}`,
+      imageUrl: `https://example.test/images/updated-${index}.jpg`,
+    }))
+    aiState.visibleArticles = initialArticles
+    const wrapper = mount(NewsView, { global: { stubs: { NewsCard } } })
+    await flushPromises()
+
+    const initialCards = wrapper.findAllComponents(NewsCard)
+    expect(initialCards).toHaveLength(3)
+    expect(initialCards.map(card => card.props('variant'))).toEqual(['hero', 'featured', 'featured'])
+    for (const [index, card] of initialCards.entries()) {
+      const images = card.findAll('img')
+      expect(images.length).toBeGreaterThan(0)
+      for (const image of images) {
+        expect(image.attributes('src')).toBe(initialArticles[index]!.imageUrl)
+        await image.trigger('error')
+      }
+      expect(card.find('img').exists()).toBe(false)
+    }
+
+    aiState.visibleArticles = replacementArticles
+    await flushPromises()
+
+    const updatedCards = wrapper.findAllComponents(NewsCard)
+    expect(updatedCards).toHaveLength(3)
+    for (const [index, card] of updatedCards.entries()) {
+      const article = replacementArticles[index]!
+      expect(card.text()).toContain(article.title)
+      const images = card.findAll('img')
+      expect.soft(images.length, `${article.id} の新しい画像が表示される`).toBeGreaterThan(0)
+      for (const image of images) expect.soft(image.attributes('src')).toBe(article.imageUrl)
+    }
+  })
+
   it('mobileルートでは従来の取得・カード操作を維持する', async () => {
     route.name = 'news-mobile'
     const wrapper = mount(NewsView)
