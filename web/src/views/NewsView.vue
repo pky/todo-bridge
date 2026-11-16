@@ -594,11 +594,11 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
 
         <section
           v-if="heroArticles.length > 0 || sideArticles.length > 0"
-          class="grid grid-cols-1 gap-3 xl:grid-cols-4"
+          class="grid grid-cols-1 gap-3 lg:grid-cols-4"
         >
           <div
             v-if="heroArticles.length > 0"
-            class="grid grid-cols-1 gap-3 xl:col-span-2 xl:grid-cols-2"
+            class="grid grid-cols-1 gap-3 lg:col-span-2 lg:grid-cols-2"
           >
             <NewsCard
               v-if="heroArticles[0]"
@@ -607,7 +607,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
               :can-manage="canManage"
               :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(heroArticles[0].id)"
               variant="hero"
-              class="xl:col-span-2"
+              class="lg:col-span-2"
               @bookmark="handleBookmark"
               @dismiss="handleDismiss"
               @article-click="handleArticleClick"
@@ -638,7 +638,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
 
           <div
             v-if="sideArticles.length > 0"
-            class="grid grid-cols-1 gap-2 xl:col-span-2"
+            class="grid grid-cols-1 gap-2 lg:col-span-2"
           >
             <NewsCard
               v-for="article in sideArticles"
@@ -656,7 +656,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
 
         <section
           v-if="remainingArticles.length > 0"
-          class="mt-3 grid grid-cols-1 gap-2 xl:grid-cols-2"
+          class="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2"
         >
           <NewsCard
             v-for="article in remainingArticles"
