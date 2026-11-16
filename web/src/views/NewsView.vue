@@ -602,6 +602,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
           >
             <NewsCard
               v-if="heroArticles[0]"
+              :key="heroArticles[0].id"
               :article="heroArticles[0]"
               :can-manage="canManage"
               :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(heroArticles[0].id)"
@@ -613,6 +614,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
             />
             <NewsCard
               v-if="heroArticles[1]"
+              :key="heroArticles[1].id"
               :article="heroArticles[1]"
               :can-manage="canManage"
               :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(heroArticles[1].id)"
@@ -623,6 +625,7 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
             />
             <NewsCard
               v-if="heroArticles[2]"
+              :key="heroArticles[2].id"
               :article="heroArticles[2]"
               :can-manage="canManage"
               :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(heroArticles[2].id)"
