@@ -133,7 +133,7 @@ export async function scrapeArticle(url: string, options?: { signal?: AbortSigna
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; ReRTM-Bot/1.0)',
       },
-      maxContentLength: 500_000,
+      maxContentLength: 2_000_000,
       proxy: false,
       lookup: safeLookup,
       beforeRedirect: (redirect) => {
