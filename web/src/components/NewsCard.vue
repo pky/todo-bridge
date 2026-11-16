@@ -70,34 +70,34 @@ const accentColor = computed(() => {
 
 const cardClass = computed(() => {
   if (props.variant === 'hero') {
-    return 'border-line bg-surface p-3 hover:bg-surface-hover active:bg-surface-alt xl:min-h-[360px] xl:border-line-strong xl:bg-surface/95 xl:p-4 xl:shadow-sm xl:hover:bg-surface'
+    return 'border-line bg-surface p-3 hover:bg-surface-hover active:bg-surface-alt lg:min-h-[360px] lg:border-line-strong lg:bg-surface/95 lg:p-4 lg:shadow-sm lg:hover:bg-surface'
   }
   if (props.variant === 'featured') {
-    return 'border-line bg-surface p-3 hover:bg-surface-hover active:bg-surface-alt xl:min-h-[180px] xl:p-4 xl:shadow-sm xl:hover:bg-surface'
+    return 'border-line bg-surface p-3 hover:bg-surface-hover active:bg-surface-alt lg:min-h-[180px] lg:p-4 lg:shadow-sm lg:hover:bg-surface'
   }
   return 'border-line bg-surface p-3 hover:bg-surface-hover active:bg-surface-alt'
 })
 
 const thumbnailClass = computed(() => {
-  if (props.variant === 'hero') return 'h-14 w-14 rounded xl:h-48 xl:w-full xl:rounded-xl md:xl:h-56'
-  if (props.variant === 'featured') return 'h-14 w-14 rounded xl:h-28 xl:w-full xl:rounded-lg'
+  if (props.variant === 'hero') return 'h-14 w-14 rounded lg:h-48 lg:w-full lg:rounded-xl md:lg:h-56'
+  if (props.variant === 'featured') return 'h-14 w-14 rounded lg:h-28 lg:w-full lg:rounded-lg'
   return 'h-14 w-14 rounded'
 })
 
 const titleClass = computed(() => {
-  if (props.variant === 'hero') return 'text-sm font-semibold leading-snug text-fg xl:text-xl xl:text-fg xl:line-clamp-3'
-  if (props.variant === 'featured') return 'text-sm font-semibold leading-snug text-fg xl:text-base xl:line-clamp-2'
+  if (props.variant === 'hero') return 'text-sm font-semibold leading-snug text-fg lg:text-xl lg:text-fg lg:line-clamp-3'
+  if (props.variant === 'featured') return 'text-sm font-semibold leading-snug text-fg lg:text-base lg:line-clamp-2'
   return 'text-sm font-semibold leading-snug text-fg'
 })
 
 const summaryClass = computed(() => {
-  if (props.variant === 'hero') return 'mt-2 text-xs leading-relaxed text-fg-subtle xl:mt-3 xl:text-sm xl:text-fg-muted'
+  if (props.variant === 'hero') return 'mt-2 text-xs leading-relaxed text-fg-subtle lg:mt-3 lg:text-sm lg:text-fg-muted'
   if (props.variant === 'featured') return 'mt-2 text-xs leading-relaxed text-fg-subtle'
   return 'mt-2 text-xs leading-relaxed text-fg-subtle'
 })
 
 const metaClass = computed(() => {
-  if (props.variant === 'hero') return 'mt-1 flex flex-wrap items-center gap-2 text-xs text-fg-faint xl:mt-2 xl:text-fg-subtle'
+  if (props.variant === 'hero') return 'mt-1 flex flex-wrap items-center gap-2 text-xs text-fg-faint lg:mt-2 lg:text-fg-subtle'
   return 'mt-1 flex flex-wrap items-center gap-2 text-xs text-fg-faint'
 })
 
@@ -172,9 +172,9 @@ function handleImageError(): void {
     :style="{ boxShadow: `inset 5px 0 0 ${accentColor}` }"
     @click="openArticle"
   >
-    <div v-if="showsHeaderContent" class="space-y-3 xl:space-y-3">
+    <div v-if="showsHeaderContent" class="space-y-3 lg:space-y-3">
       <div
-        class="hidden overflow-hidden bg-surface-alt xl:block"
+        class="hidden overflow-hidden bg-surface-alt lg:block"
         :class="thumbnailClass"
       >
         <img
@@ -189,8 +189,8 @@ function handleImageError(): void {
         </div>
       </div>
 
-      <div class="flex gap-3 xl:hidden">
-        <div class="flex h-14 w-14 flex-shrink-0 overflow-hidden bg-surface-alt xl:hidden" :class="thumbnailClass">
+      <div class="flex gap-3 lg:hidden">
+        <div class="flex h-14 w-14 flex-shrink-0 overflow-hidden bg-surface-alt lg:hidden" :class="thumbnailClass">
           <img
             v-if="thumbnailUrl"
             :src="thumbnailUrl"
@@ -241,7 +241,7 @@ function handleImageError(): void {
         </div>
       </div>
 
-      <div class="hidden xl:flex xl:items-start xl:gap-3">
+      <div class="hidden lg:flex lg:items-start lg:gap-3">
         <div class="min-w-0 flex-1">
           <p :class="titleClass">
             {{ article.titleJa || article.title }}
