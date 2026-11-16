@@ -19,7 +19,9 @@ Codex と Claude Code の共通ルール。CLAUDE.md はこのファイルを読
 - テストは Firebase Emulator を使う。ルールテストはデモ用プロジェクト `demo-rertm` で動く（`test:rules` に設定済み）
 - Firebase / GCP / Gemini / Google Calendar のキー、トークン、secret、環境変数の値をコードやファイルに書かない
 - Google Calendar の refresh token はサーバー側だけで扱い、ログやテスト出力に出さない
-- エージェントはデプロイ、rm、git reset、ブランチ削除、本番データに触れる操作を実行しない。人が行う。git push、PR、マージ後の片付けは各エージェントの全体設定に従う
+- エージェントは rm、git reset、ブランチ削除、本番データに触れる操作を実行しない。人が行う。git push、PR、マージ後の片付けは各エージェントの全体設定に従う
+- デプロイ: Hosting と Functions の変更で、保存するデータの構造も既存データも変えないものは、マージ後にエージェントがデプロイし、出した後に確かめる。Hosting は配信中のファイルが新しい版になったか、Functions は次の実行のログと結果を見る
+- 人がデプロイするもの: Firestore と Storage のルール、Firestore の index、データの移行、既存の本番データを一括で書き換える処理を含む変更。戻すのが難しく、権限やデータを壊しうるため
 
 ## 公開安全性
 このリポジトリは公開されている。
