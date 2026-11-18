@@ -8,6 +8,7 @@ Codex と Claude Code の共通ルール。CLAUDE.md はこのファイルを読
 - `doc/`: テンプレート2件以外は .gitignore 対象のローカル専用資料
 - `progress.txt`、`internal_docs/`: ローカル専用。コミットしない
 - パッケージマネージャは npm。pnpm / yarn は使わない
+- modern-web-guidance skill の `npx` が sandbox で EPERM になるときは、環境変数 `npm_config_cache` を書き込める一時ディレクトリに、`npm_config_script_shell` を `/bin/sh` にして実行する
 
 ## 実装上の制約
 - 未完了タスクの取得に `limit()` を使わない。パフォーマンス最適化でも全件表示を優先する
