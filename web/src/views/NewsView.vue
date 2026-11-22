@@ -594,18 +594,42 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
 
         <section
           v-if="heroArticles.length > 0 || sideArticles.length > 0"
-          class="grid grid-cols-1 gap-3 lg:grid-cols-4"
+          class="grid grid-cols-1 gap-3"
         >
           <div
-            v-if="heroArticles[0]"
-            class="grid grid-cols-1 gap-3 lg:col-span-2 lg:self-start"
+            v-if="heroArticles.length > 0"
+            class="grid grid-cols-1 gap-3 lg:grid-cols-4"
           >
             <NewsCard
+              v-if="heroArticles[0]"
               :key="heroArticles[0].id"
               :article="heroArticles[0]"
               :can-manage="canManage"
               :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(heroArticles[0].id)"
               variant="hero"
+              class="lg:col-span-2"
+              @bookmark="handleBookmark"
+              @dismiss="handleDismiss"
+              @article-click="handleArticleClick"
+            />
+            <NewsCard
+              v-if="heroArticles[1]"
+              :key="heroArticles[1].id"
+              :article="heroArticles[1]"
+              :can-manage="canManage"
+              :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(heroArticles[1].id)"
+              variant="featured"
+              @bookmark="handleBookmark"
+              @dismiss="handleDismiss"
+              @article-click="handleArticleClick"
+            />
+            <NewsCard
+              v-if="heroArticles[2]"
+              :key="heroArticles[2].id"
+              :article="heroArticles[2]"
+              :can-manage="canManage"
+              :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(heroArticles[2].id)"
+              variant="featured"
               @bookmark="handleBookmark"
               @dismiss="handleDismiss"
               @article-click="handleArticleClick"
@@ -613,36 +637,9 @@ async function updateActionItem(key: string, restore = false): Promise<void> {
           </div>
 
           <div
-            v-if="heroArticles.length > 1 || sideArticles.length > 0"
-            class="grid grid-cols-1 content-start gap-2 lg:col-span-2"
+            v-if="sideArticles.length > 0"
+            class="grid grid-cols-1 gap-2 lg:grid-cols-2"
           >
-            <div
-              v-if="heroArticles.length > 1"
-              class="mb-1 grid grid-cols-1 gap-3 lg:grid-cols-2"
-            >
-              <NewsCard
-                v-if="heroArticles[1]"
-                :key="heroArticles[1].id"
-                :article="heroArticles[1]"
-                :can-manage="canManage"
-                :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(heroArticles[1].id)"
-                variant="featured"
-                @bookmark="handleBookmark"
-                @dismiss="handleDismiss"
-                @article-click="handleArticleClick"
-              />
-              <NewsCard
-                v-if="heroArticles[2]"
-                :key="heroArticles[2].id"
-                :article="heroArticles[2]"
-                :can-manage="canManage"
-                :read-later-state="isMobileTopic ? undefined : aiNewsStore.readLaterState?.(heroArticles[2].id)"
-                variant="featured"
-                @bookmark="handleBookmark"
-                @dismiss="handleDismiss"
-                @article-click="handleArticleClick"
-              />
-            </div>
             <NewsCard
               v-for="article in sideArticles"
               :key="article.id"
