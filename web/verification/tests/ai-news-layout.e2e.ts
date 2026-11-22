@@ -22,7 +22,7 @@ for (const viewport of [
         const card = heading?.closest('div.cursor-pointer')
         if (!card) throw new Error(`記事タイトルに対応するカードがありません: ${title}`)
         const rect = card.getBoundingClientRect()
-        return { left: rect.left, width: rect.width, minHeight: getComputedStyle(card).minHeight }
+        return { left: rect.left, top: rect.top, width: rect.width, minHeight: getComputedStyle(card).minHeight }
       }
 
       return {
@@ -40,8 +40,9 @@ for (const viewport of [
     // 未対応の幅でも全条件を照合し、画面の証跡を残す。
     if (multiColumn) {
       expect.soft(layout.hero.width).toBeLessThan(layout.viewportWidth * 0.6)
-      expect.soft(Math.abs(layout.hero.left - layout.featured.left)).toBeLessThanOrEqual(2)
-      expect.soft(Math.abs(layout.hero.width - layout.featured.width)).toBeLessThanOrEqual(2)
+      expect.soft(layout.featured.width).toBeLessThan(layout.hero.width)
+      expect.soft(layout.featured.left).toBeGreaterThan(layout.hero.left + layout.hero.width)
+      expect.soft(Math.abs(layout.featured.top - layout.hero.top)).toBeLessThanOrEqual(2)
       expect.soft(layout.hero.minHeight).toBe('360px')
     } else {
       expect.soft(Math.abs(layout.hero.left - layout.featured.left)).toBeLessThanOrEqual(2)

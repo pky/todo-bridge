@@ -102,7 +102,7 @@ describe('NewsViewのAI専用storeへの配線', () => {
 
     const initialCards = wrapper.findAllComponents(NewsCard)
     expect(initialCards).toHaveLength(3)
-    expect(initialCards.map(card => card.props('variant'))).toEqual(['hero', 'default', 'default'])
+    expect(initialCards.map(card => card.props('variant'))).toEqual(['hero', 'featured', 'featured'])
     for (const [index, card] of initialCards.entries()) {
       const images = card.findAll('img')
       expect(images.length).toBeGreaterThan(0)
