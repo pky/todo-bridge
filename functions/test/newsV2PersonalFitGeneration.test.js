@@ -57,7 +57,7 @@ test('生成は判定結果の順に公開用記事を返しai-fit予算を使�
   assert.deepEqual(result.curatorArticles.map(row => row.id), ['preferred', 'learned'])
   assert.equal(calls.judge, 1)
   assert.ok(calls.budget.some(([stage, max]) => stage === 'ai-fit' && max === 9))
-  assert.equal(calls.batches, 1)
+  assert.equal(calls.batches, 2, '好み判定1回と話題判定1回')
   for (const row of result.curatorArticles) assert.ok(!('personalFit' in row))
 })
 for (const mode of ['exception', 'unavailable', 'throw']) test(`判定${mode}でも公開可能でキーワード学習の並びを維持する`, async () => {
@@ -77,5 +77,5 @@ test('要約を複数ラウンド行っても判定Claudeは候補のバッチ�
   assert.equal(result.ok, true)
   assert.ok(calls.summary >= 2, '不採用補充で要約を複数回呼ぶ')
   assert.equal(calls.judge, 1)
-  assert.equal(calls.batches, 2)
+  assert.equal(calls.batches, 3, '好み判定2回と話題判定1回')
 })
