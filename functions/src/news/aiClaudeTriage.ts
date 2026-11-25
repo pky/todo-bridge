@@ -111,7 +111,7 @@ export function getAiTriageConfig(env: Record<string, string | undefined>): AiTr
   return {
     model: env.CLAUDE_AI_TRIAGE_MODEL || 'claude-haiku-5-5',
     effort,
-    dailyMaxRequests: Number.isFinite(max) && max >= 0 ? max : 10,
+    dailyMaxRequests: Number.isFinite(max) && max >= 0 ? max : 12,
   }
 }
 
