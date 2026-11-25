@@ -64,6 +64,30 @@ test('話題の点数は代表の有用性と重要度に反応の合計を足�
   assertScore(calcAiStoryScore(representative, members, { maxHnScore: 99, maxGithubScore: 99 }), 60 + 20 + 60 * 1.5)
 })
 
+test('話題の点数は代表と関連記事で情報源と正規化した議論URLが同じ反応を1回だけ数える', () => {
+  const { calcAiStoryScore } = require('../lib/news/aiStories')
+  const discussionUrl = 'https://example.test/discussion?id=42'
+  const representative = article({ source: 'hn', score: 99, discussionUrl, developerValue: 'normal' })
+  const members = [
+    article({ source: 'hn', score: 99, url: 'https://example.test/related', discussionUrl: `${discussionUrl}&utm_source=feed` }),
+    article({ extraReactions: [reaction('hn', 99, discussionUrl)] }),
+  ]
+
+  assertScore(calcAiStoryScore(representative, members, { maxHnScore: 99, maxGithubScore: 0 }), 60 + 60)
+})
+
+test('話題の点数はHNの別々の議論とZennの記事の反応をすべて足す', () => {
+  const { calcAiStoryScore } = require('../lib/news/aiStories')
+  const representative = article({ sourceName: 'Zenn ai', score: 99, developerValue: 'normal' })
+  const members = [
+    article({ source: 'hn', score: 99, discussionUrl: 'https://example.test/discussion?id=42' }),
+    article({ source: 'hn', score: 9, discussionUrl: 'https://example.test/discussion?id=43' }),
+  ]
+  const limits = { maxHnScore: 99, maxGithubScore: 0, maxZennScore: 99 }
+
+  assertScore(calcAiStoryScore(representative, members, limits), 60 + 60 * 2.5)
+})
+
 test('全員の反応がなければ中立値0.5を一度だけ使い、正規化できる0件は中立値に置き換えない', () => {
   const { calcAiStoryScore } = require('../lib/news/aiStories')
   const representative = article({ developerValue: 'high', importance: 'low' })

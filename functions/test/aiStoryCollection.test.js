@@ -5,6 +5,8 @@ const axios = require('axios')
 
 if (admin.apps.length === 0) admin.initializeApp({ projectId: 'demo-rertm' })
 const { deduplicateArticles } = require('../lib/news/collectArticles')
+const { calcAiBaseScore } = require('../lib/news/aiSelection')
+const { getOwnArticleReaction } = require('../lib/news/aiStories')
 const { fetchHNArticles } = require('../lib/news/fetchers/hnFetcher')
 const { fetchRedditArticles } = require('../lib/news/fetchers/redditFetcher')
 
@@ -13,6 +15,12 @@ function article(overrides = {}) {
     title: '架空の新製品', url: 'https://example.test/release', description: '', thumbnailUrl: null,
     source: 'rss', sourceName: '架空通信', score: null, publishedAt: new Date('2026-11-25T00:00:00Z'), ...overrides,
   }
+}
+
+function zennTagCopies() {
+  return ['ai', 'llm', 'llmengineering'].map(tag => article({
+    sourceName: `Zenn ${tag}`, score: 100, url: 'https://example.test/zenn-article',
+  }))
 }
 
 test('同じ正規化URLの先頭記事を残し、後続の情報源の有効な反応を既存の反応に足す', () => {
@@ -38,6 +46,31 @@ test('同じ正規化URLの先頭記事を残し、後続の情報源の有効�
     { source: 'reddit', sourceName: reddit.sourceName, count: 0, url: reddit.url },
   ])
   assert.ok(!Object.hasOwn(result[1], 'extraReactions'))
+})
+
+test('同じZenn記事が3つのタグフィードから届いても反応は1件だけ残す', () => {
+  const copies = zennTagCopies()
+  const result = deduplicateArticles(copies)
+  assert.equal(result.length, 1)
+  const [merged] = result
+  const reactions = [getOwnArticleReaction(merged), ...merged.extraReactions ?? []]
+  assert.deepEqual(reactions.map(({ source, url, count }) => ({ source, url, count })), [
+    { source: 'zenn', url: copies[0].url, count: 100 },
+  ])
+})
+
+test('基礎点はタグフィードをまとめた記事も重複が保存済みの記事も1件分の反応で計算する', () => {
+  const copies = zennTagCopies()
+  const [merged] = deduplicateArticles(copies)
+  const [single] = deduplicateArticles(copies.slice(0, 1))
+  const storedWithDuplicate = { ...single, extraReactions: [getOwnArticleReaction(copies[1])] }
+  const limits = { maxHnScore: 0, maxGithubScore: 0, maxZennScore: 100 }
+  const expected = calcAiBaseScore(single, limits)
+
+  assert.deepEqual({
+    merged: calcAiBaseScore(merged, limits),
+    storedWithDuplicate: calcAiBaseScore(storedWithDuplicate, limits),
+  }, { merged: expected, storedWithDuplicate: expected })
 })
 
 test('HNはリンク先を保ち、投稿IDを使った議論URLを返す', async t => {
