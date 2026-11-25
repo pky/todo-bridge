@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk'
-import { calcAiBaseScore, isAiFeedCandidate } from '../aiSelection'
+import { calcAiBaseScore, isAiFeedCandidate, type AiScoreLimits } from '../aiSelection'
 import { runClaudeBatches } from '../claudeBatchRunner'
 import { escapePromptText as esc } from '../claudeClient'
 import type { ClaudeMessagesClient, ClaudeRequestParams } from '../claudeClient'
@@ -122,7 +122,7 @@ export function parsePersonalFitResponse(message: Anthropic.Beta.BetaMessage, ex
 
 export async function judgeCuratorPersonalFit(articles: NewsArticleWithId[], events: Record<string, unknown>[], deps: {
   client: ClaudeMessagesClient | null; config: AiFitConfig
-  scoreLimits: { maxHnScore: number; maxGithubScore: number }
+  scoreLimits: AiScoreLimits
   now: () => number; reserveRequest?: () => Promise<boolean>
 }): Promise<PersonalFitOutcome> {
   const history = buildPersonalFitHistory(events)

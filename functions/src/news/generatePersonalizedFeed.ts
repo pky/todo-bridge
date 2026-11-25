@@ -6,6 +6,7 @@ import {
   AI_SUMMARY_VERSION,
   AI_TRIAGE_VERSION,
   calcAiBaseScore,
+  collectAiScoreLimits,
   isAiFeedCandidate,
   isDisplayableAiArticle,
   needsAiSummary,
@@ -388,11 +389,7 @@ export async function runGeneratePersonalizedFeed(
         return true
       })
 
-    // HN・GitHubの最大スコアを算出（人気スコア正規化用）
-    const maxScore = (source: NewsArticle['source']) => articles
-      .filter(a => a.source === source && a.score !== null)
-      .reduce((max, a) => Math.max(max, a.score ?? 0), 0)
-    const scoreLimits = { maxHnScore: maxScore('hn'), maxGithubScore: maxScore('github') }
+    const scoreLimits = collectAiScoreLimits(articles)
 
     let curatorReady = true
     let curatorPreferences: NewsPreferences = { keywords: [] }

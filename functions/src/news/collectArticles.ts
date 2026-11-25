@@ -4,6 +4,8 @@ import axios from 'axios'
 import { fetchHNArticles } from './fetchers/hnFetcher'
 import { fetchRSSArticles } from './fetchers/rssFetcher'
 import { fetchGitHubTrending } from './fetchers/githubTrendingFetcher'
+import { enrichJapaneseReactions } from './fetchers/jaReactionFetcher'
+import { fetchRedditArticles } from './fetchers/redditFetcher'
 import { fetchOfficialMobileHtmlArticles } from './fetchers/mobileOfficialFetcher'
 import { fetchMobileRssArticles } from './fetchers/mobileRssFetcher'
 import { scrapeArticle } from './scraper'
@@ -419,14 +421,15 @@ export async function runCollectArticles(): Promise<AiCollectResult> {
       return []
     }
   }
-  const [hnArticles, rssArticles, githubArticles] = await Promise.all([
+  const [hnArticles, rssArticles, githubArticles, redditArticles] = await Promise.all([
     collectSource('hn', onSuccess => fetchHNArticles(onSuccess)),
-    collectSource('rss', onSuccess => fetchRSSArticles(10, onSuccess)),
+    collectSource('rss', async onSuccess => enrichJapaneseReactions(await fetchRSSArticles(10, onSuccess))),
     collectSource('github', onSuccess => fetchGitHubTrending(onSuccess)),
+    collectSource('reddit', onSuccess => fetchRedditArticles(20, onSuccess)),
   ])
 
-  console.log(`[collectArticles] Sources: hn=${hnArticles.length}, rss=${rssArticles.length}, github=${githubArticles.length}`)
-  const allRaw = deduplicateArticles([...hnArticles, ...rssArticles, ...githubArticles])
+  console.log(`[collectArticles] Sources: hn=${hnArticles.length}, rss=${rssArticles.length}, github=${githubArticles.length}, reddit=${redditArticles.length}`)
+  const allRaw = deduplicateArticles([...hnArticles, ...rssArticles, ...githubArticles, ...redditArticles])
   console.log(`[collectArticles] Collected ${allRaw.length} articles after dedup`)
   const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const collectionRef = db.collection('topics/ai/articles')

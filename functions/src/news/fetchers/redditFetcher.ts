@@ -23,16 +23,21 @@ interface RedditResponse {
   }
 }
 
-export async function fetchRedditArticles(limitPerSub = 20): Promise<RawArticle[]> {
+export async function fetchRedditArticles(limitPerSub = 20, onSuccess?: () => void): Promise<RawArticle[]> {
   const articles: RawArticle[] = []
+  let succeeded = false
 
   for (const sub of SUBREDDITS) {
     try {
       const { data } = await axios.get<RedditResponse>(
         `${REDDIT_API}/r/${sub}/hot.json?limit=${limitPerSub}`,
-        { headers: { 'User-Agent': 'ReRTM-NewsBot/1.0' } }
+        { timeout: 10000, headers: { 'User-Agent': 'ReRTM-NewsBot/1.0' } }
       )
 
+      if (!Array.isArray(data.data.children)) {
+        console.error(`[reddit] r/${sub} の記事一覧の形式が不正です`)
+        continue
+      }
       for (const post of data.data.children) {
         const { title, url, selftext, thumbnail, score, created_utc, is_self } = post.data
 
@@ -53,10 +58,13 @@ export async function fetchRedditArticles(limitPerSub = 20): Promise<RawArticle[
           publishedAt: new Date(created_utc * 1000),
         })
       }
-    } catch (err) {
-      console.error(`[reddit] Failed to fetch r/${sub}:`, err)
+      succeeded = true
+    } catch (error) {
+      const reason = axios.isAxiosError(error) ? error.response?.status ?? error.code : undefined
+      console.error(`[reddit] Failed to fetch r/${sub}:`, reason)
     }
   }
 
+  if (succeeded) onSuccess?.()
   return articles
 }
