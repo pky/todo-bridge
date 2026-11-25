@@ -146,6 +146,19 @@ test('Reddit の取得が全件失敗しても HN・RSS・GitHub を保存し、
   assert.deepEqual(redditLimits, [20])
 })
 
+test('収集は subreddit ごとの取得上限を10件に指定する', async () => {
+  const redditLimits = []
+  await collect([], {}, [], {
+    fetchRedditArticles: async (limit, onSuccess) => {
+      redditLimits.push(limit)
+      onSuccess()
+      return []
+    },
+  })
+
+  assert.deepEqual(redditLimits, [10])
+})
+
 test('RSS で取得した Zenn・Qiita の記事をいいね数付きで保存する', async t => {
   const zenn = raw('zenn-story', {
     sourceName: 'Zenn fixture-ai', url: 'https://zenn.dev/fixture-author/articles/sample-rss/',

@@ -77,6 +77,19 @@ test('取得が失敗した topic・tag の点を null のまま返し、成功�
   assert.ok(errorLog.mock.callCount() > 0, '通信エラーを console.error に記録する')
 })
 
+test('反応数の取得で通常の Error が発生したら、例外メッセージを記録する', async t => {
+  const { enrichJapaneseReactions } = require('../lib/news/fetchers/jaReactionFetcher')
+  const errorLog = t.mock.method(console, 'error', () => {})
+  const error = new Error('架空の Zenn 接続エラー')
+  const article = raw('zenn-offline', 'Zenn fixture-offline', 'https://example.com/zenn-offline')
+
+  const actual = await enrichJapaneseReactions([article], { getJson: async () => { throw error } })
+
+  assert.deepEqual(actual, [article])
+  const logs = errorLog.mock.calls.map(({ arguments: args }) => args.map(String).join(' '))
+  assert.ok(logs.some(line => line.includes(error.message)), '例外メッセージをログに残す')
+})
+
 test('応答の形式が異なる記事と URL が見つからない記事は点を変えずに返す', async t => {
   const { enrichJapaneseReactions } = require('../lib/news/fetchers/jaReactionFetcher')
   t.mock.method(console, 'error', () => {})
