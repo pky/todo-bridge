@@ -143,7 +143,7 @@ test('Reddit の取得が全件失敗しても HN・RSS・GitHub を保存し、
   })
   assert.deepEqual(result.saved.map(article => article.source).sort(), ['github', 'hn', 'rss'])
   assert.deepEqual(result.sourceResult, { sourcesSucceeded: 3, sourcesFailed: 1 })
-  assert.deepEqual(redditLimits, [20])
+  assert.deepEqual(redditLimits, [10])
 })
 
 test('収集は subreddit ごとの取得上限を10件に指定する', async () => {
