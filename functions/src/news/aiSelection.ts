@@ -14,13 +14,34 @@ export const AI_EXCLUDE_CATEGORIES = [
 ] as const
 
 export const AI_FEED_MAX_ARTICLES = 20
-export const AI_FEED_SOURCE_LIMITS = { hn: 5, github: 4, japanese: 8, otherRss: 6 }
+export const AI_FEED_SOURCE_LIMITS = { hn: 5, github: 4, reddit: 3, japanese: 8, otherRss: 6 }
+export const AI_REACTION_WEIGHT = 60
+export const AI_REACTION_NEUTRAL = 0.5
 
 export type AiSourceBucket = keyof typeof AI_FEED_SOURCE_LIMITS
+export type AiReactionSource = 'hn' | 'github' | 'reddit' | 'zenn' | 'qiita'
+
+export interface AiScoreLimits {
+  maxHnScore: number
+  maxGithubScore: number
+  maxRedditScore?: number
+  maxZennScore?: number
+  maxQiitaScore?: number
+}
+
+const AI_REACTION_LIMIT_KEYS = {
+  hn: 'maxHnScore',
+  github: 'maxGithubScore',
+  reddit: 'maxRedditScore',
+  zenn: 'maxZennScore',
+  qiita: 'maxQiitaScore',
+} as const satisfies Record<AiReactionSource, keyof AiScoreLimits>
 
 type TriageFields = Pick<NewsArticle, 'triageStatus' | 'triageVersion' | 'triageDecision' | 'developerValue' | 'summaryVersion' | 'summaryStatus' | 'summarizedAt'>
 type SummaryFields = TriageFields & Pick<NewsArticle, 'summaryJa'>
-type ScoreFields = Pick<NewsArticle, 'source' | 'score' | 'developerValue' | 'importance'>
+type ReactionSourceFields = Pick<NewsArticle, 'source' | 'sourceName'>
+type ReactionFields = ReactionSourceFields & Pick<NewsArticle, 'score'>
+type ScoreFields = ReactionFields & Pick<NewsArticle, 'developerValue' | 'importance'>
 
 export function isSyntheticGithubDescription(description: string): boolean {
   return description.startsWith('GitHub trending repository:')
@@ -53,35 +74,59 @@ export function needsAiSummary(article: Partial<TriageFields>, now: number = Dat
       || (article.summaryStatus !== 'generated' && article.summaryStatus !== 'rejected'))
 }
 
-export function getAiSourceBucket(article: Pick<NewsArticle, 'source' | 'sourceName'>): AiSourceBucket {
-  if (article.source === 'hn') return 'hn'
-  if (article.source === 'github') return 'github'
-  if (article.sourceName.startsWith('Zenn') || article.sourceName.startsWith('Qiita')) return 'japanese'
-  return 'otherRss'
+export function getAiReactionSource({ source, sourceName }: ReactionSourceFields): AiReactionSource | null {
+  if (source === 'hn' || source === 'github' || source === 'reddit') return source
+  if (sourceName.startsWith('Zenn')) return 'zenn'
+  if (sourceName.startsWith('Qiita')) return 'qiita'
+  return null
+}
+
+export function getAiSourceBucket(article: ReactionSourceFields): AiSourceBucket {
+  const source = getAiReactionSource(article)
+  if (source === null) return 'otherRss'
+  if (source === 'zenn' || source === 'qiita') return 'japanese'
+  return source
+}
+
+export function collectAiScoreLimits(articles: ReactionFields[]): AiScoreLimits {
+  const limits: Required<AiScoreLimits> = {
+    maxHnScore: 0, maxGithubScore: 0, maxRedditScore: 0, maxZennScore: 0, maxQiitaScore: 0,
+  }
+  for (const article of articles) {
+    const source = getAiReactionSource(article)
+    const { score } = article
+    if (source === null || typeof score !== 'number' || !Number.isFinite(score)) continue
+    const key = AI_REACTION_LIMIT_KEYS[source]
+    limits[key] = Math.max(limits[key], score)
+  }
+  return limits
 }
 
 export function calcAiBaseScore(
   article: Partial<ScoreFields>,
-  { maxHnScore, maxGithubScore }: { maxHnScore: number; maxGithubScore: number }
+  limits: AiScoreLimits
 ): number {
   let score = article.developerValue === 'high' ? 100 : article.developerValue === 'normal' ? 60 : 0
   if (article.importance === 'high') score += 20
   else if (article.importance === 'low') score -= 10
 
-  if (article.source === 'hn' || article.source === 'github') {
-    const max = article.source === 'hn' ? maxHnScore : maxGithubScore
-    if (typeof article.score === 'number' && max > 0) score += Math.min(article.score / max, 1) * 20
-  } else {
-    score += 10
-  }
-  return score
+  const source = getAiReactionSource({ source: article.source ?? 'rss', sourceName: article.sourceName ?? '' })
+  if (source === null) return score + AI_REACTION_WEIGHT * AI_REACTION_NEUTRAL
+
+  const max = limits[AI_REACTION_LIMIT_KEYS[source]] ?? 0
+  const reactions = article.score
+  const fallback = source === 'zenn' || source === 'qiita' ? AI_REACTION_NEUTRAL : 0
+  const strength = typeof reactions === 'number' && Number.isFinite(reactions) && max > 0
+    ? Math.min(Math.log1p(Math.max(reactions, 0)) / Math.log1p(max), 1)
+    : fallback
+  return score + AI_REACTION_WEIGHT * strength
 }
 
 export function selectAiFeed<T extends { article: Pick<NewsArticle, 'source' | 'sourceName'> & Partial<TriageFields>; displayScore: number }>(
   ranked: T[],
   now: number = Date.now()
 ): T[] {
-  const counts: Record<AiSourceBucket, number> = { hn: 0, github: 0, japanese: 0, otherRss: 0 }
+  const counts: Record<AiSourceBucket, number> = { hn: 0, github: 0, reddit: 0, japanese: 0, otherRss: 0 }
   const selected: T[] = []
   for (const item of [...ranked].sort((a, b) => b.displayScore - a.displayScore)) {
     if (selected.length >= AI_FEED_MAX_ARTICLES) break

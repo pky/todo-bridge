@@ -74,6 +74,7 @@ async function collect(raws, decisions = {}, existing = []) {
     ['../lib/news/fetchers/hnFetcher', { fetchHNArticles: async onSuccess => { onSuccess(); return [] } }],
     ['../lib/news/fetchers/githubTrendingFetcher', { fetchGitHubTrending: async onSuccess => { onSuccess(); return [] } }],
     ['../lib/news/fetchers/rssFetcher', { fetchRSSArticles: async (_limit, onSuccess) => { onSuccess(); return raws } }],
+    ['../lib/news/fetchers/redditFetcher', { fetchRedditArticles: async () => [] }],
     ['../lib/news/scraper', {
       scrapeArticle: async url => {
         scraped.push(url)

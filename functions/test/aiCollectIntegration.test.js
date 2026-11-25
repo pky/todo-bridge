@@ -26,7 +26,9 @@ function previousOf(current, overrides = {}) {
 
 // 収集から保存までを実行するが、通信先と永続化先はすべてメモリー上に置く。
 // decisions は記事タイトルから decision（include | hold | exclude）への対応。
-async function collect(raws, decisions = {}, existing = []) {
+async function collect(raws, decisions = {}, existing = [], {
+  hn = [], github = [], fetchRedditArticles = async () => [],
+} = {}) {
   const saved = []
   const scraped = []
   const triaged = []
@@ -70,9 +72,10 @@ async function collect(raws, decisions = {}, existing = []) {
   const firestore = Object.assign(() => db, { Timestamp: admin.firestore.Timestamp })
   const replacements = [
     ['firebase-admin', { firestore }],
-    ['../lib/news/fetchers/hnFetcher', { fetchHNArticles: async () => [] }],
-    ['../lib/news/fetchers/githubTrendingFetcher', { fetchGitHubTrending: async () => [] }],
-    ['../lib/news/fetchers/rssFetcher', { fetchRSSArticles: async () => raws }],
+    ['../lib/news/fetchers/hnFetcher', { fetchHNArticles: async onSuccess => { onSuccess(); return hn } }],
+    ['../lib/news/fetchers/githubTrendingFetcher', { fetchGitHubTrending: async onSuccess => { onSuccess(); return github } }],
+    ['../lib/news/fetchers/rssFetcher', { fetchRSSArticles: async (_limit, onSuccess) => { onSuccess(); return raws } }],
+    ['../lib/news/fetchers/redditFetcher', { fetchRedditArticles }],
     ['../lib/news/scraper', {
       scrapeArticle: async url => {
         scraped.push(url)
@@ -108,13 +111,14 @@ async function collect(raws, decisions = {}, existing = []) {
     return [key, require.cache[key]]
   })
   const originalTarget = require.cache[target]
+  let sourceResult
   try {
     for (const [name, exports] of replacements) {
       const key = require.resolve(name)
       require.cache[key] = { id: key, filename: key, loaded: true, exports }
     }
     delete require.cache[target]
-    await require(target).runCollectArticles()
+    sourceResult = await require(target).runCollectArticles()
   } finally {
     if (originalTarget) require.cache[target] = originalTarget
     else delete require.cache[target]
@@ -123,8 +127,61 @@ async function collect(raws, decisions = {}, existing = []) {
       else delete require.cache[key]
     }
   }
-  return { saved, scraped, triaged, events, queries, today }
+  return { saved, scraped, triaged, events, queries, today, sourceResult }
 }
+
+test('Reddit の取得が全件失敗しても HN・RSS・GitHub を保存し、失敗元を集計する', async () => {
+  const redditLimits = []
+  const result = await collect([raw('rss-story')], {}, [], {
+    hn: [raw('hn-story', { source: 'hn', sourceName: 'Hacker News' })],
+    github: [raw('github-story', { source: 'github', sourceName: 'GitHub Trending' })],
+    fetchRedditArticles: async limit => {
+      redditLimits.push(limit)
+      // 全取得が失敗すると、取得処理は成功を通知せず空配列を返す。
+      return []
+    },
+  })
+  assert.deepEqual(result.saved.map(article => article.source).sort(), ['github', 'hn', 'rss'])
+  assert.deepEqual(result.sourceResult, { sourcesSucceeded: 3, sourcesFailed: 1 })
+  assert.deepEqual(redditLimits, [10])
+})
+
+test('収集は subreddit ごとの取得上限を10件に指定する', async () => {
+  const redditLimits = []
+  await collect([], {}, [], {
+    fetchRedditArticles: async (limit, onSuccess) => {
+      redditLimits.push(limit)
+      onSuccess()
+      return []
+    },
+  })
+
+  assert.deepEqual(redditLimits, [10])
+})
+
+test('RSS で取得した Zenn・Qiita の記事をいいね数付きで保存する', async t => {
+  const zenn = raw('zenn-story', {
+    sourceName: 'Zenn fixture-ai', url: 'https://zenn.dev/fixture-author/articles/sample-rss/',
+  })
+  const qiita = raw('qiita-story', {
+    sourceName: 'Qiita fixture-ai', url: 'https://qiita.com/fixture-author/items/sample-rss?ref=rss',
+  })
+  const get = t.mock.method(require('axios'), 'get', async input => {
+    const url = new URL(input)
+    if (url.hostname === 'zenn.dev') {
+      return { data: { articles: [{ path: '/fixture-author/articles/sample-rss', liked_count: 37 }] } }
+    }
+    if (url.hostname === 'qiita.com') {
+      return { data: [{ url: 'https://qiita.com/fixture-author/items/sample-rss', likes_count: 24 }] }
+    }
+    throw new Error('想定外の取得先です')
+  })
+  const result = await collect([zenn, raw('other-rss'), qiita])
+  assert.deepEqual(new Map(result.saved.map(article => [article.title, article.score])), new Map([
+    [zenn.title, 37], ['other-rss', null], [qiita.title, 24],
+  ]))
+  assert.deepEqual(get.mock.calls.map(call => new URL(call.arguments[0]).hostname).sort(), ['qiita.com', 'zenn.dev'])
+})
 
 test('収集は全新着を判定し、include と hold だけ本文取得し、excludeとpendingは本文なしで保存する', async () => {
   const result = await collect([

@@ -1,4 +1,4 @@
-import { calcAiBaseScore, selectAiFeed } from '../aiSelection'
+import { calcAiBaseScore, selectAiFeed, type AiScoreLimits } from '../aiSelection'
 import { buildEventSignals, buildInteractionSignals, calcPreferenceMultiplier, learnKeywordPreferences } from '../interactionLearning'
 import type { NewsArticle, NewsPreferences } from '../types'
 import type { PersonalFit } from './curatorPersonalFit'
@@ -13,7 +13,7 @@ interface CuratorSelectionBase {
   articles: NewsArticleWithId[]
   preferences: NewsPreferences
   learningCutoffMs: number
-  scoreLimits: { maxHnScore: number; maxGithubScore: number }
+  scoreLimits: AiScoreLimits
   personalFit?: Map<string, PersonalFit>
 }
 

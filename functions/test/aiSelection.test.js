@@ -40,7 +40,8 @@ test('定数は仕様どおり', () => {
   assert.deepEqual(m.AI_INCLUDE_CATEGORIES, INCLUDE_CATEGORIES)
   assert.deepEqual(m.AI_EXCLUDE_CATEGORIES, EXCLUDE_CATEGORIES)
   assert.equal(m.AI_FEED_MAX_ARTICLES, 20)
-  assert.deepEqual(m.AI_FEED_SOURCE_LIMITS, { hn: 5, github: 4, japanese: 8, otherRss: 6 })
+  const existingLimits = Object.fromEntries(Object.entries(m.AI_FEED_SOURCE_LIMITS).filter(([source]) => source !== 'reddit'))
+  assert.deepEqual(existingLimits, { hn: 5, github: 4, japanese: 8, otherRss: 6 })
 })
 
 test('isSyntheticGithubDescription は合成説明文だけ true', () => {
@@ -115,45 +116,117 @@ test('getAiSourceBucket はソースと掲載元名で分類する', () => {
   assert.equal(getAiSourceBucket({ source: 'rss', sourceName: 'はてなブックマーク IT' }), 'otherRss')
 })
 
-test('calcAiBaseScore は developerValue と importance と人気を合算する', () => {
+test('calcAiBaseScore は developerValue と importance と反応を合算する', () => {
   const { calcAiBaseScore } = mod()
   const max = { maxHnScore: 100, maxGithubScore: 100 }
-  assert.equal(calcAiBaseScore(candidate('a', { developerValue: 'high', importance: 'normal' }), max), 110)
-  assert.equal(calcAiBaseScore(candidate('b', { developerValue: 'normal', importance: 'normal' }), max), 70)
-  assert.equal(calcAiBaseScore(candidate('c', { developerValue: 'high', importance: 'high' }), max), 130)
-  assert.equal(calcAiBaseScore(candidate('d', { developerValue: 'high', importance: 'low' }), max), 100)
-  assert.equal(calcAiBaseScore(candidate('e', { developerValue: 'low', importance: 'normal' }), max), 10)
+  assert.equal(calcAiBaseScore(candidate('a', { developerValue: 'high', importance: 'normal' }), max), 130)
+  assert.equal(calcAiBaseScore(candidate('b', { developerValue: 'normal', importance: 'normal' }), max), 90)
+  assert.equal(calcAiBaseScore(candidate('c', { developerValue: 'high', importance: 'high' }), max), 150)
+  assert.equal(calcAiBaseScore(candidate('d', { developerValue: 'high', importance: 'low' }), max), 120)
+  assert.equal(calcAiBaseScore(candidate('e', { developerValue: 'low', importance: 'normal' }), max), 30)
 })
 
-test('calcAiBaseScore の人気は HN と GitHub が最大値で正規化した 0 から 20、RSS は 10', () => {
+test('calcAiBaseScore は情報源別の最大値との対数の比を使い、反応の加点を 0 から 60 に収める', () => {
   const { calcAiBaseScore } = mod()
-  const max = { maxHnScore: 200, maxGithubScore: 50 }
-  const base = { developerValue: 'normal', importance: 'normal' }
-  assert.equal(calcAiBaseScore(candidate('hn-max', { ...base, source: 'hn', score: 200 }), max), 80)
-  assert.equal(calcAiBaseScore(candidate('hn-half', { ...base, source: 'hn', score: 100 }), max), 70)
-  assert.equal(calcAiBaseScore(candidate('hn-zero', { ...base, source: 'hn', score: 0 }), max), 60)
-  assert.equal(calcAiBaseScore(candidate('gh-half', { ...base, source: 'github', score: 25 }), max), 70)
-  assert.equal(calcAiBaseScore(candidate('gh-over', { ...base, source: 'github', score: 500 }), max), 80)
-  assert.equal(calcAiBaseScore(candidate('rss', { ...base, source: 'rss' }), max), 70)
-  assert.equal(calcAiBaseScore(candidate('hn-no-max', { ...base, source: 'hn', score: 30 }), { maxHnScore: 0, maxGithubScore: 0 }), 60)
+  const max = { maxHnScore: 255, maxGithubScore: 80, maxRedditScore: 63, maxZennScore: 26, maxQiitaScore: 15 }
+  const cases = [
+    // 1 + score と 1 + 最大値を同じ底の累乗にし、対数の比を指数から求める。
+    ['hn-half', { source: 'hn', score: 15 }, 90],
+    ['github-quarter', { source: 'github', score: 2 }, 75],
+    ['reddit-half', { source: 'reddit', score: 7 }, 90],
+    ['zenn-third', { sourceName: 'Zenn ai', score: 2 }, 80],
+    ['qiita-three-quarters', { sourceName: 'Qiita ai', score: 7 }, 105],
+    ['hn-max', { source: 'hn', score: 255 }, 120],
+    ['github-over', { source: 'github', score: 500 }, 120],
+    ['hn-negative', { source: 'hn', score: -4 }, 60],
+    ['reddit-zero', { source: 'reddit', score: 0 }, 60],
+    ['zenn-zero', { sourceName: 'Zenn ai', score: 0 }, 60],
+    ['rss-without-reactions', { score: 500 }, 90],
+  ]
+  for (const [id, article, expected] of cases) {
+    const actual = calcAiBaseScore(candidate(id, article), max)
+    assert.ok(Math.abs(actual - expected) < 1e-9, `${id}: 期待値 ${expected}、実際 ${actual}`)
+  }
 })
 
-test('calcAiBaseScore は HN と GitHub で score が null なら人気を 0 にする', () => {
+test('calcAiBaseScore は HN・GitHub・Reddit の score 欠損または最大値なしで反応を 0 にする', () => {
   const { calcAiBaseScore } = mod()
-  const max = { maxHnScore: 100, maxGithubScore: 100 }
-  const base = { developerValue: 'normal', importance: 'normal' }
-  assert.equal(calcAiBaseScore(candidate('hn-null', { ...base, source: 'hn', score: null }), max), 60)
-  assert.equal(calcAiBaseScore(candidate('gh-null', { ...base, source: 'github', score: null }), max), 60)
+  for (const source of ['hn', 'github', 'reddit']) {
+    const max = { maxHnScore: 100, maxGithubScore: 100, maxRedditScore: 100 }
+    assert.equal(calcAiBaseScore(candidate('missing-score', { source, score: null }), max), 60, source)
+    const noMax = { maxHnScore: 0, maxGithubScore: 0 }
+    assert.equal(calcAiBaseScore(candidate('missing-max', { source, score: 30 }), noMax), 60, source)
+  }
 })
 
-test('calcAiBaseScore は importance が同じなら人気が developerValue の差を覆さない', () => {
+test('calcAiBaseScore は importance が同じなら反応の多い normal が反応のない high を上回る', () => {
   const { calcAiBaseScore } = mod()
   const max = { maxHnScore: 100, maxGithubScore: 100 }
   for (const importance of ['high', 'normal', 'low']) {
     const popularNormal = calcAiBaseScore(candidate('n', { developerValue: 'normal', importance, source: 'hn', score: 100 }), max)
     const quietHigh = calcAiBaseScore(candidate('h', { developerValue: 'high', importance, source: 'hn', score: 0 }), max)
-    assert.ok(quietHigh > popularNormal, `${importance}: ${quietHigh} > ${popularNormal}`)
+    assert.ok(popularNormal > quietHigh, `${importance}: ${popularNormal} > ${quietHigh}`)
   }
+})
+
+test('反応の重みは 60、反応を取得できないときの中立値は 0.5', () => {
+  const { AI_REACTION_WEIGHT, AI_REACTION_NEUTRAL, calcAiBaseScore } = mod()
+  assert.equal(AI_REACTION_WEIGHT, 60)
+  assert.equal(AI_REACTION_NEUTRAL, 0.5)
+  const max = { maxHnScore: 0, maxGithubScore: 0, maxZennScore: 40, maxQiitaScore: 80 }
+  for (const sourceName of ['Zenn ai', 'Qiita ai']) {
+    assert.equal(calcAiBaseScore(candidate('failed', { sourceName, score: null }), max), 90, sourceName)
+    const noMax = { maxHnScore: 0, maxGithubScore: 0 }
+    assert.equal(calcAiBaseScore(candidate('no-max', { sourceName, score: 4 }), noMax), 90, sourceName)
+  }
+})
+
+test('calcAiBaseScore はその日の Zenn と HN の 1 位に同じ点を付ける', () => {
+  const { calcAiBaseScore } = mod()
+  const zennTop = candidate('zenn-top', { sourceName: 'Zenn ai', score: 20 })
+  const hnTop = candidate('hn-top', { source: 'hn', score: 800 })
+  const max = { maxHnScore: 800, maxGithubScore: 0, maxZennScore: 20 }
+  assert.deepEqual([calcAiBaseScore(zennTop, max), calcAiBaseScore(hnTop, max)], [120, 120])
+})
+
+test('getAiReactionSource は source を優先し、Zenn と Qiita は掲載元名の先頭で判定する', () => {
+  const { getAiReactionSource } = mod()
+  const inputs = [
+    { source: 'hn', sourceName: 'Hacker News' },
+    { source: 'github', sourceName: 'GitHub Trending' },
+    { source: 'reddit', sourceName: 'Zenn ai' },
+    { source: 'rss', sourceName: 'Zenn ai' },
+    { source: 'rss', sourceName: 'Qiita' },
+    { source: 'rss', sourceName: 'Fictional Zenn Feed' },
+  ]
+  assert.deepEqual(inputs.map(getAiReactionSource), ['hn', 'github', 'reddit', 'zenn', 'qiita', null])
+})
+
+test('collectAiScoreLimits は情報源ごとの最大反応数を集める', () => {
+  const { collectAiScoreLimits } = mod()
+  const inputs = [
+    { source: 'hn', sourceName: 'Hacker News', score: 210 },
+    { source: 'github', sourceName: 'GitHub Trending', score: 36 },
+    { source: 'reddit', sourceName: 'r/fictional-one', score: 12 },
+    { source: 'reddit', sourceName: 'r/fictional-two', score: 90 },
+    { source: 'hn', sourceName: 'Hacker News', score: 18 },
+    { source: 'rss', sourceName: 'Zenn ai', score: 51 },
+    { source: 'rss', sourceName: 'Zenn llm', score: null },
+    { source: 'rss', sourceName: 'Qiita ai', score: 17 },
+    { source: 'rss', sourceName: 'Fictional Feed', score: 1000 },
+  ]
+  assert.deepEqual(collectAiScoreLimits(inputs), {
+    maxHnScore: 210, maxGithubScore: 36, maxRedditScore: 90, maxZennScore: 51, maxQiitaScore: 17,
+  })
+})
+
+test('collectAiScoreLimits は負数や数値以外しかない情報源も 0 にする', () => {
+  const { collectAiScoreLimits } = mod()
+  assert.deepEqual(collectAiScoreLimits([
+    { source: 'hn', sourceName: 'Hacker News', score: -1 },
+    { source: 'rss', sourceName: 'Qiita ai', score: null },
+    { source: 'reddit', sourceName: 'r/fictional', score: '300' },
+  ]), { maxHnScore: 0, maxGithubScore: 0, maxRedditScore: 0, maxZennScore: 0, maxQiitaScore: 0 })
 })
 
 function ranked(prefix, count, overrides, startScore) {
@@ -162,6 +235,20 @@ function ranked(prefix, count, overrides, startScore) {
     displayScore: startScore - index,
   }))
 }
+
+test('selectAiFeed は Reddit を独立した枠に入れて上位 3 件を選ぶ', () => {
+  const { AI_FEED_SOURCE_LIMITS, getAiSourceBucket, selectAiFeed } = mod()
+  const reddit = { source: 'reddit', sourceName: 'r/fictional' }
+  const items = [
+    ...ranked('reddit', 5, reddit, 200),
+    ...ranked('other', 6, { source: 'rss', sourceName: 'Fictional Feed' }, 100),
+  ]
+  assert.deepEqual(ids(selectAiFeed(items)), [
+    'reddit-0', 'reddit-1', 'reddit-2', 'other-0', 'other-1', 'other-2', 'other-3', 'other-4', 'other-5',
+  ])
+  assert.equal(getAiSourceBucket(reddit), 'reddit')
+  assert.equal(AI_FEED_SOURCE_LIMITS.reddit, 3)
+})
 
 test('selectAiFeed はソース別上限を守り、合計 23 件から 20 件に切る', () => {
   const { selectAiFeed } = mod()
