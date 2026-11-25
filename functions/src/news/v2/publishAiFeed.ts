@@ -23,7 +23,7 @@ export interface AiFeedDaily {
 export type PublishResult = { status: 'published' | 'already' | 'skipped-newer' | 'skipped-same-day-conflict' }
 const metadata = { contentType: 'application/json; charset=utf-8', cacheControl: 'private, no-store' }
 const feedKeys = new Set(['schemaVersion', 'topic', 'feedDate', 'generatedAt', 'revision', 'totalCount', 'articles'])
-const articleKeys = new Set(['id', 'title', 'sourceName', 'publishedAt', 'summary', 'url', 'imageUrl', 'readReason', 'publisherDomain', 'tags'])
+const articleKeys = new Set(['id', 'title', 'sourceName', 'publishedAt', 'summary', 'url', 'imageUrl', 'readReason', 'publisherDomain', 'tags', 'reactions', 'related'])
 
 function feedBytes(feed: AiFeedV2): Buffer {
   if (!validateAiFeedV2(feed).ok
