@@ -47,7 +47,7 @@ test('正の学習と明示キーワードの倍率を基礎点に適用して�
 
 for (const [bucket, limit] of Object.entries(AI_FEED_SOURCE_LIMITS)) {
   test(`${bucket}のsource上限${limit}件を守る`, () => {
-    const source = bucket === 'hn' || bucket === 'github' ? bucket : 'rss'
+    const source = bucket === 'hn' || bucket === 'github' || bucket === 'reddit' ? bucket : 'rss'
     const sourceName = bucket === 'japanese' ? 'Zenn 架空欄' : '架空通信'
     const result = select(Array.from({ length: 30 }, (_, i) => article(`item-${i}`, { source, sourceName })))
     assert.equal(result.length, limit)
@@ -56,7 +56,7 @@ for (const [bucket, limit] of Object.entries(AI_FEED_SOURCE_LIMITS)) {
 }
 
 test('複数sourceでも総件数20件以下かつ点数降順にする', () => {
-  const articles = Object.keys(AI_FEED_SOURCE_LIMITS).flatMap((bucket, index) => Array.from({ length: 30 }, (_, i) => article(`${bucket}-${i}`, { source: bucket === 'hn' || bucket === 'github' ? bucket : 'rss', sourceName: bucket === 'japanese' ? 'Qiita 架空欄' : '架空通信', score: index + i })))
+  const articles = Object.keys(AI_FEED_SOURCE_LIMITS).flatMap((bucket, index) => Array.from({ length: 30 }, (_, i) => article(`${bucket}-${i}`, { source: bucket === 'hn' || bucket === 'github' || bucket === 'reddit' ? bucket : 'rss', sourceName: bucket === 'japanese' ? 'Qiita 架空欄' : '架空通信', score: index + i })))
   const result = select(articles)
   assert.equal(result.length, 20)
   assert.ok(result.every((item, i) => i === 0 || result[i - 1].displayScore >= item.displayScore))
