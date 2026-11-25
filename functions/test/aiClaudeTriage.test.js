@@ -44,7 +44,7 @@ const echoAll = (params) => message(idsOf(params).map((id) => item(id)))
 
 test('getAiTriageConfig は既定値を返す', () => {
   assert.deepEqual(getAiTriageConfig({}), {
-    model: 'claude-haiku-5-5', effort: 'low', dailyMaxRequests: 10,
+    model: 'claude-haiku-5-5', effort: 'low', dailyMaxRequests: 12,
   })
 })
 
@@ -124,6 +124,22 @@ test('triageAiArticles は30件ずつ送る', async () => {
   assert.equal(out.results.size, 65)
   assert.deepEqual(out.pendingIds, [])
   assert.equal(out.requestCount, 3)
+})
+
+test('triageAiArticles は既定の予算で310件すべてを処理する', async () => {
+  const config = getAiTriageConfig({})
+  const client = stubClient(echoAll)
+  let reservations = 0
+  const out = await triageAiArticles(inputs(310), {
+    client,
+    config,
+    reserveRequest: async () => ++reservations <= config.dailyMaxRequests,
+  })
+
+  assert.deepEqual(
+    { requestCount: out.requestCount, processedCount: out.results.size, pendingCount: out.pendingIds.length },
+    { requestCount: 11, processedCount: 310, pendingCount: 0 },
+  )
 })
 
 test('triageAiArticles は client が null なら全件 pending', async () => {
