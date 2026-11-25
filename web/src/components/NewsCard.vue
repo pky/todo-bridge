@@ -1,6 +1,7 @@
 <!-- web/src/components/NewsCard.vue -->
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import AiNewsStoryDetails from '@/components/AiNewsStoryDetails.vue'
 import MobileSummary from '@/components/MobileSummary.vue'
 import type { NewsArticle } from '@/types'
 import { isSafeExternalUrl } from '@/utils/safeUrl'
@@ -102,6 +103,8 @@ const metaClass = computed(() => {
 })
 
 const showsHeaderContent = computed(() => props.variant === 'hero' || props.variant === 'featured')
+const showsStoryDetails = computed(() => props.article.topic === 'ai'
+  && (props.article.reactions?.length || props.article.related?.length))
 const mobileBadges = computed(() => {
   const badges: string[] = []
   if (props.article.isOfficial) badges.push('公式')
@@ -284,6 +287,7 @@ function handleImageError(): void {
       <p v-else-if="article.summaryJa" :class="summaryClass">
         {{ article.summaryJa }}
       </p>
+      <AiNewsStoryDetails v-if="showsStoryDetails" :reactions="article.reactions" :related="article.related" />
 
       <div v-if="mobileBadges.length > 0" class="flex flex-wrap gap-1">
         <span
@@ -366,6 +370,11 @@ function handleImageError(): void {
     <p v-else-if="!showsHeaderContent && article.summaryJa" :class="summaryClass">
       {{ article.summaryJa }}
     </p>
+    <AiNewsStoryDetails
+      v-if="!showsHeaderContent && showsStoryDetails"
+      :reactions="article.reactions"
+      :related="article.related"
+    />
 
     <p v-if="article.topic === 'ai' && article.summaryStatus === 'fallback'" class="mt-2 text-xs text-fg-subtle">
       元の説明文

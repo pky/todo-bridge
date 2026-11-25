@@ -17,6 +17,20 @@ export type ActionType =
 
 export type ImportantLevel = 'urgent' | 'review' | 'reference'
 
+export const AI_REACTION_SOURCES = ['hn', 'github', 'reddit', 'zenn', 'qiita'] as const
+
+export interface AiNewsReaction {
+  source: (typeof AI_REACTION_SOURCES)[number]
+  count: number
+  url?: string
+}
+
+export interface AiNewsRelated {
+  title: string
+  sourceName: string
+  url: string
+}
+
 export interface MobileSummary {
   overview: string
   target: string
@@ -33,6 +47,8 @@ export interface NewsArticle {
   summaryJa?: string
   developerValue?: 'high' | 'normal' | 'low'
   readReason?: string
+  reactions?: AiNewsReaction[]
+  related?: AiNewsRelated[]
   triageDecision?: 'include' | 'hold' | 'exclude'
   category?: string
   feedEligible?: boolean

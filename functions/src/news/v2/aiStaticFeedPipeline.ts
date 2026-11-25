@@ -2,7 +2,8 @@ import { buildAiFeedV2, toAiFeedV2Article } from './feedContract'
 import { aiFeedDailyPath, publishDaily, saveDailyIfAbsent, type AiFeedDaily, type FeedBucket, type PublishResult } from './publishAiFeed'
 import type { NewsArticleWithId } from './curatorSelection'
 
-export type GenerateAiFeedResult = { ok: true; curatorArticles: NewsArticleWithId[] } | { ok: false }
+export type CuratorFeedArticle = NewsArticleWithId & { storyMembers?: NewsArticleWithId[] }
+export type GenerateAiFeedResult = { ok: true; curatorArticles: CuratorFeedArticle[] } | { ok: false }
 interface PipelineDependencies {
   bucket: FeedBucket
   feedDate: string
@@ -32,7 +33,7 @@ export async function runAiStaticFeedPipeline(deps: PipelineDependencies): Promi
 
 export async function publishCuratorArticles(
   deps: Pick<PipelineDependencies, 'bucket' | 'feedDate' | 'now'>,
-  curatorArticles: NewsArticleWithId[],
+  curatorArticles: CuratorFeedArticle[],
   learningCutoffAt: Date
 ): Promise<PublishResult> {
   const articles = curatorArticles.flatMap(article => {

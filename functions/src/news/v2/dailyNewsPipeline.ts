@@ -1,6 +1,5 @@
 import type { AiCollectResult } from '../collectArticles'
-import type { GenerateAiFeedResult } from './aiStaticFeedPipeline'
-import type { NewsArticleWithId } from './curatorSelection'
+import type { CuratorFeedArticle, GenerateAiFeedResult } from './aiStaticFeedPipeline'
 
 interface DailyNewsDependencies {
   feedDate: string
@@ -10,7 +9,7 @@ interface DailyNewsDependencies {
   readDailyTimeoutMs: number
   collectAi: () => Promise<AiCollectResult>
   generateAi: (context: { curatorUid: string | undefined; learningCutoffAt: Date }) => Promise<GenerateAiFeedResult>
-  publish: (articles: NewsArticleWithId[], learningCutoffAt: Date) => Promise<unknown>
+  publish: (articles: CuratorFeedArticle[], learningCutoffAt: Date) => Promise<unknown>
   recoverPublish: () => Promise<unknown>
   collectMobile: () => Promise<unknown>
   generateMobile: () => Promise<unknown>

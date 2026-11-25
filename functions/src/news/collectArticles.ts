@@ -20,8 +20,12 @@ import { createClaudeMessagesClient as createAiClaudeMessagesClient } from './cl
 import { createClaudeDailyRequestReservation } from './claudeDailyBudget'
 import { triageAiArticles, getAiTriageConfig, type TriageInput, type TriageResult } from './aiClaudeTriage'
 import { AI_REUSE_MAX_AGE_MS, AI_TRIAGE_VERSION, isSyntheticGithubDescription } from './aiSelection'
+import { getOwnArticleReaction, getUniqueArticleReactions } from './aiStories'
 import { getMobileActionItemKey, isMobileActionItemArticle, syncMobileActionItems, type MobileActionItem } from './mobileActionItems'
 import type { RawArticle, NewsArticle, NewsTopic, SourceTier } from './types'
+import { normalizeUrl } from './normalizeUrl'
+
+export { normalizeUrl } from './normalizeUrl'
 
 const db = admin.firestore()
 export const MOBILE_CLASSIFICATION_DEADLINE_MS = 240000
@@ -33,35 +37,6 @@ const CLEANUP_BATCH_SIZE = 500
 const CLEANUP_MAX_ROUNDS = 20
 const OFFICIAL_MOBILE_MAX_AGE_DAYS = 14
 const COMMUNITY_MOBILE_MAX_AGE_DAYS = 30
-
-export function normalizeUrl(url: string): string {
-  try {
-    const u = new URL(url)
-    const params = new URLSearchParams(u.search)
-    const trackingParams = [
-      'utm_source',
-      'utm_medium',
-      'utm_campaign',
-      'utm_term',
-      'utm_content',
-      'fbclid',
-      'gclid',
-    ]
-
-    for (const key of trackingParams) {
-      params.delete(key)
-    }
-
-    const normalizedPath = `${u.hostname}${u.pathname}`.replace(/\/$/, '')
-    const normalizedSearch = params.toString()
-
-    return normalizedSearch
-      ? `${normalizedPath}?${normalizedSearch}`
-      : normalizedPath
-  } catch {
-    return url
-  }
-}
 
 export function normalizeTitle(title: string): string {
   return title
@@ -94,12 +69,24 @@ function getApproximateIdentityKey(article: RawArticle): string {
 }
 
 export function deduplicateArticles(articles: RawArticle[]): RawArticle[] {
-  const seen = new Set<string>()
-  return articles.filter(a => {
-    const key = normalizeUrl(a.url)
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
+  const groups = new Map<string, RawArticle[]>()
+  for (const article of articles) {
+    const key = normalizeUrl(article.url)
+    const group = groups.get(key)
+    if (group) group.push(article)
+    else groups.set(key, [article])
+  }
+  return Array.from(groups.values(), group => {
+    const [first] = group
+    const reactions = getUniqueArticleReactions(group)
+    const own = getOwnArticleReaction(first)
+    // 先頭記事自身の反応は集約後も先頭にあり、最大件数を score に反映する。
+    const extraReactions = own ? reactions.slice(1) : reactions
+    return {
+      ...first,
+      ...(own ? { score: reactions[0].count } : {}),
+      ...(extraReactions.length > 0 || first.extraReactions !== undefined ? { extraReactions } : {}),
+    }
   })
 }
 
@@ -202,6 +189,8 @@ function buildAiBase(raw: RawArticle, today: string, fetchedAt: admin.firestore.
     topic: 'ai',
     source: raw.source,
     sourceName: raw.sourceName,
+    ...(raw.discussionUrl !== undefined ? { discussionUrl: raw.discussionUrl } : {}),
+    ...(raw.extraReactions !== undefined ? { extraReactions: raw.extraReactions } : {}),
     ...(raw.publisherDomain ? { publisherDomain: raw.publisherDomain } : {}),
     ...(typeof raw.generalSource === 'boolean' ? { generalSource: raw.generalSource } : {}),
     score: raw.score ?? null,
@@ -363,6 +352,8 @@ function restoreAiRawArticle(article: Omit<NewsArticle, 'publishedAt'> & { publi
     thumbnailUrl: article.thumbnailUrl ?? null,
     source: article.source,
     sourceName: article.sourceName,
+    ...(typeof article.discussionUrl === 'string' ? { discussionUrl: article.discussionUrl } : {}),
+    ...(Array.isArray(article.extraReactions) ? { extraReactions: article.extraReactions } : {}),
     ...(article.publisherDomain ? { publisherDomain: article.publisherDomain } : {}),
     ...(typeof article.generalSource === 'boolean' ? { generalSource: article.generalSource } : {}),
     score: article.score ?? null,

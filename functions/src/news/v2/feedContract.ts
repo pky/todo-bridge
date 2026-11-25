@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import { getUniqueArticleReactions, isAiReactionSource, type AiReactionSource } from '../aiStories'
 import { toWidgetArticleDto } from '../widgetDto'
 import type { FeedDoc } from '../widgetFeed'
 
@@ -6,6 +7,11 @@ export const AI_FEED_V2_SCHEMA_VERSION = 2
 export const AI_FEED_V2_MAX_ARTICLES = 20
 
 export const AI_FEED_V2_MAX_BYTES = 1048576
+const MAX_REACTIONS = 10
+const MAX_RELATED = 5
+
+interface AiFeedV2Reaction { source: AiReactionSource; count: number; url?: string }
+interface AiFeedV2Related { title: string; sourceName: string; url: string }
 
 export interface AiFeedV2Article {
   id: string
@@ -18,6 +24,8 @@ export interface AiFeedV2Article {
   readReason?: string
   publisherDomain?: string
   tags?: string[]
+  reactions?: AiFeedV2Reaction[]
+  related?: AiFeedV2Related[]
 }
 
 export interface AiFeedV2 {
@@ -63,6 +71,16 @@ function isHttpsUrl(value: unknown): value is string {
   }
 }
 
+function isReaction(value: unknown): value is AiFeedV2Reaction {
+  return isRecord(value) && isAiReactionSource(value.source)
+    && typeof value.count === 'number' && Number.isInteger(value.count) && value.count >= 0
+    && (!('url' in value) || isHttpsUrl(value.url))
+}
+
+function isRelated(value: unknown): value is AiFeedV2Related {
+  return isRecord(value) && isNonemptyString(value.title) && isNonemptyString(value.sourceName) && isHttpsUrl(value.url)
+}
+
 function isArticle(value: unknown): value is AiFeedV2Article {
   if (!isRecord(value)) return false
   if (!['id', 'title', 'sourceName', 'summary'].every((key) => isNonemptyString(value[key]))) return false
@@ -74,6 +92,10 @@ function isArticle(value: unknown): value is AiFeedV2Article {
     if (key in value && !isNonemptyString(value[key])) return false
   }
   if ('tags' in value && (!Array.isArray(value.tags) || !value.tags.every(isNonemptyString))) return false
+  if ('reactions' in value && (!Array.isArray(value.reactions) || value.reactions.length < 1
+    || value.reactions.length > MAX_REACTIONS || !value.reactions.every(isReaction))) return false
+  if ('related' in value && (!Array.isArray(value.related) || value.related.length < 1
+    || value.related.length > MAX_RELATED || !value.related.every(isRelated))) return false
   return true
 }
 
@@ -116,6 +138,24 @@ export function computeFeedRevision(value: FeedContent): string {
   return createHash('sha256').update(canonicalizeJson({ schemaVersion, topic, feedDate, totalCount, articles }), 'utf8').digest('hex')
 }
 
+function toFeedReactions(docs: unknown[]): AiFeedV2Reaction[] {
+  return getUniqueArticleReactions(docs).slice(0, MAX_REACTIONS).map(({ source, count, url }) => ({
+    source, count: Math.round(count), ...(isHttpsUrl(url) ? { url } : {}),
+  }))
+}
+
+function toRelatedLinks(members: unknown[]): AiFeedV2Related[] {
+  const links: AiFeedV2Related[] = []
+  for (const member of members) {
+    if (!isRecord(member)) continue
+    const { title, sourceName, url } = member
+    if (!isNonemptyString(title) || !isNonemptyString(sourceName) || !isHttpsUrl(url)) continue
+    links.push({ title, sourceName, url })
+    if (links.length === MAX_RELATED) break
+  }
+  return links
+}
+
 export function toAiFeedV2Article(doc: FeedDoc): AiFeedV2Article | null {
   // 掲載時刻だけはv2の境界で変換し、不正なTimestampを公開しない。
   const widget = toWidgetArticleDto({ ...doc, publishedAt: null }, 'ai')
@@ -137,6 +177,11 @@ export function toAiFeedV2Article(doc: FeedDoc): AiFeedV2Article | null {
     const tags = doc.tags.filter(isNonemptyString)
     if (tags.length) article.tags = tags
   }
+  const members: unknown[] = Array.isArray(doc.storyMembers) ? doc.storyMembers : []
+  const reactions = toFeedReactions([doc, ...members])
+  const related = toRelatedLinks(members)
+  if (reactions.length > 0) article.reactions = reactions
+  if (related.length > 0) article.related = related
   return isArticle(article) ? article : null
 }
 

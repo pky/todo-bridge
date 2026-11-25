@@ -1,6 +1,13 @@
 // functions/src/news/aiSelection.ts
 // AI ニュースの選別規則。Firestore に依存しない純粋関数だけを置く。
 import type { NewsArticle } from './types'
+import {
+  AI_REACTION_LIMIT_KEYS, AI_REACTION_NEUTRAL, AI_REACTION_WEIGHT, calcAiArticleValue,
+  calcReactionStrengthSum, getAiReactionSource, getArticleReactions, type AiScoreLimits,
+} from './aiStories'
+
+export { AI_REACTION_NEUTRAL, AI_REACTION_WEIGHT, collectAiScoreLimits, getAiReactionSource } from './aiStories'
+export type { AiReactionSource, AiScoreLimits } from './aiStories'
 
 export const AI_TRIAGE_VERSION = 'ai-v2'
 export const AI_SUMMARY_VERSION = 'ai-v2'
@@ -15,33 +22,12 @@ export const AI_EXCLUDE_CATEGORIES = [
 
 export const AI_FEED_MAX_ARTICLES = 20
 export const AI_FEED_SOURCE_LIMITS = { hn: 5, github: 4, reddit: 3, japanese: 8, otherRss: 6 }
-export const AI_REACTION_WEIGHT = 60
-export const AI_REACTION_NEUTRAL = 0.5
-
 export type AiSourceBucket = keyof typeof AI_FEED_SOURCE_LIMITS
-export type AiReactionSource = 'hn' | 'github' | 'reddit' | 'zenn' | 'qiita'
-
-export interface AiScoreLimits {
-  maxHnScore: number
-  maxGithubScore: number
-  maxRedditScore?: number
-  maxZennScore?: number
-  maxQiitaScore?: number
-}
-
-const AI_REACTION_LIMIT_KEYS = {
-  hn: 'maxHnScore',
-  github: 'maxGithubScore',
-  reddit: 'maxRedditScore',
-  zenn: 'maxZennScore',
-  qiita: 'maxQiitaScore',
-} as const satisfies Record<AiReactionSource, keyof AiScoreLimits>
 
 type TriageFields = Pick<NewsArticle, 'triageStatus' | 'triageVersion' | 'triageDecision' | 'developerValue' | 'summaryVersion' | 'summaryStatus' | 'summarizedAt'>
 type SummaryFields = TriageFields & Pick<NewsArticle, 'summaryJa'>
 type ReactionSourceFields = Pick<NewsArticle, 'source' | 'sourceName'>
-type ReactionFields = ReactionSourceFields & Pick<NewsArticle, 'score'>
-type ScoreFields = ReactionFields & Pick<NewsArticle, 'developerValue' | 'importance'>
+type ScoreFields = ReactionSourceFields & Pick<NewsArticle, 'score' | 'developerValue' | 'importance' | 'url' | 'discussionUrl' | 'extraReactions'>
 
 export function isSyntheticGithubDescription(description: string): boolean {
   return description.startsWith('GitHub trending repository:')
@@ -74,13 +60,6 @@ export function needsAiSummary(article: Partial<TriageFields>, now: number = Dat
       || (article.summaryStatus !== 'generated' && article.summaryStatus !== 'rejected'))
 }
 
-export function getAiReactionSource({ source, sourceName }: ReactionSourceFields): AiReactionSource | null {
-  if (source === 'hn' || source === 'github' || source === 'reddit') return source
-  if (sourceName.startsWith('Zenn')) return 'zenn'
-  if (sourceName.startsWith('Qiita')) return 'qiita'
-  return null
-}
-
 export function getAiSourceBucket(article: ReactionSourceFields): AiSourceBucket {
   const source = getAiReactionSource(article)
   if (source === null) return 'otherRss'
@@ -88,29 +67,17 @@ export function getAiSourceBucket(article: ReactionSourceFields): AiSourceBucket
   return source
 }
 
-export function collectAiScoreLimits(articles: ReactionFields[]): AiScoreLimits {
-  const limits: Required<AiScoreLimits> = {
-    maxHnScore: 0, maxGithubScore: 0, maxRedditScore: 0, maxZennScore: 0, maxQiitaScore: 0,
-  }
-  for (const article of articles) {
-    const source = getAiReactionSource(article)
-    const { score } = article
-    if (source === null || typeof score !== 'number' || !Number.isFinite(score)) continue
-    const key = AI_REACTION_LIMIT_KEYS[source]
-    limits[key] = Math.max(limits[key], score)
-  }
-  return limits
-}
-
 export function calcAiBaseScore(
   article: Partial<ScoreFields>,
   limits: AiScoreLimits
 ): number {
-  let score = article.developerValue === 'high' ? 100 : article.developerValue === 'normal' ? 60 : 0
-  if (article.importance === 'high') score += 20
-  else if (article.importance === 'low') score -= 10
+  const score = calcAiArticleValue(article)
+  if (Array.isArray(article.extraReactions) && article.extraReactions.length > 0) {
+    const strength = calcReactionStrengthSum(getArticleReactions(article), limits)
+    if (strength !== null) return score + AI_REACTION_WEIGHT * strength
+  }
 
-  const source = getAiReactionSource({ source: article.source ?? 'rss', sourceName: article.sourceName ?? '' })
+  const source = getAiReactionSource(article)
   if (source === null) return score + AI_REACTION_WEIGHT * AI_REACTION_NEUTRAL
 
   const max = limits[AI_REACTION_LIMIT_KEYS[source]] ?? 0

@@ -25,6 +25,7 @@ import {
   type LearnedKeywords,
 } from './interactionLearning'
 import type { NewsArticle, NewsPreferences, NewsTopic } from './types'
+import { AI_STORY_MAX_CANDIDATES, getAiStoryConfig, groupAiStories } from './v2/aiStoryGrouping'
 import { excludeActedArticles, selectCuratorAiFeed } from './v2/curatorSelection'
 import { getAiFitConfig, judgeCuratorPersonalFit, type PersonalFit } from './v2/curatorPersonalFit'
 import type { GenerateAiFeedResult } from './v2/aiStaticFeedPipeline'
@@ -501,6 +502,25 @@ export async function runGeneratePersonalizedFeed(
       }
     }
 
+    let storyGroups: string[][] = []
+    if (options.curatorUid && curatorReady) {
+      try {
+        const candidates = curatorCandidates.filter(article => isAiFeedCandidate(article))
+          .sort((a, b) => calcAiBaseScore(b, scoreLimits) - calcAiBaseScore(a, scoreLimits))
+          .slice(0, AI_STORY_MAX_CANDIDATES)
+          .map(({ id, title, url, sourceName }) => ({ id, title, url, sourceName }))
+        const config = getAiStoryConfig(process.env)
+        const result = await groupAiStories(candidates, {
+          client: createClaudeMessagesClient(process.env.ANTHROPIC_API_KEY), config, now: Date.now,
+          reserveRequest: createClaudeDailyRequestReservation(db, 'ai-story', config.dailyMaxRequests),
+        })
+        storyGroups = result.groups
+        console.log(`[generatePersonalizedFeed] storyGrouping status=${result.status} groups=${storyGroups.length} requests=${result.requestCount}`)
+      } catch {
+        console.warn('[generatePersonalizedFeed] storyGrouping status=error groups=0 requests=0')
+      }
+    }
+
     // 要約が得られず今日は再送しない記事。保存はせず、翌日に再試行する。
     const skippedIds = new Set<string>()
     const rank = (user: FeedUser): RankedFeedItem[] => user.articles
@@ -515,7 +535,7 @@ export async function runGeneratePersonalizedFeed(
     const selectCurator = () => options.curatorUid && curatorReady
       ? selectCuratorAiFeed({
         articles: curatorCandidates.filter(article => !skippedIds.has(article.id)),
-        preferences: curatorPreferences, events: curatorEvents, learningCutoffMs, scoreLimits,
+        preferences: curatorPreferences, events: curatorEvents, learningCutoffMs, scoreLimits, storyGroups,
         ...(personalFit ? { personalFit } : {}),
       })
       : []
@@ -669,7 +689,8 @@ export async function runGeneratePersonalizedFeed(
     }
     const curatorOutcome = evaluateCuratorSummaryOutcome({ selectedIds: [...curatorSelectedIds], skipped: curatorSkipped })
     return curatorReady && curatorTriageReady && summaryReady && curatorOutcome.ok
-      ? { ok: true, curatorArticles: selectCurator().filter(item => isDisplayableAiArticle(item.article)).map(item => item.article) }
+      ? { ok: true, curatorArticles: selectCurator().filter(item => isDisplayableAiArticle(item.article))
+        .map(({ article, members }) => members.length > 0 ? { ...article, storyMembers: members } : article) }
       : { ok: false }
 }
 
