@@ -1,4 +1,5 @@
-import { calcAiBaseScore, selectAiFeed, type AiScoreLimits } from '../aiSelection'
+import { calcAiBaseScore, isAiFeedCandidate, selectAiFeed, type AiScoreLimits } from '../aiSelection'
+import { calcAiStoryScore, pickStoryRepresentative } from '../aiStories'
 import { buildEventSignals, buildInteractionSignals, calcPreferenceMultiplier, learnKeywordPreferences } from '../interactionLearning'
 import type { NewsArticle, NewsPreferences } from '../types'
 import type { PersonalFit } from './curatorPersonalFit'
@@ -7,6 +8,7 @@ export type NewsArticleWithId = NewsArticle & { id: string }
 export interface RankedFeedItem {
   article: NewsArticleWithId
   displayScore: number
+  members: NewsArticleWithId[]
 }
 
 interface CuratorSelectionBase {
@@ -15,6 +17,7 @@ interface CuratorSelectionBase {
   learningCutoffMs: number
   scoreLimits: AiScoreLimits
   personalFit?: Map<string, PersonalFit>
+  storyGroups?: string[][]
 }
 
 export type CuratorSelectionInput = CuratorSelectionBase & (
@@ -43,10 +46,31 @@ export function selectCuratorAiFeed(input: CuratorSelectionInput): RankedFeedIte
   const signals = sourceSignals
     .filter(signal => signal.atMs <= input.learningCutoffMs)
   const learned = input.personalFit ? { positive: [], negative: [] } : learnKeywordPreferences(signals, input.learningCutoffMs)
-  return selectAiFeed(input.articles.map(article => ({
-    article,
-    displayScore: calcAiBaseScore(article, input.scoreLimits)
-      * calcPreferenceMultiplier(article, input.preferences, learned)
-      * (input.personalFit?.get(article.id) === 'high' ? 1.3 : input.personalFit?.get(article.id) === 'low' ? 0.7 : 1),
-  })))
+  const now = Date.now()
+  const groupedMembers = new Map<string, NewsArticleWithId[]>()
+  const memberIds = new Set<string>()
+  for (const group of input.storyGroups ?? []) {
+    const ids = new Set(group)
+    const articles = input.articles.filter(article =>
+      ids.has(article.id) && !memberIds.has(article.id) && isAiFeedCandidate(article, now)
+    )
+    if (articles.length < 2) continue
+    const representative = pickStoryRepresentative(articles)
+    if (!representative) continue
+    groupedMembers.set(representative.id, articles.filter(article => article.id !== representative.id))
+    for (const article of articles) memberIds.add(article.id)
+  }
+
+  return selectAiFeed(input.articles.flatMap(article => {
+    const members = groupedMembers.get(article.id)
+    if (members === undefined && memberIds.has(article.id)) return []
+    const score = members ? calcAiStoryScore(article, members, input.scoreLimits) : calcAiBaseScore(article, input.scoreLimits)
+    const fit = input.personalFit?.get(article.id)
+    return [{
+      article,
+      members: members ?? [],
+      displayScore: score * calcPreferenceMultiplier(article, input.preferences, learned)
+        * (fit === 'high' ? 1.3 : fit === 'low' ? 0.7 : 1),
+    }]
+  }), now)
 }

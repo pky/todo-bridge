@@ -1,4 +1,8 @@
+import { AI_REACTION_SOURCES, type AiNewsReaction, type AiNewsRelated } from '@/types/news'
+
 export const AI_FEED_V2_MAX_BYTES = 1048576
+const MAX_REACTIONS = 10
+const MAX_RELATED = 5
 
 export interface AiFeedV2Article {
   id: string
@@ -11,6 +15,8 @@ export interface AiFeedV2Article {
   readReason?: string
   publisherDomain?: string
   tags?: string[]
+  reactions?: AiNewsReaction[]
+  related?: AiNewsRelated[]
 }
 
 export interface AiFeedV2 {
@@ -47,13 +53,23 @@ function isIsoTimestamp(value: unknown): value is string {
   return Number.isFinite(Date.parse(value))
 }
 
-function isHttpsUrl(value: unknown): value is string {
+export function isHttpsUrl(value: unknown): value is string {
   if (typeof value !== 'string' || !/^https:\/\//i.test(value) || /[\s\p{White_Space}\p{Cc}]/u.test(value)) return false
   try {
     return new URL(value).protocol === 'https:'
   } catch {
     return false
   }
+}
+
+function isReaction(value: unknown): value is AiNewsReaction {
+  return isRecord(value) && AI_REACTION_SOURCES.some(source => source === value.source)
+    && typeof value.count === 'number' && Number.isInteger(value.count) && value.count >= 0
+    && (!('url' in value) || isHttpsUrl(value.url))
+}
+
+function isRelated(value: unknown): value is AiNewsRelated {
+  return isRecord(value) && isNonemptyString(value.title) && isNonemptyString(value.sourceName) && isHttpsUrl(value.url)
 }
 
 function isArticle(value: unknown): value is AiFeedV2Article {
@@ -67,6 +83,10 @@ function isArticle(value: unknown): value is AiFeedV2Article {
     if (key in value && !isNonemptyString(value[key])) return false
   }
   if ('tags' in value && (!Array.isArray(value.tags) || !value.tags.every(isNonemptyString))) return false
+  if ('reactions' in value && (!Array.isArray(value.reactions) || value.reactions.length < 1
+    || value.reactions.length > MAX_REACTIONS || !value.reactions.every(isReaction))) return false
+  if ('related' in value && (!Array.isArray(value.related) || value.related.length < 1
+    || value.related.length > MAX_RELATED || !value.related.every(isRelated))) return false
   return true
 }
 

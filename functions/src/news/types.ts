@@ -1,5 +1,6 @@
 // functions/src/news/types.ts
 import * as admin from 'firebase-admin'
+import type { AiReactionSource } from './aiSelection'
 import type { MobileSummary } from './mobileClaudeClassifier'
 
 export type NewsTopic = 'ai' | 'mobile'
@@ -18,6 +19,13 @@ export type ActionType =
 
 export type ImportantLevel = 'urgent' | 'review' | 'reference'
 
+export interface AiReaction {
+  source: AiReactionSource
+  sourceName: string
+  count: number
+  url: string
+}
+
 export interface NewsArticle {
   title: string
   description: string       // 収集時の生テキスト（英語記事は判定・要約前のスコアリングに使用）
@@ -28,6 +36,8 @@ export interface NewsArticle {
   contentJa?: string        // 本文主要部分の日本語訳
   tags?: string[]           // 判定時に抽出したAI・技術系キーワードタグ
   url: string
+  discussionUrl?: string
+  extraReactions?: AiReaction[]
   normalizedUrl?: string
   thumbnailUrl: string | null
   topic: NewsTopic
@@ -70,6 +80,8 @@ export interface NewsArticle {
 export interface RawArticle {
   title: string
   url: string
+  discussionUrl?: string
+  extraReactions?: AiReaction[]
   description: string
   thumbnailUrl: string | null
   topic?: NewsTopic

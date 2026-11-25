@@ -20,6 +20,7 @@ import { createClaudeMessagesClient as createAiClaudeMessagesClient } from './cl
 import { createClaudeDailyRequestReservation } from './claudeDailyBudget'
 import { triageAiArticles, getAiTriageConfig, type TriageInput, type TriageResult } from './aiClaudeTriage'
 import { AI_REUSE_MAX_AGE_MS, AI_TRIAGE_VERSION, isSyntheticGithubDescription } from './aiSelection'
+import { getOwnArticleReaction } from './aiStories'
 import { getMobileActionItemKey, isMobileActionItemArticle, syncMobileActionItems, type MobileActionItem } from './mobileActionItems'
 import type { RawArticle, NewsArticle, NewsTopic, SourceTier } from './types'
 
@@ -94,13 +95,18 @@ function getApproximateIdentityKey(article: RawArticle): string {
 }
 
 export function deduplicateArticles(articles: RawArticle[]): RawArticle[] {
-  const seen = new Set<string>()
-  return articles.filter(a => {
-    const key = normalizeUrl(a.url)
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
+  const kept = new Map<string, RawArticle>()
+  for (const article of articles) {
+    const key = normalizeUrl(article.url)
+    const first = kept.get(key)
+    if (!first) {
+      kept.set(key, article)
+      continue
+    }
+    const reaction = getOwnArticleReaction(article)
+    if (reaction) kept.set(key, { ...first, extraReactions: [...first.extraReactions ?? [], reaction] })
+  }
+  return [...kept.values()]
 }
 
 export function getSourceTierRank(sourceTier?: SourceTier): number {
@@ -202,6 +208,8 @@ function buildAiBase(raw: RawArticle, today: string, fetchedAt: admin.firestore.
     topic: 'ai',
     source: raw.source,
     sourceName: raw.sourceName,
+    ...(raw.discussionUrl !== undefined ? { discussionUrl: raw.discussionUrl } : {}),
+    ...(raw.extraReactions !== undefined ? { extraReactions: raw.extraReactions } : {}),
     ...(raw.publisherDomain ? { publisherDomain: raw.publisherDomain } : {}),
     ...(typeof raw.generalSource === 'boolean' ? { generalSource: raw.generalSource } : {}),
     score: raw.score ?? null,
@@ -363,6 +371,8 @@ function restoreAiRawArticle(article: Omit<NewsArticle, 'publishedAt'> & { publi
     thumbnailUrl: article.thumbnailUrl ?? null,
     source: article.source,
     sourceName: article.sourceName,
+    ...(typeof article.discussionUrl === 'string' ? { discussionUrl: article.discussionUrl } : {}),
+    ...(Array.isArray(article.extraReactions) ? { extraReactions: article.extraReactions } : {}),
     ...(article.publisherDomain ? { publisherDomain: article.publisherDomain } : {}),
     ...(typeof article.generalSource === 'boolean' ? { generalSource: article.generalSource } : {}),
     score: article.score ?? null,

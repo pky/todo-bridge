@@ -40,6 +40,8 @@ function parsePost(post: unknown, sub: string): RawArticle | null {
   return {
     title,
     url: articleUrl,
+    ...(is_self !== true && typeof permalink === 'string' && permalink.startsWith('/')
+      ? { discussionUrl: `${REDDIT_API}${permalink}` } : {}),
     description,
     thumbnailUrl: typeof thumbnail === 'string' && thumbnail.startsWith('http') ? thumbnail : null,
     source: 'reddit',

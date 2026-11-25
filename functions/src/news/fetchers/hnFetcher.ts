@@ -25,6 +25,7 @@ export function selectHnStories(items: Array<HNItem | null>, limit: number): Raw
     articles.push({
       title: item.title,
       url: item.url,
+      discussionUrl: `https://news.ycombinator.com/item?id=${item.id}`,
       description: item.text || '',
       thumbnailUrl: null,
       source: 'hn',
