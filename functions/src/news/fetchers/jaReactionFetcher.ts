@@ -47,7 +47,8 @@ async function fetchReactionScores(
       console.error('[jaReaction] URL または反応数の形式が不正です', sourceName, invalidRows)
     }
   } catch (error) {
-    const reason = axios.isAxiosError(error) ? error.response?.status ?? error.code : undefined
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined
+    const reason = status ?? (error instanceof Error ? error.message : String(error))
     console.error('[jaReaction] 反応数の取得に失敗しました', sourceName, reason)
   }
   return scores

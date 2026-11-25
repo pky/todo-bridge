@@ -425,7 +425,7 @@ export async function runCollectArticles(): Promise<AiCollectResult> {
     collectSource('hn', onSuccess => fetchHNArticles(onSuccess)),
     collectSource('rss', async onSuccess => enrichJapaneseReactions(await fetchRSSArticles(10, onSuccess))),
     collectSource('github', onSuccess => fetchGitHubTrending(onSuccess)),
-    collectSource('reddit', onSuccess => fetchRedditArticles(20, onSuccess)),
+    collectSource('reddit', onSuccess => fetchRedditArticles(10, onSuccess)),
   ])
 
   console.log(`[collectArticles] Sources: hn=${hnArticles.length}, rss=${rssArticles.length}, github=${githubArticles.length}, reddit=${redditArticles.length}`)
