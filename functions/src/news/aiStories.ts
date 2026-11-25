@@ -1,4 +1,5 @@
 import type { AiReaction, NewsArticle } from './types'
+import { normalizeUrl } from './normalizeUrl'
 
 export const AI_REACTION_WEIGHT = 60
 export const AI_REACTION_NEUTRAL = 0.5
@@ -68,10 +69,23 @@ function getExtraReactions(value: unknown): AiReaction[] {
 }
 
 export function getArticleReactions(article: unknown): AiReaction[] {
-  if (!isRecord(article)) return []
-  const own = getOwnArticleReaction(article)
-  const extra = getExtraReactions(article.extraReactions)
-  return own ? [own, ...extra] : extra
+  return getUniqueArticleReactions([article])
+}
+
+export function getUniqueArticleReactions(articles: unknown[]): AiReaction[] {
+  const unique = new Map<string, AiReaction>()
+  for (const article of articles) {
+    if (!isRecord(article)) continue
+    const own = getOwnArticleReaction(article)
+    const reactions = getExtraReactions(article.extraReactions)
+    if (own) reactions.unshift(own)
+    for (const reaction of reactions) {
+      const key = `${reaction.source}:${normalizeUrl(reaction.url)}`
+      const previous = unique.get(key)
+      if (!previous || reaction.count > previous.count) unique.set(key, reaction)
+    }
+  }
+  return [...unique.values()]
 }
 
 type ReactionFields = Pick<NewsArticle, 'source' | 'sourceName' | 'score' | 'extraReactions'>
@@ -114,7 +128,7 @@ export function calcAiArticleValue(article: Partial<ArticleValueFields>): number
 }
 
 export function calcAiStoryScore(representative: Partial<ArticleValueFields>, members: unknown[], limits: AiScoreLimits): number {
-  const reactions = [representative, ...members].flatMap(getArticleReactions)
+  const reactions = getUniqueArticleReactions([representative, ...members])
   const strength = calcReactionStrengthSum(reactions, limits) ?? AI_REACTION_NEUTRAL
   return calcAiArticleValue(representative) + AI_REACTION_WEIGHT * strength
 }

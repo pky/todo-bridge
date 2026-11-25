@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { getArticleReactions, isAiReactionSource, type AiReactionSource } from '../aiStories'
+import { getUniqueArticleReactions, isAiReactionSource, type AiReactionSource } from '../aiStories'
 import { toWidgetArticleDto } from '../widgetDto'
 import type { FeedDoc } from '../widgetFeed'
 
@@ -139,18 +139,9 @@ export function computeFeedRevision(value: FeedContent): string {
 }
 
 function toFeedReactions(docs: unknown[]): AiFeedV2Reaction[] {
-  const seen = new Set<string>()
-  const reactions: AiFeedV2Reaction[] = []
-  for (const doc of docs) {
-    for (const { source, count, url } of getArticleReactions(doc)) {
-      const key = `${source}:${url}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      reactions.push({ source, count: Math.round(count), ...(isHttpsUrl(url) ? { url } : {}) })
-      if (reactions.length === MAX_REACTIONS) return reactions
-    }
-  }
-  return reactions
+  return getUniqueArticleReactions(docs).slice(0, MAX_REACTIONS).map(({ source, count, url }) => ({
+    source, count: Math.round(count), ...(isHttpsUrl(url) ? { url } : {}),
+  }))
 }
 
 function toRelatedLinks(members: unknown[]): AiFeedV2Related[] {
