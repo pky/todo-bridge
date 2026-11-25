@@ -238,10 +238,10 @@ test('フィード生成は判定待ち・旧版・low・exclude・rejected を�
   ])
   assert.deepEqual(new Set(idsOf(result.saved)), new Set(['high', 'normal', 'high-low-importance', 'normal-high-importance']))
   const scoreOf = id => result.saved.find(item => item.id === id).displayScore
-  assert.equal(scoreOf('high'), 110)
-  assert.equal(scoreOf('high-low-importance'), 100)
-  assert.equal(scoreOf('normal-high-importance'), 90)
-  assert.equal(scoreOf('normal'), 70)
+  assert.equal(scoreOf('high'), 130)
+  assert.equal(scoreOf('high-low-importance'), 120)
+  assert.equal(scoreOf('normal-high-importance'), 110)
+  assert.equal(scoreOf('normal'), 90)
   for (const id of ['pending-ai', 'pending-general', 'excluded', 'legacy', 'old-version', 'low-value', 'rejected']) {
     assert.ok(!result.sentIds.includes(id), `${id} を要約へ送っている`)
   }
@@ -470,10 +470,10 @@ test('保存した記事の共有側に feedEligible と、嗜好倍率を含ま
     rejectedBefore('rejected-one'),
   ], { preferences: { 'reader-demo': { keywords: [{ word: 'fictional', weight: 2 }] } } })
   const saved = result.saved.find(item => item.id === 'saved')
-  assert.equal(saved.displayScore, 130 * 2)
+  assert.equal(saved.displayScore, 150 * 2)
   const sharedArticle = result.shared('saved')
   assert.equal(sharedArticle.feedEligible, true)
-  assert.equal(sharedArticle.sharedScore, 130)
+  assert.equal(sharedArticle.sharedScore, 150)
   for (const id of ['not-saved', 'rejected-one']) {
     const other = result.shared(id)
     assert.ok(!other || other.feedEligible !== true, `${id} に feedEligible=true を書いている`)
