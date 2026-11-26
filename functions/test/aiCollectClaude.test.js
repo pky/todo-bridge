@@ -218,7 +218,7 @@ test('buildTriagedAiArticle は pending 記事にも raw の publisherDomain を
 test('保存する記事は raw の URL から求めた normalizedUrl を持つ(判定済み・pending・再利用とも)', () => {
   const raw = rawArticle({ url: 'https://www.example.com/post/?utm_source=feed&id=7' })
   const expected = collect.normalizeUrl(raw.url)
-  assert.equal(expected, 'www.example.com/post?id=7')
+  assert.equal(expected, 'example.com/post?id=7')
   assert.equal(buildTriagedAiArticle(raw, '', triageResult(), TODAY, fetchedAt).normalizedUrl, expected)
   assert.equal(buildTriagedAiArticle(raw, '', null, TODAY, fetchedAt).normalizedUrl, expected)
   const source = existingArticle({ normalizedUrl: 'stale.example.com/other' })
