@@ -2,6 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const { buildAiFeedV2, computeFeedRevision, validateAiFeedV2 } = require('../lib/news/v2/feedContract')
 const { AI_FEED_LATEST_PATH, aiFeedDailyPath, aiFeedPublishedPath, saveDailyIfAbsent, publishDaily, PreconditionFailedError } = require('../lib/news/v2/publishAiFeed')
+const { AI_FEED_V2_ARTICLE_KEYS, AI_FEED_V2_FEED_KEYS, toAiFeedV2Article } = require('../lib/news/v2/feedContract')
 
 const now = '2026-11-03T21:00:00.000Z'
 function daily(feedDate = '2026-11-04', title = '架空記事') {
@@ -202,4 +203,82 @@ test('UTF-8で1MiB超のfeedは公開せずlatestを維持する', async () => {
   await assert.rejects(publishDaily(bucket, value, now))
   assert.equal(bucket.writes.length, 0)
   assert.deepEqual(bucket.json(AI_FEED_LATEST_PATH), old.feed)
+})
+
+function dailyWithAllArticleFields() {
+  const member = {
+    id: 'fictional-member',
+    title: '架空の関連記事',
+    sourceName: '架空掲示板',
+    source: 'hn',
+    score: 12,
+    url: 'https://example.test/related',
+  }
+  const doc = {
+    id: 'fictional-article',
+    title: '架空の記事',
+    sourceName: '架空通信',
+    source: 'rss',
+    summaryJa: '架空の記事の概要',
+    publishedAt: { toDate: () => new Date(now) },
+    url: 'https://example.test/article',
+    thumbnailUrl: 'https://example.test/article.png',
+    readReason: '架空の利用例を確認できる',
+    publisherDomain: 'example.test',
+    tags: ['検証'],
+    storyMembers: [member],
+  }
+  const article = toAiFeedV2Article(doc)
+  assert.ok(article)
+  assert.equal(article.publishedAt, now)
+  assert.equal(article.url, doc.url)
+  assert.equal(article.imageUrl, doc.thumbnailUrl)
+  assert.equal(article.readReason, doc.readReason)
+  assert.equal(article.publisherDomain, doc.publisherDomain)
+  assert.deepEqual(article.tags, doc.tags)
+  assert.deepEqual(article.reactions, [{ source: member.source, count: member.score, url: member.url }])
+  assert.deepEqual(article.related, [{ title: member.title, sourceName: member.sourceName, url: member.url }])
+
+  const feedDate = '2026-11-04'
+  const feed = buildAiFeedV2({ feedDate, generatedAt: now, articles: [article] })
+  const { id, title, summary, url } = article
+  return { schemaVersion: 2, topic: 'ai', feedDate, learningCutoffAt: now, feed, actionArticles: [{ id, title, summary, url }] }
+}
+
+test('配信契約が公開する項目一覧は生成した記事とフィードの項目に一致する', () => {
+  assert.ok(AI_FEED_V2_ARTICLE_KEYS, 'feedContract が AI_FEED_V2_ARTICLE_KEYS を export していません')
+  assert.ok(AI_FEED_V2_FEED_KEYS, 'feedContract が AI_FEED_V2_FEED_KEYS を export していません')
+  const { feed } = dailyWithAllArticleFields()
+
+  for (const [value, allowedKeys] of [[feed.articles[0], AI_FEED_V2_ARTICLE_KEYS], [feed, AI_FEED_V2_FEED_KEYS]]) {
+    const keys = Object.keys(value)
+    for (const key of keys) assert.ok(allowedKeys.has(key), `公開項目一覧に ${key} がありません`)
+    assert.equal(allowedKeys.size, keys.length)
+  }
+  assert.equal(AI_FEED_V2_ARTICLE_KEYS.has('debugScore'), false)
+})
+
+test('生成した記事の全項目が日次原本とlatest.jsonに残る', async () => {
+  const bucket = fakeBucket()
+  const value = dailyWithAllArticleFields()
+  const expectedFeed = structuredClone(value.feed)
+
+  await saveDailyIfAbsent(bucket, value)
+  const saved = bucket.json(aiFeedDailyPath(value.feedDate))
+  assert.deepEqual(saved.feed, expectedFeed)
+
+  assert.deepEqual(await publishDaily(bucket, saved, now), { status: 'published' })
+  assert.deepEqual(bucket.json(AI_FEED_LATEST_PATH), expectedFeed)
+})
+
+test('全公開項目を持つ記事にdebugScoreを足すと日次原本の保存を拒否する', async () => {
+  const bucket = fakeBucket()
+  const value = dailyWithAllArticleFields()
+  value.feed.articles[0].debugScore = 12
+  value.feed.revision = computeFeedRevision(value.feed)
+
+  await assert.rejects(saveDailyIfAbsent(bucket, value), {
+    message: '配信契約を満たさないフィードです',
+  })
+  assert.equal(bucket.writes.length, 0)
 })

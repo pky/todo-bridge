@@ -1,4 +1,10 @@
-import { AI_FEED_V2_MAX_BYTES, validateAiFeedV2, type AiFeedV2 } from './feedContract'
+import {
+  AI_FEED_V2_ARTICLE_KEYS,
+  AI_FEED_V2_FEED_KEYS,
+  AI_FEED_V2_MAX_BYTES,
+  validateAiFeedV2,
+  type AiFeedV2,
+} from './feedContract'
 
 export interface FeedObject { data: Buffer; generation: string }
 export interface FeedBucket {
@@ -22,13 +28,11 @@ export interface AiFeedDaily {
 }
 export type PublishResult = { status: 'published' | 'already' | 'skipped-newer' | 'skipped-same-day-conflict' }
 const metadata = { contentType: 'application/json; charset=utf-8', cacheControl: 'private, no-store' }
-const feedKeys = new Set(['schemaVersion', 'topic', 'feedDate', 'generatedAt', 'revision', 'totalCount', 'articles'])
-const articleKeys = new Set(['id', 'title', 'sourceName', 'publishedAt', 'summary', 'url', 'imageUrl', 'readReason', 'publisherDomain', 'tags', 'reactions', 'related'])
 
 function feedBytes(feed: AiFeedV2): Buffer {
   if (!validateAiFeedV2(feed).ok
-    || Object.keys(feed).some(key => !feedKeys.has(key))
-    || feed.articles.some(article => Object.keys(article).some(key => !articleKeys.has(key)))) {
+    || Object.keys(feed).some(key => !AI_FEED_V2_FEED_KEYS.has(key))
+    || feed.articles.some(article => Object.keys(article).some(key => !AI_FEED_V2_ARTICLE_KEYS.has(key)))) {
     throw new Error('配信契約を満たさないフィードです')
   }
   const bytes = Buffer.from(JSON.stringify(feed), 'utf8')

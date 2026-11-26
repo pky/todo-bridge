@@ -38,6 +38,34 @@ export interface AiFeedV2 {
   articles: AiFeedV2Article[]
 }
 
+const articleKeyFlags = {
+  id: true,
+  title: true,
+  sourceName: true,
+  summary: true,
+  publishedAt: true,
+  url: true,
+  imageUrl: true,
+  readReason: true,
+  publisherDomain: true,
+  tags: true,
+  reactions: true,
+  related: true,
+} satisfies Record<keyof AiFeedV2Article, true>
+
+const feedKeyFlags = {
+  schemaVersion: true,
+  topic: true,
+  feedDate: true,
+  generatedAt: true,
+  revision: true,
+  totalCount: true,
+  articles: true,
+} satisfies Record<keyof AiFeedV2, true>
+
+export const AI_FEED_V2_ARTICLE_KEYS: ReadonlySet<string> = new Set(Object.keys(articleKeyFlags))
+export const AI_FEED_V2_FEED_KEYS: ReadonlySet<string> = new Set(Object.keys(feedKeyFlags))
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
