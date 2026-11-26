@@ -15,8 +15,12 @@ export function normalizeUrl(url: string): string {
     for (const key of trackingParams) {
       params.delete(key)
     }
+    params.sort()
 
-    const normalizedPath = `${u.hostname}${u.pathname}`.replace(/\/$/, '')
+    const hostname = u.hostname.replace(/^www\./, '')
+    // /index.html と /index.html/ は従来どおり同一視する。
+    const pathname = u.pathname.replace(/\/index\.html\/?$/, '')
+    const normalizedPath = `${hostname}${pathname}`.replace(/\/$/, '')
     const normalizedSearch = params.toString()
 
     return normalizedSearch
