@@ -1,5 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
+const { Timestamp } = require('firebase-admin/firestore')
 
 // 未実装のモジュールでファイル全体が落ちないよう、読み込み失敗は各テスト内の失敗として報告する。
 let selection = null
@@ -344,3 +345,91 @@ test('selectAiFeed は now を受け取り、期限切れの rejected を候補�
   ]
   assert.deepEqual(ids(selectAiFeed(items, NOW)), ['old-rejected', 'plain'])
 })
+
+test('selectAiFeed は同点の記事を公開日時の新しい順に並べる', () => {
+  const { selectAiFeed } = mod()
+  const items = [
+    { article: candidate('older', { publishedAt: Timestamp.fromMillis(NOW) }), displayScore: 90 },
+    { article: candidate('newer', { publishedAt: Timestamp.fromMillis(NOW + 1) }), displayScore: 90 },
+  ]
+  assert.deepEqual(ids(selectAiFeed(items)), ['newer', 'older'])
+})
+
+test('selectAiFeed は公開日時がない記事を同点の中で最後に並べる', () => {
+  const { selectAiFeed } = mod()
+  const items = [
+    { article: candidate('undated'), displayScore: 90 },
+    { article: candidate('dated', { publishedAt: Timestamp.fromMillis(0) }), displayScore: 90 },
+  ]
+  assert.deepEqual(ids(selectAiFeed(items)), ['dated', 'undated'])
+})
+
+test('selectAiFeed は新しい低得点の記事より古い高得点の記事を先に並べる', () => {
+  const { selectAiFeed } = mod()
+  const items = [
+    { article: candidate('newer-low', { publishedAt: Timestamp.fromMillis(NOW) }), displayScore: 89 },
+    { article: candidate('older-high', { publishedAt: Timestamp.fromMillis(NOW - DAY_MS) }), displayScore: 90 },
+  ]
+  assert.deepEqual(ids(selectAiFeed(items)), ['older-high', 'newer-low'])
+})
+
+test('selectAiFeed はソース別上限の境界で同点なら新しい記事を残す', () => {
+  const { selectAiFeed } = mod()
+  const hn = { source: 'hn', sourceName: 'Hacker News' }
+  const items = [
+    ...ranked('hn', 4, hn, 100),
+    { article: candidate('older-hn', { ...hn, publishedAt: Timestamp.fromMillis(NOW - DAY_MS) }), displayScore: 90 },
+    { article: candidate('newer-hn', { ...hn, publishedAt: Timestamp.fromMillis(NOW) }), displayScore: 90 },
+  ]
+  assert.deepEqual(ids(selectAiFeed(items)), ['hn-0', 'hn-1', 'hn-2', 'hn-3', 'newer-hn'])
+})
+
+test('selectAiFeed は全体20件の上限の境界で同点なら新しい記事を残す', () => {
+  const { selectAiFeed } = mod()
+  const japanese = { sourceName: 'Zenn ai' }
+  const items = [
+    ...ranked('hn', 5, { source: 'hn', sourceName: 'Hacker News' }, 140),
+    ...ranked('gh', 4, { source: 'github', sourceName: 'GitHub Trending' }, 130),
+    ...ranked('reddit', 3, { source: 'reddit', sourceName: 'r/fictional' }, 120),
+    ...ranked('jp', 7, japanese, 110),
+    { article: candidate('older-rss', { publishedAt: Timestamp.fromMillis(NOW - DAY_MS) }), displayScore: 90 },
+    { article: candidate('newer-jp', { ...japanese, publishedAt: Timestamp.fromMillis(NOW) }), displayScore: 90 },
+  ]
+  const selected = selectAiFeed(items)
+  assert.equal(selected.length, 20)
+  assert.deepEqual(ids(selected).slice(19), ['newer-jp'])
+})
+
+test('selectAiFeed は同点の ISO 8601 文字列と Timestamp を日時順に並べる', () => {
+  const { selectAiFeed } = mod()
+  const items = [
+    { article: candidate('older-iso', { publishedAt: '2026-10-28T08:00:00+09:00' }), displayScore: 90 },
+    { article: candidate('timestamp', { publishedAt: Timestamp.fromMillis(NOW) }), displayScore: 90 },
+    { article: candidate('newer-iso', { publishedAt: '2026-10-28T01:00:00Z' }), displayScore: 90 },
+  ]
+  assert.deepEqual(ids(selectAiFeed(items)), ['newer-iso', 'timestamp', 'older-iso'])
+})
+
+const unreadablePublicationDates = [
+  ['toMillis がないオブジェクト', {}],
+  ['日時に変換できない文字列', 'not-a-date'],
+  ['toMillis が例外を投げるオブジェクト', {
+    toMillis() {
+      throw new Error('公開日時を変換できません')
+    },
+  }],
+  ['toMillis が NaN を返すオブジェクト', { toMillis: () => NaN }],
+  ['toMillis が Infinity を返すオブジェクト', { toMillis: () => Infinity }],
+]
+
+for (const [description, publishedAt] of unreadablePublicationDates) {
+  test(`selectAiFeed は無効な公開日時を同点の中で最後に並べる（${description}）`, () => {
+    const { selectAiFeed } = mod()
+    const items = [
+      { article: candidate('invalid', { publishedAt }), displayScore: 90 },
+      { article: candidate('dated', { publishedAt: Timestamp.fromMillis(-1) }), displayScore: 90 },
+      { article: candidate('undated'), displayScore: 90 },
+    ]
+    assert.deepEqual(ids(selectAiFeed(items)), ['dated', 'invalid', 'undated'])
+  })
+}
