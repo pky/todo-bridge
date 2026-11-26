@@ -1,6 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { buildAiFeedV2, computeFeedRevision } = require('../lib/news/v2/feedContract')
+const { buildAiFeedV2, computeFeedRevision, validateAiFeedV2 } = require('../lib/news/v2/feedContract')
 const { AI_FEED_LATEST_PATH, aiFeedDailyPath, aiFeedPublishedPath, saveDailyIfAbsent, publishDaily, PreconditionFailedError } = require('../lib/news/v2/publishAiFeed')
 
 const now = '2026-11-03T21:00:00.000Z'
@@ -50,6 +50,35 @@ test('daily保存競合では最初の原本を返し、二つ目で上書きし
   bucket.beforeWrite = async path => { if (path === aiFeedDailyPath(first.feedDate)) { bucket.beforeWrite = null; bucket.seed(path, first) } }
   assert.deepEqual(await saveDailyIfAbsent(bucket, second), first)
   assert.deepEqual(bucket.json(aiFeedDailyPath(first.feedDate)), first)
+  assert.equal(bucket.writes.length, 0)
+})
+
+test('日次原本を保存すると記事のreactionsとrelatedがJSONに残る', async () => {
+  const bucket = fakeBucket()
+  const value = daily()
+  const article = value.feed.articles[0]
+  article.reactions = [{ source: 'hn', count: 12, url: 'https://example.com/discussion' }]
+  article.related = [{ title: '架空の関連記事', sourceName: '架空通信', url: 'https://example.com/related' }]
+  value.feed.revision = computeFeedRevision(value.feed)
+  assert.equal(validateAiFeedV2(value.feed).ok, true)
+  const expectedArticle = structuredClone(article)
+
+  await saveDailyIfAbsent(bucket, value)
+
+  const savedArticle = bucket.json(aiFeedDailyPath(value.feedDate)).feed.articles[0]
+  assert.deepEqual(savedArticle.reactions, expectedArticle.reactions)
+  assert.deepEqual(savedArticle.related, expectedArticle.related)
+})
+
+test('記事に契約外のdebugScoreがある日次原本は保存を拒否する', async () => {
+  const bucket = fakeBucket()
+  const value = daily()
+  value.feed.articles[0].debugScore = 12
+  value.feed.revision = computeFeedRevision(value.feed)
+
+  await assert.rejects(saveDailyIfAbsent(bucket, value), {
+    message: '配信契約を満たさないフィードです',
+  })
   assert.equal(bucket.writes.length, 0)
 })
 
