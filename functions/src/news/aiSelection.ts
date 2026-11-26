@@ -89,6 +89,27 @@ export function calcAiBaseScore(
   return score + AI_REACTION_WEIGHT * strength
 }
 
+function getPublishedAtMillis(value: unknown): number | null {
+  if (typeof value === 'string') {
+    const parts = /^(\d{4}-\d{2}-\d{2})T(?:[01]\d|2[0-3]):\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.exec(value)
+    if (!parts) return null
+    const millis = Date.parse(value)
+    if (!Number.isFinite(millis)) return null
+
+    const day = new Date(`${parts[1]}T00:00:00Z`)
+    return Number.isFinite(day.getTime()) && day.toISOString().slice(0, 10) === parts[1] ? millis : null
+  }
+
+  if (value === null || typeof value !== 'object') return null
+  try {
+    if (!('toMillis' in value) || typeof value.toMillis !== 'function') return null
+    const millis: unknown = value.toMillis()
+    return typeof millis === 'number' && Number.isFinite(millis) ? millis : null
+  } catch {
+    return null
+  }
+}
+
 export function selectAiFeed<T extends {
   article: Pick<NewsArticle, 'source' | 'sourceName'> & Partial<TriageFields> & Partial<Pick<NewsArticle, 'publishedAt'>>
   displayScore: number
@@ -96,17 +117,17 @@ export function selectAiFeed<T extends {
   ranked: T[],
   now: number = Date.now()
 ): T[] {
-  const sorted = [...ranked].sort((a, b) => {
-    if (a.displayScore !== b.displayScore) return b.displayScore - a.displayScore
-    const aPublishedAt = a.article.publishedAt
-    const bPublishedAt = b.article.publishedAt
-    if (!aPublishedAt) return bPublishedAt ? 1 : 0
-    if (!bPublishedAt) return -1
-    return bPublishedAt.toMillis() - aPublishedAt.toMillis()
-  })
+  const sorted = ranked
+    .map(item => ({ item, publishedAtMillis: getPublishedAtMillis(item.article.publishedAt) }))
+    .sort((a, b) => {
+      if (a.item.displayScore !== b.item.displayScore) return b.item.displayScore - a.item.displayScore
+      if (a.publishedAtMillis === null) return b.publishedAtMillis === null ? 0 : 1
+      if (b.publishedAtMillis === null) return -1
+      return b.publishedAtMillis - a.publishedAtMillis
+    })
   const counts: Record<AiSourceBucket, number> = { hn: 0, github: 0, reddit: 0, japanese: 0, otherRss: 0 }
   const selected: T[] = []
-  for (const item of sorted) {
+  for (const { item } of sorted) {
     if (selected.length >= AI_FEED_MAX_ARTICLES) break
     if (!isAiFeedCandidate(item.article, now)) continue
     const bucket = getAiSourceBucket(item.article)
