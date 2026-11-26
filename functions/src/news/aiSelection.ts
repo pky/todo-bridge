@@ -89,13 +89,24 @@ export function calcAiBaseScore(
   return score + AI_REACTION_WEIGHT * strength
 }
 
-export function selectAiFeed<T extends { article: Pick<NewsArticle, 'source' | 'sourceName'> & Partial<TriageFields>; displayScore: number }>(
+export function selectAiFeed<T extends {
+  article: Pick<NewsArticle, 'source' | 'sourceName'> & Partial<TriageFields> & Partial<Pick<NewsArticle, 'publishedAt'>>
+  displayScore: number
+}>(
   ranked: T[],
   now: number = Date.now()
 ): T[] {
+  const sorted = [...ranked].sort((a, b) => {
+    if (a.displayScore !== b.displayScore) return b.displayScore - a.displayScore
+    const aPublishedAt = a.article.publishedAt
+    const bPublishedAt = b.article.publishedAt
+    if (!aPublishedAt) return bPublishedAt ? 1 : 0
+    if (!bPublishedAt) return -1
+    return bPublishedAt.toMillis() - aPublishedAt.toMillis()
+  })
   const counts: Record<AiSourceBucket, number> = { hn: 0, github: 0, reddit: 0, japanese: 0, otherRss: 0 }
   const selected: T[] = []
-  for (const item of [...ranked].sort((a, b) => b.displayScore - a.displayScore)) {
+  for (const item of sorted) {
     if (selected.length >= AI_FEED_MAX_ARTICLES) break
     if (!isAiFeedCandidate(item.article, now)) continue
     const bucket = getAiSourceBucket(item.article)
