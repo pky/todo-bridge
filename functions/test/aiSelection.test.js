@@ -399,3 +399,37 @@ test('selectAiFeed は全体20件の上限の境界で同点なら新しい記�
   assert.equal(selected.length, 20)
   assert.deepEqual(ids(selected).slice(19), ['newer-jp'])
 })
+
+test('selectAiFeed は同点の ISO 8601 文字列と Timestamp を日時順に並べる', () => {
+  const { selectAiFeed } = mod()
+  const items = [
+    { article: candidate('older-iso', { publishedAt: '2026-10-28T08:00:00+09:00' }), displayScore: 90 },
+    { article: candidate('timestamp', { publishedAt: Timestamp.fromMillis(NOW) }), displayScore: 90 },
+    { article: candidate('newer-iso', { publishedAt: '2026-10-28T01:00:00Z' }), displayScore: 90 },
+  ]
+  assert.deepEqual(ids(selectAiFeed(items)), ['newer-iso', 'timestamp', 'older-iso'])
+})
+
+const unreadablePublicationDates = [
+  ['toMillis がないオブジェクト', {}],
+  ['日時に変換できない文字列', 'not-a-date'],
+  ['toMillis が例外を投げるオブジェクト', {
+    toMillis() {
+      throw new Error('公開日時を変換できません')
+    },
+  }],
+  ['toMillis が NaN を返すオブジェクト', { toMillis: () => NaN }],
+  ['toMillis が Infinity を返すオブジェクト', { toMillis: () => Infinity }],
+]
+
+for (const [description, publishedAt] of unreadablePublicationDates) {
+  test(`selectAiFeed は無効な公開日時を同点の中で最後に並べる（${description}）`, () => {
+    const { selectAiFeed } = mod()
+    const items = [
+      { article: candidate('invalid', { publishedAt }), displayScore: 90 },
+      { article: candidate('dated', { publishedAt: Timestamp.fromMillis(-1) }), displayScore: 90 },
+      { article: candidate('undated'), displayScore: 90 },
+    ]
+    assert.deepEqual(ids(selectAiFeed(items)), ['dated', 'invalid', 'undated'])
+  })
+}
