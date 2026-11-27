@@ -191,7 +191,7 @@ function registerCalendar(suggestion: DocumentSuggestion): void {
       </div>
     </div>
 
-    <p v-if="loading" class="mt-3 text-sm text-fg-subtle">候補を読み込み中...</p>
+    <p v-if="loading" class="mt-3 text-sm text-fg-subtle">候補を読み込み中…</p>
     <p v-else-if="error" class="mt-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger-strong">{{ error }}</p>
     <p v-else-if="actionableSuggestions.length === 0" class="mt-3 text-sm text-fg-subtle">Todoや予定にできる候補は見つかりませんでした。</p>
 
