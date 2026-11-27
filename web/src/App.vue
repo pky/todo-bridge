@@ -62,7 +62,7 @@ onMounted(async () => {
 
 <template>
   <div v-if="authStore.loading" class="min-h-screen flex items-center justify-center">
-    <div class="text-fg-subtle">読み込み中...</div>
+    <div class="text-fg-subtle">読み込み中…</div>
   </div>
   <router-view v-else-if="authStore.accessMode !== 'newsViewer' || route.name === 'news-ai'" />
 
