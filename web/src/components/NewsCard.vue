@@ -115,11 +115,40 @@ const mobileBadges = computed(() => {
   return badges
 })
 
+const GITHUB_RESERVED_PATHS = new Set([
+  'about',
+  'apps',
+  'collections',
+  'contact',
+  'customer-stories',
+  'enterprise',
+  'events',
+  'explore',
+  'features',
+  'login',
+  'marketplace',
+  'new',
+  'notifications',
+  'organizations',
+  'orgs',
+  'pricing',
+  'search',
+  'security',
+  'settings',
+  'signup',
+  'site',
+  'sponsors',
+  'topics',
+  'trending',
+  'users',
+])
+
 const githubRepository = computed(() => {
   const match = /^https:\/\/(?:www\.)?github\.com\/([a-z0-9_.-]+)\/([a-z0-9_.-]+)(?=[/?#]|$)/i.exec(props.article.url)
   const owner = match?.[1]
   const repo = match?.[2]
   if (!owner || !repo || [owner, repo].some(segment => segment === '.' || segment === '..')) return null
+  if (GITHUB_RESERVED_PATHS.has(owner.toLowerCase())) return null
 
   return { owner, repo }
 })
