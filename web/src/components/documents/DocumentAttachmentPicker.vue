@@ -104,7 +104,7 @@ async function handleFileSelection(event: Event): Promise<void> {
       />
 
       <p v-if="uploadError" class="mt-2 rounded bg-danger-soft px-2 py-1.5 text-xs text-danger-strong">{{ uploadError }}</p>
-      <p v-if="documentsStore.loading" class="mt-3 text-xs text-fg-subtle">書類を読み込み中...</p>
+      <p v-if="documentsStore.loading" class="mt-3 text-xs text-fg-subtle">書類を読み込み中…</p>
       <p v-else-if="availableDocuments.length === 0" class="mt-3 text-xs text-fg-subtle">選択できる書類がありません。</p>
       <div v-else class="mt-3 max-h-64 space-y-1 overflow-y-auto">
         <label
