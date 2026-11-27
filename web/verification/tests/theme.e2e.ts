@@ -68,3 +68,57 @@ test('アプリのJavaScriptを遮断しても描画前に保存済みダーク�
   expect(await browser.evaluate(() => document.querySelector('#app')?.childElementCount ?? null)).toBe(0)
   await app.screenshot('theme-before-app')
 })
+
+test('設定画面で選んだセピアの配色と選択状態を再読み込み後も維持する', async ({ app, screen, browser, demoUser }) => {
+  await browser.addInitScript(({ uid }) => {
+    localStorage.setItem(`rertm-personal-space-migrated-${uid}`, 'true')
+  }, { uid: demoUser.uid })
+  await browser.route(`${functionsOrigin}/**/getGoogleCalendarServiceConfig`, async (route) => {
+    await route.fulfill({
+      json: { data: { serviceAccountEmail: '' } },
+      headers: {
+        'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'content-type,authorization',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      },
+    })
+  })
+  await app.open('/settings')
+  const html = browser.locator('html')
+  const group = screen.getByTestId('settings-account').getByRole('radiogroup', 'テーマ')
+  const sepia = group.getByRole('radio', 'セピア', { exact: true })
+  const background = () => browser.evaluate(() => getComputedStyle(document.body).backgroundColor)
+  const savedTheme = () => browser.evaluate(() => localStorage.getItem('rertm-theme'))
+  await expect(html).toHaveAttribute('data-theme', 'light')
+  await expect(group.getByRole('radio', 'ライト', { exact: true })).toHaveAttribute('aria-checked', 'true')
+  const lightBackground = await background()
+
+  await sepia.tap()
+  await expect(html).toHaveAttribute('data-theme', 'sepia')
+  await expect(sepia).toHaveAttribute('aria-checked', 'true')
+  await expect.poll(background).not.toBe(lightBackground)
+  await expect.poll(background).not.toBe('rgb(22, 22, 30)')
+  expect(await savedTheme()).toBe('sepia')
+
+  await browser.reload()
+  await expect(html).toHaveAttribute('data-theme', 'sepia')
+  await expect(sepia).toHaveAttribute('aria-checked', 'true')
+  expect(await savedTheme()).toBe('sepia')
+})
+
+test('端末がダークでアプリのJavaScriptを遮断した状態でも描画前に保存済みセピアを適用する', async ({ app, browser, demoUser }) => {
+  expect(demoUser.uid).toBeTruthy()
+  await browser.emulateMedia({ colorScheme: 'dark' })
+  await browser.addInitScript(() => { localStorage.setItem('rertm-theme', 'sepia') })
+  let blockedScripts = 0
+  await browser.route('**/*', async (route) => {
+    if (/\.(?:[cm]?js|ts)$/.test(new URL(route.request.url).pathname)) {
+      blockedScripts += 1
+      await route.abort()
+    } else await route.fallback()
+  })
+
+  await app.open('/settings')
+  await expect(browser.locator('html')).toHaveAttribute('data-theme', 'sepia')
+  expect(blockedScripts).toBeGreaterThan(0)
+  expect(await browser.evaluate(() => document.querySelector('#app')?.childElementCount ?? null)).toBe(0)
+})

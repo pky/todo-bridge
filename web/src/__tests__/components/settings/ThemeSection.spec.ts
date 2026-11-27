@@ -35,11 +35,11 @@ async function render(preference = 'light') {
 }
 
 describe('表示テーマの選択', () => {
-  it('見出しとテーマのグループに3つのradioを順番どおり表示する', async () => {
+  it('見出しとテーマのグループに4つのradioを順番どおり表示する', async () => {
     const view = await render()
     expect(view.findAll('h1,h2,h3,h4,h5,h6').map((node) => node.text())).toContain('表示')
     const group = view.get('[role="radiogroup"][aria-label="テーマ"]')
-    expect(group.findAll('[role="radio"]').map((node) => node.text())).toEqual(['ライト', 'ダーク', '端末に合わせる'])
+    expect(group.findAll('[role="radio"]').map((node) => node.text())).toEqual(['ライト', 'ダーク', 'セピア', '端末に合わせる'])
   })
 
   it.each([['light', 'ライト'], ['dark', 'ダーク'], ['system', '端末に合わせる']])('現在値 %s だけを選択中にする', async (preference, label) => {
@@ -60,6 +60,52 @@ describe('表示テーマの選択', () => {
       expect(document.documentElement.dataset.theme).toBe(resolved)
       expect(localStorage.getItem('rertm-theme')).toBe(preference)
       expect(view.findAll('[role="radio"][aria-checked="true"]').map((node) => node.text())).toEqual([label])
+    }
+  })
+
+  it('現在値が sepia ならセピアだけを選択中にする', async () => {
+    const view = await render('sepia')
+    const radios = view.findAll('[role="radio"]')
+    expect(radios.filter((node) => node.attributes('aria-checked') === 'true').map((node) => node.text())).toEqual(['セピア'])
+    expect(radios.filter((node) => node.text() !== 'セピア').every((node) => node.attributes('aria-checked') === 'false')).toBe(true)
+  })
+
+  it('セピアをクリックすると画面と選択状態が切り替わり端末に保存する', async () => {
+    const view = await render('dark')
+    const sepia = view.findAll('[role="radio"]').find((node) => node.text() === 'セピア')
+    expect(sepia, 'セピアの選択肢').toBeDefined()
+    await sepia!.trigger('click')
+    expect(document.documentElement.dataset.theme).toBe('sepia')
+    expect(localStorage.getItem('rertm-theme')).toBe('sepia')
+    expect(view.findAll('[role="radio"][aria-checked="true"]').map((node) => node.text())).toEqual(['セピア'])
+  })
+
+  it.each(['ArrowRight', 'ArrowDown'])('%s でダークからセピアを経由して端末に合わせるへ進む', async (key) => {
+    const view = await render('dark')
+    document.body.append(view.element)
+    const selected = () => view.get('[role="radio"][aria-checked="true"]')
+
+    for (const label of ['セピア', '端末に合わせる']) {
+      await selected().trigger('keydown', { key })
+      expect(selected().text()).toBe(label)
+      expect(document.activeElement).toBe(selected().element)
+    }
+  })
+
+  it.each([
+    ['ArrowRight', 'ArrowLeft'], ['ArrowDown', 'ArrowUp'],
+  ])('Endで末尾に移動し、%s と %s で両端を循環してセピアへ戻れる', async (forward, back) => {
+    const view = await render()
+    document.body.append(view.element)
+    const selected = () => view.get('[role="radio"][aria-checked="true"]')
+
+    for (const [key, label] of [
+      ['End', '端末に合わせる'], [forward, 'ライト'],
+      [back, '端末に合わせる'], [back, 'セピア'],
+    ]) {
+      await selected().trigger('keydown', { key })
+      expect(selected().text()).toBe(label)
+      expect(document.activeElement).toBe(selected().element)
     }
   })
 })

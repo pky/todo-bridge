@@ -38,6 +38,14 @@ describe('アプリ読み込み前のテーマ初期化', () => {
     expect(document.documentElement.dataset.theme).toBe(expected)
   })
 
+  it.each([true, false])('保存値が sepia なら端末dark=%s でも描画前にセピアを適用する', (dark) => {
+    localStorage.setItem('rertm-theme', 'sepia')
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: dark })))
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    new Function(initScript())()
+    expect(document.documentElement.dataset.theme).toBe('sepia')
+  })
+
   it('localStorageが読めなくても例外を出さずライトを適用する', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('読み取り不可') })
     vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true })))
