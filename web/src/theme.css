@@ -138,6 +138,89 @@
   --color-deco-teal: var(--tn-teal);
 }
 
+:root[data-theme="sepia"] {
+  color-scheme: light;
+  --sepia-canvas: #f3e8d5;
+  --sepia-surface: #fff8ea;
+  --sepia-surface-muted: #fbf2e1;
+  --sepia-surface-alt: #f4e9d7;
+  --sepia-surface-strong: #eadbc3;
+  --sepia-surface-stronger: #deccb1;
+  --sepia-line: #e0d0b6;
+  --sepia-line-strong: #c9b395;
+  --sepia-ink: #332419;
+  --sepia-ink-secondary: #523c2c;
+  --sepia-ink-muted: #654e3c;
+  --sepia-ink-subtle: #6d5541;
+  --sepia-ink-faint: #755e49;
+  --sepia-on-solid: #fffaf0;
+  --sepia-on-solid-muted: #f4ddbd;
+  --sepia-accent: #8e492c;
+  --sepia-danger: #a23e38;
+  --sepia-success: #4d682d;
+  --sepia-warning: #865d17;
+  --sepia-special: #7e4c72;
+  --sepia-orange: #ac5e30;
+  --sepia-blue: #49697f;
+  --sepia-cyan: #537e86;
+  --sepia-emerald: #57764b;
+  --sepia-teal: #446d64;
+
+  --color-canvas: var(--sepia-canvas);
+  --color-surface: var(--sepia-surface);
+  --color-surface-muted: var(--sepia-surface-muted);
+  --color-surface-alt: var(--sepia-surface-alt);
+  --color-surface-strong: var(--sepia-surface-strong);
+  --color-surface-stronger: var(--sepia-surface-stronger);
+  --color-surface-hover: var(--sepia-surface-muted);
+  --color-inverse: var(--sepia-ink-secondary);
+  --color-inverse-strong: var(--sepia-ink);
+  --color-scrim: var(--sepia-ink);
+  --color-line-subtle: var(--sepia-surface-strong);
+  --color-line: var(--sepia-line);
+  --color-line-strong: var(--sepia-line-strong);
+  --color-fg: var(--sepia-ink);
+  --color-fg-secondary: var(--sepia-ink-secondary);
+  --color-fg-muted: var(--sepia-ink-muted);
+  --color-fg-subtle: var(--sepia-ink-subtle);
+  --color-fg-faint: var(--sepia-ink-faint);
+  --color-on-solid: var(--sepia-on-solid);
+  --color-on-solid-muted: var(--sepia-on-solid-muted);
+  --color-accent: var(--sepia-accent);
+  --color-accent-hover: color-mix(in oklab, var(--sepia-accent) 75%, var(--sepia-ink));
+  --color-accent-strong: color-mix(in oklab, var(--sepia-accent) 60%, var(--sepia-ink));
+  --color-accent-soft: color-mix(in oklab, var(--sepia-accent) 10%, var(--sepia-surface));
+  --color-accent-soft-strong: color-mix(in oklab, var(--sepia-accent) 18%, var(--sepia-surface));
+  --color-accent-line: color-mix(in oklab, var(--sepia-accent) 36%, var(--sepia-surface));
+  --color-danger: var(--sepia-danger);
+  --color-danger-faint: color-mix(in oklab, var(--sepia-danger) 70%, var(--sepia-surface));
+  --color-danger-strong: color-mix(in oklab, var(--sepia-danger) 65%, var(--sepia-ink));
+  --color-danger-soft: color-mix(in oklab, var(--sepia-danger) 10%, var(--sepia-surface));
+  --color-danger-soft-strong: color-mix(in oklab, var(--sepia-danger) 18%, var(--sepia-surface));
+  --color-danger-line: color-mix(in oklab, var(--sepia-danger) 36%, var(--sepia-surface));
+  --color-success: var(--sepia-success);
+  --color-success-hover: color-mix(in oklab, var(--sepia-success) 75%, var(--sepia-ink));
+  --color-success-strong: color-mix(in oklab, var(--sepia-success) 65%, var(--sepia-ink));
+  --color-success-soft: color-mix(in oklab, var(--sepia-success) 10%, var(--sepia-surface));
+  --color-success-soft-strong: color-mix(in oklab, var(--sepia-success) 18%, var(--sepia-surface));
+  --color-success-line: color-mix(in oklab, var(--sepia-success) 36%, var(--sepia-surface));
+  --color-warning: var(--sepia-warning);
+  --color-warning-hover: color-mix(in oklab, var(--sepia-warning) 75%, var(--sepia-ink));
+  --color-warning-strong: color-mix(in oklab, var(--sepia-warning) 65%, var(--sepia-ink));
+  --color-warning-soft: color-mix(in oklab, var(--sepia-warning) 10%, var(--sepia-surface));
+  --color-warning-soft-strong: color-mix(in oklab, var(--sepia-warning) 18%, var(--sepia-surface));
+  --color-warning-line: color-mix(in oklab, var(--sepia-warning) 36%, var(--sepia-surface));
+  --color-special: var(--sepia-special);
+  --color-special-hover: color-mix(in oklab, var(--sepia-special) 75%, var(--sepia-ink));
+  --color-priority-high: var(--sepia-danger);
+  --color-priority-medium: var(--sepia-orange);
+  --color-priority-low: var(--sepia-blue);
+  --color-deco-sky: var(--sepia-blue);
+  --color-deco-cyan: var(--sepia-cyan);
+  --color-deco-emerald: var(--sepia-emerald);
+  --color-deco-teal: var(--sepia-teal);
+}
+
 @layer base {
   body {
     background-color: var(--color-canvas);
