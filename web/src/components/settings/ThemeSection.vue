@@ -5,6 +5,7 @@ const { preference, setPreference } = useTheme()
 const options: { value: ThemePreference; label: string }[] = [
   { value: 'light', label: 'ライト' },
   { value: 'dark', label: 'ダーク' },
+  { value: 'sepia', label: 'セピア' },
   { value: 'system', label: '端末に合わせる' },
 ]
 

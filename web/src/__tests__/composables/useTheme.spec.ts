@@ -64,6 +64,62 @@ describe('テーマの状態と端末への保存', () => {
     expect(document.documentElement.dataset.theme).toBe(preference)
   })
 
+  it.each([true, false])('保存したセピアを起動時に反映する（端末dark=%s）', async (dark) => {
+    prefersDark = dark
+    localStorage.setItem('rertm-theme', 'sepia')
+    const theme = await start()
+    expect(theme.preference.value).toBe('sepia')
+    expect(theme.resolvedTheme.value).toBe('sepia')
+    expect(document.documentElement.dataset.theme).toBe('sepia')
+  })
+
+  it('ダークからセピアに切り替えて保存し、metaと次回起動に反映する', async () => {
+    localStorage.setItem('rertm-theme', 'dark')
+    const theme = await start()
+    const meta = document.querySelector('meta[name="theme-color"]')
+    expect(meta?.getAttribute('content')).toBe('#16161e')
+
+    theme.setPreference('sepia')
+    expect(theme.preference.value).toBe('sepia')
+    expect(theme.resolvedTheme.value).toBe('sepia')
+    expect(document.documentElement.dataset.theme).toBe('sepia')
+    expect(localStorage.getItem(theme.key)).toBe('sepia')
+    expect(meta?.getAttribute('content')).toBe('#3b82f6')
+
+    vi.resetModules()
+    delete document.documentElement.dataset.theme
+    const restarted = await start()
+    expect(restarted.resolvedTheme.value).toBe('sepia')
+    expect(document.documentElement.dataset.theme).toBe('sepia')
+  })
+
+  it('保存済みセピアは端末設定をダークとライトに切り替えても維持する', async () => {
+    localStorage.setItem('rertm-theme', 'sepia')
+    const theme = await start()
+
+    for (const dark of [true, false]) {
+      changeMedia(dark)
+      expect(theme.preference.value).toBe('sepia')
+      expect(theme.resolvedTheme.value).toBe('sepia')
+      expect(document.documentElement.dataset.theme).toBe('sepia')
+      expect(localStorage.getItem(theme.key)).toBe('sepia')
+    }
+  })
+
+  it('別タブのセピア選択に追従し、大文字の保存値はライトに戻す', async () => {
+    prefersDark = true
+    localStorage.setItem('rertm-theme', 'SEPIA')
+    const theme = await start()
+    expect(theme.preference.value).toBe('light')
+    expect(document.documentElement.dataset.theme).toBe('light')
+
+    localStorage.setItem(theme.key, 'sepia')
+    window.dispatchEvent(new StorageEvent('storage', { key: theme.key, newValue: 'sepia', oldValue: 'SEPIA', storageArea: localStorage }))
+    expect(theme.preference.value).toBe('sepia')
+    expect(theme.resolvedTheme.value).toBe('sepia')
+    expect(document.documentElement.dataset.theme).toBe('sepia')
+  })
+
   it('ダークへの変更を即座に反映して保存し、metaも切り替える', async () => {
     const theme = await start()
     theme.setPreference('dark')

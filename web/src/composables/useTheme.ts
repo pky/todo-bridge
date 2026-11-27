@@ -1,18 +1,19 @@
 import { computed, readonly, ref } from 'vue'
 
-export type ThemePreference = 'light' | 'dark' | 'system'
+type ResolvedTheme = 'light' | 'dark' | 'sepia'
+export type ThemePreference = ResolvedTheme | 'system'
 export const THEME_STORAGE_KEY = 'rertm-theme'
 
 const preference = ref<ThemePreference>('light')
 const prefersDark = ref(false)
-const resolvedTheme = computed<'light' | 'dark'>(() =>
+const resolvedTheme = computed<ResolvedTheme>(() =>
   preference.value === 'system' ? (prefersDark.value ? 'dark' : 'light') : preference.value,
 )
 let initialized = false
 let media: MediaQueryList | undefined
 
 function parsePreference(value: string | null): ThemePreference {
-  return value === 'dark' || value === 'system' ? value : 'light'
+  return value === 'dark' || value === 'sepia' || value === 'system' ? value : 'light'
 }
 
 function applyTheme(): void {

@@ -7,7 +7,9 @@
         let theme = 'light'
         try {
           const preference = localStorage.getItem('rertm-theme')
-          if (preference === 'dark' || (preference === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+          if (preference === 'dark' || preference === 'sepia') {
+            theme = preference
+          } else if (preference === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
             theme = 'dark'
           }
         } catch {

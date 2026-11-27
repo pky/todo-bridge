@@ -72,6 +72,32 @@ describe('色トークンの一元管理', () => {
     expect(requiredTokens.filter((token) => !dark.has(token))).toEqual([])
   })
 
+  it('セピアはライトの全色トークンを定義し、背景と文字色を変える', () => {
+    const css = postcss.parse(readFileSync(resolve(src, 'theme.css'), 'utf8'))
+    const light = new Map<string, string>()
+    const sepia = new Map<string, string>()
+    let colorScheme: string | undefined
+
+    css.walkAtRules('theme', (rule) => {
+      rule.walkDecls(/^--color-/, (decl) => {
+        if (decl.prop !== '--color-*' && decl.value.trim()) light.set(decl.prop, decl.value.trim())
+      })
+    })
+    css.walkRules((rule) => {
+      if (!rule.selectors.some((selector) => /^:root\[data-theme\s*=\s*["']?sepia["']?\]$/.test(selector.trim()))) return
+      rule.walkDecls((decl) => {
+        if (decl.prop.startsWith('--color-') && decl.value.trim()) sepia.set(decl.prop, decl.value.trim())
+        if (decl.prop === 'color-scheme') colorScheme = decl.value.trim()
+      })
+    })
+
+    expect([...sepia.keys()].sort(), 'セピアで定義した色トークン').toEqual([...light.keys()].sort())
+    expect(colorScheme).toBe('light')
+    for (const token of ['--color-canvas', '--color-surface', '--color-fg']) {
+      expect(sepia.get(token), token).not.toBe(light.get(token))
+    }
+  })
+
   it('画面で使用するトークン系ユーティリティに未定義の色がない', () => {
     const { light } = tokenDefinitions()
     const pattern = new RegExp(`(?<![\\w-])${utilities}-(${tokenFamilies})(?![\\w-])`, 'g')
