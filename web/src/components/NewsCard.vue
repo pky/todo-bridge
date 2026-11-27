@@ -1,6 +1,6 @@
 <!-- web/src/components/NewsCard.vue -->
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import AiNewsStoryDetails from '@/components/AiNewsStoryDetails.vue'
 import MobileSummary from '@/components/MobileSummary.vue'
 import type { NewsArticle } from '@/types'
@@ -22,7 +22,6 @@ const emit = defineEmits<{
 const readLaterLabel = computed(() => ({ idle: 'あとで読む', sending: '追加中…', added: '追加済み', unknown: '未確認・再試行' })[props.readLaterState ?? 'idle'])
 const readLaterDisabled = computed(() => props.readLaterState === 'sending' || props.readLaterState === 'added')
 
-const imageLoadFailed = ref(false)
 const displayedSource = computed(() => {
   if (props.article.publisherDomain) return props.article.publisherDomain
   if (['はてなブックマーク IT', 'Menthas', 'Hacker News'].includes(props.article.sourceName)) {
@@ -116,16 +115,48 @@ const mobileBadges = computed(() => {
   return badges
 })
 
-const thumbnailUrl = computed(() => {
-  const url = props.article.thumbnailUrl
-  if (!url || imageLoadFailed.value) return null
+const githubRepository = computed(() => {
+  if (props.article.source !== 'github') return null
 
-  // GitHub OGP は 429 が出やすいため、GitHub記事では画像を読まない
-  if (props.article.source === 'github' || url.includes('opengraph.githubassets.com')) {
-    return null
+  const match = /^https:\/\/(?:www\.)?github\.com\/([a-z0-9_.-]+)\/([a-z0-9_.-]+)(?=[/?#]|$)/i.exec(props.article.url)
+  const owner = match?.[1]
+  const repo = match?.[2]
+  if (!owner || !repo || [owner, repo].some(segment => segment === '.' || segment === '..')) return null
+
+  return { owner, repo }
+})
+
+// GitHub 記事は保存済み画像または OGP を先に表示し、読み込みに失敗したらアイコンに切り替える
+const primaryThumbnailUrl = computed(() => {
+  const repository = githubRepository.value
+  return props.article.thumbnailUrl || (repository
+    ? `https://opengraph.githubassets.com/1/${repository.owner}/${repository.repo}`
+    : null)
+})
+const avatarThumbnailUrl = computed(() => {
+  const repository = githubRepository.value
+  return repository ? `https://avatars.githubusercontent.com/${repository.owner}` : null
+})
+
+const thumbnailAttempt = ref(0)
+watch([() => props.article.id, primaryThumbnailUrl, avatarThumbnailUrl], () => {
+  thumbnailAttempt.value = 0
+})
+
+const thumbnailImage = computed(() => {
+  const attempt = thumbnailAttempt.value
+  const src = [primaryThumbnailUrl.value, avatarThumbnailUrl.value][attempt]
+  if (!src) return null
+
+  const key = `${attempt}:${src}`
+  return {
+    key,
+    src,
+    onError(): void {
+      // 同じ画像を表示する2つの枠でエラーが発生しても、次の候補には一度だけ進める
+      if (thumbnailImage.value?.key === key) thumbnailAttempt.value += 1
+    },
   }
-
-  return url
 })
 
 function formatScore(article: NewsArticle): string {
@@ -162,10 +193,6 @@ function openArticle(): void {
   emit('articleClick', props.article)
   window.open(props.article.url, '_blank', 'noopener,noreferrer')
 }
-
-function handleImageError(): void {
-  imageLoadFailed.value = true
-}
 </script>
 
 <template>
@@ -181,11 +208,10 @@ function handleImageError(): void {
         :class="thumbnailClass"
       >
         <img
-          v-if="thumbnailUrl"
-          :src="thumbnailUrl"
+          v-if="thumbnailImage"
+          v-bind="thumbnailImage"
           :alt="article.titleJa"
           class="h-full w-full object-cover"
-          @error="handleImageError"
         />
         <div v-else class="flex h-full w-full items-center justify-center p-4 text-center text-xs text-fg-faint">
           {{ displayedSource }}
@@ -195,11 +221,10 @@ function handleImageError(): void {
       <div class="flex gap-3 lg:hidden">
         <div class="flex h-14 w-14 flex-shrink-0 overflow-hidden bg-surface-alt lg:hidden" :class="thumbnailClass">
           <img
-            v-if="thumbnailUrl"
-            :src="thumbnailUrl"
+            v-if="thumbnailImage"
+            v-bind="thumbnailImage"
             :alt="article.titleJa"
             class="h-full w-full object-cover"
-            @error="handleImageError"
           />
           <div v-else class="flex h-full w-full items-center justify-center p-1 text-center text-xs text-fg-faint">
             {{ displayedSource }}
@@ -313,11 +338,10 @@ function handleImageError(): void {
     <div v-else class="flex gap-3">
       <div class="flex h-14 w-14 flex-shrink-0 overflow-hidden bg-surface-alt" :class="thumbnailClass">
         <img
-          v-if="thumbnailUrl"
-          :src="thumbnailUrl"
+          v-if="thumbnailImage"
+          v-bind="thumbnailImage"
           :alt="article.titleJa"
           class="h-full w-full object-cover"
-          @error="handleImageError"
         />
         <div v-else class="flex h-full w-full items-center justify-center p-1 text-center text-xs text-fg-faint">
           {{ displayedSource }}
