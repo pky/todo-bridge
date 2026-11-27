@@ -47,6 +47,8 @@ const reservedPathUrls = [
   'https://github.com/topics/fictional-topic',
   'https://github.com/marketplace/actions/fictional-action',
   'https://github.com/Topics/fictional-topic',
+  'https://github.com/readme/guides',
+  'https://github.com/codespaces/new',
 ]
 
 function mountThumbnail(article: NewsArticle, { variant, selector }: (typeof layouts)[number]) {
