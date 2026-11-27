@@ -94,17 +94,29 @@ describe('ニュースカードの GitHub サムネイル', () => {
         expectTextFallback(thumbnail())
       })
 
-      it('RSS 記事の GitHub OGP を表示し、失敗したら配信元名を表示する', async () => {
+      it('リポジトリ URL を持たない RSS 記事でも保存済みの GitHub OGP を表示し、失敗したら配信元名を表示する', async () => {
         const thumbnailUrl = 'https://opengraph.githubassets.com/1/fictional-feed/supplied-image'
-        const thumbnail = mountThumbnail({ ...githubArticle, source: 'rss', thumbnailUrl }, layout)
+        const url = 'https://example.test/fictional-news'
+        const thumbnail = mountThumbnail({ ...githubArticle, source: 'rss', url, thumbnailUrl }, layout)
 
         expectImage(thumbnail(), thumbnailUrl)
         await thumbnail().get('img').trigger('error')
         expectTextFallback(thumbnail())
       })
 
-      it('RSS 記事に保存済み画像がなければ GitHub のリポジトリURLでも配信元名を表示する', () => {
+      it('GitHub リポジトリ URL の RSS 記事に保存済み画像がなければ OGP、アイコン、配信元名の順に表示する', async () => {
         const thumbnail = mountThumbnail({ ...githubArticle, source: 'rss' }, layout)
+
+        expectImage(thumbnail(), generatedImage)
+        await thumbnail().get('img').trigger('error')
+        expectImage(thumbnail(), ownerAvatar)
+        await thumbnail().get('img').trigger('error')
+        expectTextFallback(thumbnail())
+      })
+
+      it('リポジトリ URL と保存済み画像がない RSS 記事は配信元名を表示する', () => {
+        const url = 'https://github.com/Fictional-Owner7'
+        const thumbnail = mountThumbnail({ ...githubArticle, source: 'rss', url }, layout)
 
         expectTextFallback(thumbnail())
       })
