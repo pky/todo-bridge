@@ -43,6 +43,12 @@ const invalidRepositoryUrls = [
   { name: 'github.com で始まる別ホストのURL', url: 'https://github.com.example.com/Fictional-Owner7/Fixture_2.js' },
 ]
 
+const reservedPathUrls = [
+  'https://github.com/topics/fictional-topic',
+  'https://github.com/marketplace/actions/fictional-action',
+  'https://github.com/Topics/fictional-topic',
+]
+
 function mountThumbnail(article: NewsArticle, { variant, selector }: (typeof layouts)[number]) {
   const wrapper = mount(NewsCard, { props: { article, variant } })
   return () => wrapper.get(selector)
@@ -119,6 +125,29 @@ describe('ニュースカードの GitHub サムネイル', () => {
         const thumbnail = mountThumbnail({ ...githubArticle, source: 'rss', url }, layout)
 
         expectTextFallback(thumbnail())
+      })
+
+      it.each(reservedPathUrls)('%s で保存済み画像がなければ配信元名を表示する', (url) => {
+        const thumbnail = mountThumbnail({ ...githubArticle, url }, layout)
+
+        expectTextFallback(thumbnail())
+      })
+
+      it.each(reservedPathUrls)('%s では保存済み画像を表示し、失敗したら配信元名を表示する', async (url) => {
+        const thumbnail = mountThumbnail({ ...githubArticle, url, thumbnailUrl: suppliedImage }, layout)
+
+        expectImage(thumbnail(), suppliedImage)
+        await thumbnail().get('img').trigger('error')
+        expectTextFallback(thumbnail())
+      })
+
+      it('予約パスを接頭辞に持つ owner のリポジトリは OGP とアイコンを表示する', async () => {
+        const url = 'https://github.com/topics-fan/fixture'
+        const thumbnail = mountThumbnail({ ...githubArticle, url }, layout)
+
+        expectImage(thumbnail(), 'https://opengraph.githubassets.com/1/topics-fan/fixture')
+        await thumbnail().get('img').trigger('error')
+        expectImage(thumbnail(), 'https://avatars.githubusercontent.com/topics-fan')
       })
     })
   }
