@@ -116,8 +116,6 @@ const mobileBadges = computed(() => {
 })
 
 const githubRepository = computed(() => {
-  if (props.article.source !== 'github') return null
-
   const match = /^https:\/\/(?:www\.)?github\.com\/([a-z0-9_.-]+)\/([a-z0-9_.-]+)(?=[/?#]|$)/i.exec(props.article.url)
   const owner = match?.[1]
   const repo = match?.[2]
