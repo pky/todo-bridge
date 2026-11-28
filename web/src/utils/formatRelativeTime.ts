@@ -4,7 +4,11 @@ const DAY_MS = 24 * HOUR_MS
 
 export function formatRelativeTime(target: Date, now: Date): string {
   const elapsedMs = now.getTime() - target.getTime()
+  if (Number.isNaN(elapsedMs)) {
+    return ''
+  }
 
+  // 仕様上、時計のずれを吸収するため、未来の日時も「たった今」と表示する。
   if (elapsedMs < MINUTE_MS) {
     return 'たった今'
   }
